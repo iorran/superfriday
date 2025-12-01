@@ -1,0 +1,17 @@
+name = "superfriday-d1-proxy"
+main = "functions/api/d1.js"
+compatibility_date = "2024-01-01"
+
+# Uncomment and add your database ID after creating D1 database
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "superfriday"
+# database_id = "your-database-id-here"
+
+# For local development
+[env.development]
+[[env.development.d1_databases]]
+binding = "DB"
+database_name = "superfriday"
+# database_id = "your-database-id-here"  # Add after creating database
+
