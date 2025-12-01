@@ -20,6 +20,8 @@ yarn install
 
 ### 2. Configure Cloudflare R2
 
+**⚠️ Security Note:** The `.env` file is already in `.gitignore` and should NEVER be committed to Git. It contains sensitive API keys and credentials.
+
 Create a `.env` file in the root directory with your Cloudflare R2 credentials:
 
 ```env
