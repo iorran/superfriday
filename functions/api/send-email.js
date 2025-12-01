@@ -3,6 +3,37 @@
  * Uses Resend API (recommended) or SendGrid
  */
 
+// Handle OPTIONS for CORS preflight
+export async function onRequestOptions() {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Max-Age': '86400',
+    },
+  })
+}
+
+// Handle GET requests with helpful error
+export async function onRequestGet() {
+  return new Response(
+    JSON.stringify({ 
+      error: true, 
+      message: 'This endpoint only accepts POST requests. Please use POST method to send emails.' 
+    }),
+    {
+      status: 405,
+      headers: { 
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Allow': 'POST, OPTIONS',
+      },
+    }
+  )
+}
+
 export async function onRequestPost(context) {
   const { request, env } = context
   const { to, subject, body, html } = await request.json()
@@ -42,7 +73,10 @@ export async function onRequestPost(context) {
         id: data.id 
       }),
       {
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
       }
     )
   } catch (error) {
@@ -53,7 +87,10 @@ export async function onRequestPost(context) {
       }),
       {
         status: 500,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
       }
     )
   }

@@ -5,6 +5,37 @@
  * For local testing with Wrangler, this also works as a Worker
  */
 
+// Handle OPTIONS for CORS preflight
+export async function onRequestOptions() {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Max-Age': '86400',
+    },
+  })
+}
+
+// Handle GET requests with helpful error
+export async function onRequestGet() {
+  return new Response(
+    JSON.stringify({ 
+      error: true, 
+      message: 'This endpoint only accepts POST requests. Please use POST method to query the D1 database.' 
+    }),
+    {
+      status: 405,
+      headers: { 
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Allow': 'POST, OPTIONS',
+      },
+    }
+  )
+}
+
 export async function onRequestPost(context) {
   const { request, env } = context
   const { sql, params = [] } = await request.json()
@@ -19,7 +50,10 @@ export async function onRequestPost(context) {
         }),
         {
           status: 500,
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
         }
       )
     }
@@ -28,7 +62,10 @@ export async function onRequestPost(context) {
     const result = await env.DB.prepare(sql).bind(...params).all()
 
     return new Response(JSON.stringify(result), {
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
     })
   } catch (error) {
     console.error('D1 query error:', error)
@@ -39,7 +76,10 @@ export async function onRequestPost(context) {
       }),
       {
         status: 500,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
       }
     )
   }
