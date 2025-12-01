@@ -1,5 +1,6 @@
-name = "superfriday"
-main = "functions/api/d1.js"
+name = "superfriday-d1-proxy"
+# Note: main is only for Workers, not Pages Functions
+# For Pages, functions are automatically discovered in the functions/ directory
 compatibility_date = "2024-01-01"
 
 # Uncomment and add your database ID after creating D1 database
