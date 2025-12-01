@@ -1,7 +1,13 @@
 name = "superfriday-d1-proxy"
-# Note: main is only for Workers, not Pages Functions
-# For Pages, functions are automatically discovered in the functions/ directory
+# Note: This file is for local development with `wrangler dev` only
+# For Cloudflare Pages deployment, use GitHub Actions or Pages Dashboard
+# Pages automatically discovers functions in the functions/ directory
 compatibility_date = "2024-01-01"
+
+# Assets configuration (only needed if deploying via Wrangler CLI)
+# For Pages deployment, use GitHub Actions or Pages Dashboard instead
+[assets]
+directory = "./dist"
 
 # Uncomment and add your database ID after creating D1 database
 # [[d1_databases]]
