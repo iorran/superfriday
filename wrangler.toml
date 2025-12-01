@@ -1,4 +1,4 @@
-name = "superfriday-d1-proxy"
+name = "superfriday"
 main = "functions/api/d1.js"
 compatibility_date = "2024-01-01"
 
