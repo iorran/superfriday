@@ -10,15 +10,15 @@ compatibility_date = "2024-01-01"
 directory = "./dist"
 
 # Uncomment and add your database ID after creating D1 database
-# [[d1_databases]]
-# binding = "DB"
-# database_name = "superfriday"  # Change to your database name
-# database_id = "<your-database-id>"  # Add your actual database ID here
+[[d1_databases]]
+binding = "DB"
+database_name = "superfriday"  # Change to your database name
+database_id = "0917b92c7c05ddd44bb6d1ebfaea0707"  # Add your actual database ID here
 
 # For local development
 [env.development]
 [[env.development.d1_databases]]
 binding = "DB"
 database_name = "superfriday"  # Change to your database name if different
-# database_id = "<your-database-id>"  # Add after creating database (optional for local dev)
+database_id = "0917b92c7c05ddd44bb6d1ebfaea0707"  # Add after creating database (optional for local dev)
 
