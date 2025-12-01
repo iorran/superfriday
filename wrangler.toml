@@ -1,4 +1,4 @@
-name = "superfriday-d1-proxy"
+name = "superfriday"
 # Note: This file is for local development with `wrangler dev` only
 # For Cloudflare Pages deployment, use GitHub Actions or Pages Dashboard
 # Pages automatically discovers functions in the functions/ directory
