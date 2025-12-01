@@ -3,6 +3,7 @@ import FileUpload from './components/FileUpload'
 import FileList from './components/FileList'
 import ClientManagement from './components/ClientManagement'
 import EmailTemplateManagement from './components/EmailTemplateManagement'
+import BuildInfo from './components/BuildInfo'
 import { Toaster } from './components/ui/toaster'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs'
 import { initializeDefaults } from './lib/init-defaults'
@@ -55,6 +56,7 @@ function App() {
           </TabsContent>
         </Tabs>
       </div>
+      <BuildInfo />
       <Toaster />
     </div>
   )
