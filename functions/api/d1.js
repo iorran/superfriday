@@ -69,10 +69,16 @@ export async function onRequestPost(context) {
     })
   } catch (error) {
     console.error('D1 query error:', error)
+    console.error('SQL:', sql)
+    console.error('Params:', params)
     return new Response(
       JSON.stringify({ 
         error: true, 
-        message: error.message 
+        message: error.message,
+        sql: sql,
+        params: params,
+        stack: error.stack,
+        name: error.name
       }),
       {
         status: 500,
