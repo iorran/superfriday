@@ -39,15 +39,18 @@ export async function onRequestPost(context) {
   const { to, subject, body, html } = await request.json()
 
   try {
-    // Try to get Resend API key from environment variables
-    // Pages Functions can access VITE_* variables if they're set as environment variables
-    const RESEND_API_KEY = env.VITE_RESEND_API_KEY || env.RESEND_API_KEY
+    // Get Resend API key from environment variables
+    const RESEND_API_KEY = env.VITE_RESEND_API_KEY
     
     if (!RESEND_API_KEY) {
-      throw new Error('RESEND_API_KEY not configured. Set VITE_RESEND_API_KEY or RESEND_API_KEY in Pages environment variables.')
+      throw new Error('VITE_RESEND_API_KEY not configured. Set VITE_RESEND_API_KEY in Pages environment variables.')
     }
 
-    const FROM_EMAIL = env.VITE_FROM_EMAIL || env.FROM_EMAIL || 'invoices@yourdomain.com'
+    const FROM_EMAIL = env.VITE_FROM_EMAIL
+    
+    if (!FROM_EMAIL) {
+      throw new Error('VITE_FROM_EMAIL not configured. Set VITE_FROM_EMAIL in Pages environment variables.')
+    }
 
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
