@@ -1,6 +1,6 @@
 /**
  * Email Service
- * Handles sending emails with template support
+ * Handles creating mailto links with template support
  */
 
 /**
@@ -16,41 +16,12 @@ export const replaceTemplateVariables = (template, variables) => {
 }
 
 /**
- * Send email using the API endpoint
+ * Create a mailto link
  */
-export const sendEmail = async (to, subject, body, html = null) => {
-  const response = await fetch('/api/send-email', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      to,
-      subject,
-      body,
-      html,
-    }),
-  })
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Failed to send email' }))
-    throw new Error(error.message || `Email send failed with status ${response.status}`)
-  }
-
-  return await response.json()
-}
-
-/**
- * Send email using a template
- */
-export const sendEmailWithTemplate = async (template, variables, recipient) => {
-  const subject = replaceTemplateVariables(template.subject, variables)
-  const body = replaceTemplateVariables(template.body, variables)
-  const html = template.html 
-    ? replaceTemplateVariables(template.html, variables)
-    : body.replace(/\n/g, '<br>')
-
-  return await sendEmail(recipient.email, subject, body, html)
+export const createMailtoLink = (to, subject, body) => {
+  const encodedSubject = encodeURIComponent(subject)
+  const encodedBody = encodeURIComponent(body)
+  return `mailto:${to}?subject=${encodedSubject}&body=${encodedBody}`
 }
 
 /**

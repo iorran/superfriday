@@ -11,8 +11,8 @@ import { Button } from './ui/button'
 import { Label } from './ui/label'
 import { useToast } from './ui/use-toast'
 import { getEmailTemplates, getEmailTemplate, recordEmail } from '../lib/d1-client'
-import { sendEmailWithTemplate, getTemplateVariables } from '../lib/email-service'
-import { Loader2 } from 'lucide-react'
+import { getTemplateVariables, createMailtoLink } from '../lib/email-service'
+import { Mail } from 'lucide-react'
 
 const replaceVariables = (template, variables) => {
   let result = template
@@ -28,7 +28,7 @@ const EmailDialog = ({ open, onOpenChange, invoice, client, onSuccess }) => {
   const [selectedTemplateId, setSelectedTemplateId] = useState('')
   const [selectedTemplate, setSelectedTemplate] = useState(null)
   const [preview, setPreview] = useState({ subject: '', body: '' })
-  const [sending, setSending] = useState(false)
+  const [mailtoLink, setMailtoLink] = useState('')
   const { toast } = useToast()
 
   useEffect(() => {
@@ -46,10 +46,10 @@ const EmailDialog = ({ open, onOpenChange, invoice, client, onSuccess }) => {
   useEffect(() => {
     if (selectedTemplate && invoice && client) {
       const variables = getTemplateVariables(invoice, client)
-      setPreview({
-        subject: replaceVariables(selectedTemplate.subject, variables),
-        body: replaceVariables(selectedTemplate.body, variables),
-      })
+      const subject = replaceVariables(selectedTemplate.subject, variables)
+      const body = replaceVariables(selectedTemplate.body, variables)
+      setPreview({ subject, body })
+      setMailtoLink(createMailtoLink(client.email, subject, body))
     }
   }, [selectedTemplate, invoice, client])
 
@@ -83,8 +83,8 @@ const EmailDialog = ({ open, onOpenChange, invoice, client, onSuccess }) => {
   }
 
 
-  const handleSend = async () => {
-    if (!selectedTemplate || !client?.email) {
+  const handleOpenEmail = async () => {
+    if (!selectedTemplate || !client?.email || !mailtoLink) {
       toast({
         title: "Error",
         description: "Please select a template and ensure client email is set",
@@ -93,17 +93,8 @@ const EmailDialog = ({ open, onOpenChange, invoice, client, onSuccess }) => {
       return
     }
 
-    setSending(true)
     try {
-      const variables = getTemplateVariables(invoice, client)
-      
-      // Send email
-      await sendEmailWithTemplate(selectedTemplate, variables, {
-        email: client.email,
-        name: client.name,
-      })
-
-      // Record in history
+      // Record email opened in history
       await recordEmail({
         invoiceFileKey: invoice.file_key,
         templateId: selectedTemplate.id,
@@ -111,46 +102,33 @@ const EmailDialog = ({ open, onOpenChange, invoice, client, onSuccess }) => {
         recipientName: client.name,
         subject: preview.subject,
         body: preview.body,
-        status: 'sent',
+        status: 'opened', // Changed from 'sent' to 'opened'
       })
 
+      // Open mailto link (opens default email client)
+      window.location.href = mailtoLink
+
       toast({
-        title: "Email Sent",
-        description: `Email sent successfully to ${client.email}`,
-        variant: "success",
+        title: "Email Client Opened",
+        description: `Opening email client for ${client.email}`,
+        variant: "default",
       })
 
       if (onSuccess) {
         onSuccess()
       }
 
-      onOpenChange(false)
+      // Close dialog after a short delay
+      setTimeout(() => {
+        onOpenChange(false)
+      }, 500)
     } catch (error) {
-      console.error('Error sending email:', error)
-      
-      // Record failed attempt
-      try {
-        await recordEmail({
-          invoiceFileKey: invoice.file_key,
-          templateId: selectedTemplate.id,
-          recipientEmail: client.email,
-          recipientName: client.name,
-          subject: preview.subject,
-          body: preview.body,
-          status: 'failed',
-          errorMessage: error.message,
-        })
-      } catch (recordError) {
-        console.error('Error recording email:', recordError)
-      }
-
+      console.error('Error opening email:', error)
       toast({
-        title: "Send Failed",
-        description: error.message || "Failed to send email",
+        title: "Error",
+        description: "Failed to open email client",
         variant: "destructive",
       })
-    } finally {
-      setSending(false)
     }
   }
 
@@ -212,22 +190,15 @@ const EmailDialog = ({ open, onOpenChange, invoice, client, onSuccess }) => {
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
-            disabled={sending}
           >
             Cancel
           </Button>
           <Button
-            onClick={handleSend}
-            disabled={sending || !selectedTemplate}
+            onClick={handleOpenEmail}
+            disabled={!selectedTemplate || !mailtoLink}
           >
-            {sending ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Sending...
-              </>
-            ) : (
-              'Send Email'
-            )}
+            <Mail className="mr-2 h-4 w-4" />
+            Open Email Client
           </Button>
         </DialogFooter>
       </DialogContent>
