@@ -4,8 +4,8 @@ import { Button } from './ui/button.jsx'
 import { Label } from './ui/label'
 import { Textarea } from './ui/textarea'
 import { useToast } from './ui/use-toast'
-import { getEmailTemplates, createEmailTemplate } from '../lib/d1-client'
-import { FileText, Plus } from 'lucide-react'
+import { getEmailTemplates, createEmailTemplate, updateEmailTemplate, deleteEmailTemplate } from '../lib/d1-client'
+import { FileText, Plus, Edit, Trash2 } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -14,17 +14,30 @@ import {
   DialogHeader,
   DialogTitle,
 } from './ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from './ui/alert-dialog'
 
 const EmailTemplateManagement = () => {
   const [templates, setTemplates] = useState([])
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [editingTemplate, setEditingTemplate] = useState(null)
   const [newTemplate, setNewTemplate] = useState({
     name: '',
     subject: '',
     body: '',
     type: 'to_client',
   })
+  const [templateToDelete, setTemplateToDelete] = useState(null)
   const { toast } = useToast()
 
   useEffect(() => {
@@ -78,6 +91,82 @@ const EmailTemplateManagement = () => {
     }
   }
 
+  const handleEditTemplate = (template) => {
+    setEditingTemplate(template)
+    setNewTemplate({
+      name: template.name,
+      subject: template.subject,
+      body: template.body,
+      type: template.type,
+    })
+    setDialogOpen(true)
+  }
+
+  const handleUpdateTemplate = async () => {
+    if (!newTemplate.name.trim() || !newTemplate.subject.trim() || !newTemplate.body.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Please fill in all fields",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      await updateEmailTemplate(editingTemplate.id, newTemplate)
+      toast({
+        title: "Template Updated",
+        description: `${newTemplate.name} has been updated`,
+        variant: "success",
+      })
+      setNewTemplate({ name: '', subject: '', body: '', type: 'to_client' })
+      setEditingTemplate(null)
+      setDialogOpen(false)
+      loadTemplates()
+    } catch (error) {
+      console.error('Error updating template:', error)
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update template",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleDeleteClick = (template) => {
+    setTemplateToDelete(template)
+    setDeleteDialogOpen(true)
+  }
+
+  const handleDeleteTemplate = async () => {
+    if (!templateToDelete) return
+
+    try {
+      await deleteEmailTemplate(templateToDelete.id)
+      toast({
+        title: "Template Deleted",
+        description: `${templateToDelete.name} has been deleted`,
+        variant: "success",
+      })
+      setTemplateToDelete(null)
+      setDeleteDialogOpen(false)
+      loadTemplates()
+    } catch (error) {
+      console.error('Error deleting template:', error)
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete template",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleDialogClose = () => {
+    setDialogOpen(false)
+    setEditingTemplate(null)
+    setNewTemplate({ name: '', subject: '', body: '', type: 'to_client' })
+  }
+
   if (loading) {
     return (
       <Card>
@@ -126,6 +215,24 @@ const EmailTemplateManagement = () => {
                       <p className="text-sm font-medium mt-2">Body Preview:</p>
                       <p className="text-sm text-muted-foreground line-clamp-2">{template.body}</p>
                     </div>
+                    <div className="flex items-center gap-2 ml-4">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleEditTemplate(template)}
+                        className="h-8 w-8 p-0"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteClick(template)}
+                        className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -134,12 +241,12 @@ const EmailTemplateManagement = () => {
         </CardContent>
       </Card>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={handleDialogClose}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Create Email Template</DialogTitle>
+            <DialogTitle>{editingTemplate ? 'Edit Email Template' : 'Create Email Template'}</DialogTitle>
             <DialogDescription>
-              Create a reusable email template. Use variables like {'{{clientName}}'}, {'{{invoiceName}}'}, {'{{invoiceAmount}}'}, {'{{dueDate}}'}
+              {editingTemplate ? 'Update the email template' : 'Create a reusable email template. Use variables like {'{{clientName}}'}, {'{{invoiceName}}'}, {'{{invoiceAmount}}'}, {'{{dueDate}}'}}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -190,15 +297,35 @@ const EmailTemplateManagement = () => {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>
+            <Button variant="outline" onClick={handleDialogClose}>
               Cancel
             </Button>
-            <Button onClick={handleCreateTemplate}>
-              Create Template
+            <Button onClick={editingTemplate ? handleUpdateTemplate : handleCreateTemplate}>
+              {editingTemplate ? 'Update Template' : 'Create Template'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the template "{templateToDelete?.name}". This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteTemplate}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }

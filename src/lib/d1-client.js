@@ -63,6 +63,23 @@ export const createClient = async (name, email) => {
 }
 
 /**
+ * Update a client
+ */
+export const updateClient = async (clientId, name, email) => {
+  await executeD1Query(
+    'UPDATE clients SET name = ?, email = ? WHERE id = ?',
+    [name, email, clientId]
+  )
+}
+
+/**
+ * Delete a client
+ */
+export const deleteClient = async (clientId) => {
+  await executeD1Query('DELETE FROM clients WHERE id = ?', [clientId])
+}
+
+/**
  * Get invoice by file key
  */
 export const getInvoice = async (fileKey) => {
@@ -196,6 +213,24 @@ export const createEmailTemplate = async (templateData) => {
     [id, name, subject, body, type]
   )
   return id
+}
+
+/**
+ * Update email template
+ */
+export const updateEmailTemplate = async (templateId, templateData) => {
+  const { name, subject, body, type } = templateData
+  await executeD1Query(
+    'UPDATE email_templates SET name = ?, subject = ?, body = ?, type = ? WHERE id = ?',
+    [name, subject, body, type, templateId]
+  )
+}
+
+/**
+ * Delete email template
+ */
+export const deleteEmailTemplate = async (templateId) => {
+  await executeD1Query('DELETE FROM email_templates WHERE id = ?', [templateId])
 }
 
 /**
