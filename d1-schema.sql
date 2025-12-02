@@ -5,8 +5,8 @@ CREATE TABLE IF NOT EXISTS clients (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   email TEXT NOT NULL,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  created_at DATETIME,
+  updated_at DATETIME
 );
 
 -- Invoices table
@@ -15,16 +15,16 @@ CREATE TABLE IF NOT EXISTS invoices (
   client_id TEXT NOT NULL,             -- Reference to clients table
   original_name TEXT NOT NULL,         -- Original filename
   file_size INTEGER,                   -- File size in bytes
-  uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  uploaded_at DATETIME,
   
   -- Workflow States
-  sent_to_client BOOLEAN DEFAULT FALSE,
+  sent_to_client BOOLEAN,
   sent_to_client_at DATETIME,
   
-  payment_received BOOLEAN DEFAULT FALSE,
+  payment_received BOOLEAN,
   payment_received_at DATETIME,
   
-  sent_to_account_manager BOOLEAN DEFAULT FALSE,
+  sent_to_account_manager BOOLEAN,
   sent_to_account_manager_at DATETIME,
   
   -- Additional fields
@@ -42,8 +42,8 @@ CREATE TABLE IF NOT EXISTS email_templates (
   subject TEXT NOT NULL,                -- Email subject template
   body TEXT NOT NULL,                   -- Email body template (supports variables like {{clientName}}, {{invoiceName}})
   type TEXT NOT NULL,                   -- 'to_client', 'to_account_manager', etc.
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  created_at DATETIME,
+  updated_at DATETIME
 );
 
 -- Email history table
@@ -55,8 +55,8 @@ CREATE TABLE IF NOT EXISTS email_history (
   recipient_name TEXT,
   subject TEXT NOT NULL,
   body TEXT NOT NULL,
-  sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  status TEXT DEFAULT 'sent',          -- 'sent', 'failed', 'pending'
+  sent_at DATETIME,
+  status TEXT,                          -- 'sent', 'failed', 'pending'
   error_message TEXT,
   
   FOREIGN KEY (invoice_file_key) REFERENCES invoices(file_key),
