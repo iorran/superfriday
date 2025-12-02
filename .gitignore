@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Lock files
+package-lock.json
+
 # Environment variables
 .env
 .env.local
