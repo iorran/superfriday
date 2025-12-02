@@ -111,10 +111,6 @@ const EmailDialog = ({ open, onOpenChange, invoice, client, onSuccess }) => {
       link.href = mailtoLink
       link.style.display = 'none'
       document.body.appendChild(link)
-      
-      // Log for debugging
-      console.log('Opening mailto link:', mailtoLink)
-      
       link.click()
       
       // Clean up after a short delay

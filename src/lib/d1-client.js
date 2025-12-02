@@ -3,12 +3,6 @@
  * Uses Cloudflare D1 HTTP API for database operations
  */
 
-const getD1Config = () => ({
-  accountId: import.meta.env.VITE_D1_ACCOUNT_ID || '',
-  databaseId: import.meta.env.VITE_D1_DATABASE_ID || '',
-  apiToken: import.meta.env.VITE_D1_API_TOKEN || '', // Optional, for production
-})
-
 /**
  * Execute a SQL query on D1
  * Uses Cloudflare Pages Functions API endpoint
