@@ -102,11 +102,27 @@ const EmailDialog = ({ open, onOpenChange, invoice, client, onSuccess }) => {
         recipientName: client.name,
         subject: preview.subject,
         body: preview.body,
-        status: 'opened', // Changed from 'sent' to 'opened'
+        status: 'opened',
       })
 
-      // Open mailto link (opens default email client)
-      window.location.href = mailtoLink
+      // Create a temporary anchor element and click it
+      // This is more reliable than window.location.href
+      const link = document.createElement('a')
+      link.href = mailtoLink
+      link.style.display = 'none'
+      document.body.appendChild(link)
+      
+      // Log for debugging
+      console.log('Opening mailto link:', mailtoLink)
+      
+      link.click()
+      
+      // Clean up after a short delay
+      setTimeout(() => {
+        if (document.body.contains(link)) {
+          document.body.removeChild(link)
+        }
+      }, 100)
 
       toast({
         title: "Email Client Opened",
@@ -184,6 +200,37 @@ const EmailDialog = ({ open, onOpenChange, invoice, client, onSuccess }) => {
               {client?.name} &lt;{client?.email}&gt;
             </div>
           </div>
+
+          {mailtoLink && (
+            <div className="space-y-2">
+              <Label>Email Link</Label>
+              <div className="flex gap-2">
+                <a
+                  href={mailtoLink}
+                  className="flex-1 p-3 bg-muted rounded-md text-sm text-blue-600 hover:text-blue-800 underline break-all"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    handleOpenEmail()
+                  }}
+                >
+                  {mailtoLink.substring(0, 80)}...
+                </a>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    navigator.clipboard.writeText(mailtoLink)
+                    toast({
+                      title: "Copied",
+                      description: "Mailto link copied to clipboard",
+                    })
+                  }}
+                >
+                  Copy
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
 
         <DialogFooter>

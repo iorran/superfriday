@@ -17,11 +17,32 @@ export const replaceTemplateVariables = (template, variables) => {
 
 /**
  * Create a mailto link
+ * Note: Some email clients have limits on mailto link length (~2000 chars)
+ * If body is too long, it will be truncated
  */
 export const createMailtoLink = (to, subject, body) => {
   const encodedSubject = encodeURIComponent(subject)
-  const encodedBody = encodeURIComponent(body)
-  return `mailto:${to}?subject=${encodedSubject}&body=${encodedBody}`
+  
+  // Truncate body if too long (mailto links have ~2000 char limit)
+  // Keep some buffer for the rest of the URL
+  const maxBodyLength = 1500
+  const truncatedBody = body.length > maxBodyLength 
+    ? body.substring(0, maxBodyLength) + '\n\n[... email body truncated ...]'
+    : body
+  
+  const encodedBody = encodeURIComponent(truncatedBody)
+  const link = `mailto:${to}?subject=${encodedSubject}&body=${encodedBody}`
+  
+  // Log for debugging
+  console.log('Mailto link created:', {
+    to,
+    subjectLength: subject.length,
+    bodyLength: body.length,
+    truncatedBodyLength: truncatedBody.length,
+    linkLength: link.length,
+  })
+  
+  return link
 }
 
 /**
