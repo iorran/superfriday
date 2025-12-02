@@ -7,7 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from './ui/dialog'
-import { Button } from './ui/button'
+import { Button } from './ui/button.jsx'
 import { Label } from './ui/label'
 import { useToast } from './ui/use-toast'
 import { getEmailTemplates, getEmailTemplate, recordEmail } from '../lib/d1-client'
