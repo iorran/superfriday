@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import FileUpload from './components/FileUpload'
 import FileList from './components/FileList'
 import ClientManagement from './components/ClientManagement'
@@ -6,15 +6,9 @@ import EmailTemplateManagement from './components/EmailTemplateManagement'
 import BuildInfo from './components/BuildInfo'
 import { Toaster } from './components/ui/toaster'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs'
-import { initializeDefaults } from './lib/init-defaults'
 
 function App() {
   const [refreshTrigger, setRefreshTrigger] = useState(0)
-
-  useEffect(() => {
-    // Initialize default data on first load
-    initializeDefaults().catch(console.error)
-  }, [])
 
   const handleUploadSuccess = () => {
     // Trigger file list refresh
