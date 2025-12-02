@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { DeleteObjectCommand } from '@aws-sdk/client-s3'
 import { Card, CardContent } from './ui/card'
-import { Button } from './ui/button'
+import { Button } from './ui/button.jsx'
 import { useToast } from './ui/use-toast'
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from './ui/collapsible'
 import {

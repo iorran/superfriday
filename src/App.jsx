@@ -15,42 +15,12 @@ function App() {
     setRefreshTrigger((prev) => prev + 1)
   }
 
-  const handleTestMailto = () => {
-    const testLink = createMailtoLink(
-      'test@example.com',
-      'Test Email Subject',
-      'This is a test email body.\n\nIf you can see this, mailto links are working!'
-    )
-    
-    // Create and click anchor element
-    const link = document.createElement('a')
-    link.href = testLink
-    link.style.display = 'none'
-    document.body.appendChild(link)
-    link.click()
-    setTimeout(() => {
-      if (document.body.contains(link)) {
-        document.body.removeChild(link)
-      }
-    }, 100)
-  }
-
   return (
     <div className="min-h-screen bg-background p-4">
       <div className="max-w-6xl mx-auto space-y-8">
         <div className="text-center">
           <h1 className="text-4xl font-bold mb-2">Invoice Management</h1>
           <p className="text-muted-foreground">Manage your invoices, clients, and email templates</p>
-          <div className="mt-4">
-            <Button
-              onClick={handleTestMailto}
-              variant="outline"
-              size="sm"
-            >
-              <Mail className="mr-2 h-4 w-4" />
-              Test Mailto Link
-            </Button>
-          </div>
         </div>
 
         <Tabs defaultValue="invoices" className="w-full">

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
-import { Button } from './ui/button'
+import { Button } from './ui/button.jsx'
 import { Label } from './ui/label'
 import { useToast } from './ui/use-toast'
 import { getClients, createClient } from '../lib/d1-client'
