@@ -1,25 +1,18 @@
 /**
  * Email Service
- * Handles creating mailto links with template support
+ * Handles creating Gmail compose URLs with template support
  */
 
 /**
- * Create a mailto link
- * Note: Some email clients have limits on mailto link length (~2000 chars)
- * If body is too long, it will be truncated
+ * Create a Gmail compose URL
+ * Opens Gmail compose window with pre-filled recipient, subject, and body
  */
-export const createMailtoLink = (to, subject, body) => {
+export const createGmailComposeLink = (to, subject, body) => {
+  const encodedTo = encodeURIComponent(to)
   const encodedSubject = encodeURIComponent(subject)
+  const encodedBody = encodeURIComponent(body)
   
-  // Truncate body if too long (mailto links have ~2000 char limit)
-  // Keep some buffer for the rest of the URL
-  const maxBodyLength = 1500
-  const truncatedBody = body.length > maxBodyLength 
-    ? body.substring(0, maxBodyLength) + '\n\n[... email body truncated ...]'
-    : body
-  
-  const encodedBody = encodeURIComponent(truncatedBody)
-  return `mailto:${to}?subject=${encodedSubject}&body=${encodedBody}`
+  return `https://mail.google.com/mail/?view=cm&fs=1&to=${encodedTo}&su=${encodedSubject}&body=${encodedBody}`
 }
 
 /**

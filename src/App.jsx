@@ -6,9 +6,6 @@ import EmailTemplateManagement from './components/EmailTemplateManagement'
 import BuildInfo from './components/BuildInfo'
 import { Toaster } from './components/ui/toaster'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs'
-import { Button } from './components/ui/button'
-import { Mail } from 'lucide-react'
-import { createMailtoLink } from './lib/email-service'
 
 function App() {
   const [refreshTrigger, setRefreshTrigger] = useState(0)

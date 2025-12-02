@@ -11,7 +11,7 @@ import { Button } from './ui/button'
 import { Label } from './ui/label'
 import { useToast } from './ui/use-toast'
 import { getEmailTemplates, getEmailTemplate, recordEmail } from '../lib/d1-client'
-import { getTemplateVariables, createMailtoLink } from '../lib/email-service'
+import { getTemplateVariables, createGmailComposeLink } from '../lib/email-service'
 import { Mail } from 'lucide-react'
 
 const replaceVariables = (template, variables) => {
@@ -28,7 +28,7 @@ const EmailDialog = ({ open, onOpenChange, invoice, client, onSuccess }) => {
   const [selectedTemplateId, setSelectedTemplateId] = useState('')
   const [selectedTemplate, setSelectedTemplate] = useState(null)
   const [preview, setPreview] = useState({ subject: '', body: '' })
-  const [mailtoLink, setMailtoLink] = useState('')
+  const [gmailLink, setGmailLink] = useState('')
   const { toast } = useToast()
 
   useEffect(() => {
@@ -49,7 +49,7 @@ const EmailDialog = ({ open, onOpenChange, invoice, client, onSuccess }) => {
       const subject = replaceVariables(selectedTemplate.subject, variables)
       const body = replaceVariables(selectedTemplate.body, variables)
       setPreview({ subject, body })
-      setMailtoLink(createMailtoLink(client.email, subject, body))
+      setGmailLink(createGmailComposeLink(client.email, subject, body))
     }
   }, [selectedTemplate, invoice, client])
 
@@ -84,7 +84,7 @@ const EmailDialog = ({ open, onOpenChange, invoice, client, onSuccess }) => {
 
 
   const handleOpenEmail = async () => {
-    if (!selectedTemplate || !client?.email || !mailtoLink) {
+    if (!selectedTemplate || !client?.email || !gmailLink) {
       toast({
         title: "Error",
         description: "Please select a template and ensure client email is set",
@@ -105,24 +105,12 @@ const EmailDialog = ({ open, onOpenChange, invoice, client, onSuccess }) => {
         status: 'opened',
       })
 
-      // Create a temporary anchor element and click it
-      // This is more reliable than window.location.href
-      const link = document.createElement('a')
-      link.href = mailtoLink
-      link.style.display = 'none'
-      document.body.appendChild(link)
-      link.click()
-      
-      // Clean up after a short delay
-      setTimeout(() => {
-        if (document.body.contains(link)) {
-          document.body.removeChild(link)
-        }
-      }, 100)
+      // Open Gmail compose window in a new tab
+      window.open(gmailLink, '_blank')
 
       toast({
-        title: "Email Client Opened",
-        description: `Opening email client for ${client.email}`,
+        title: "Gmail Opened",
+        description: `Opening Gmail compose for ${client.email}`,
         variant: "default",
       })
 
@@ -138,7 +126,7 @@ const EmailDialog = ({ open, onOpenChange, invoice, client, onSuccess }) => {
       console.error('Error opening email:', error)
       toast({
         title: "Error",
-        description: "Failed to open email client",
+        description: "Failed to open Gmail",
         variant: "destructive",
       })
     }
@@ -197,28 +185,26 @@ const EmailDialog = ({ open, onOpenChange, invoice, client, onSuccess }) => {
             </div>
           </div>
 
-          {mailtoLink && (
+          {gmailLink && (
             <div className="space-y-2">
-              <Label>Email Link</Label>
+              <Label>Gmail Compose Link</Label>
               <div className="flex gap-2">
                 <a
-                  href={mailtoLink}
+                  href={gmailLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="flex-1 p-3 bg-muted rounded-md text-sm text-blue-600 hover:text-blue-800 underline break-all"
-                  onClick={(e) => {
-                    e.preventDefault()
-                    handleOpenEmail()
-                  }}
                 >
-                  {mailtoLink.substring(0, 80)}...
+                  {gmailLink.substring(0, 80)}...
                 </a>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    navigator.clipboard.writeText(mailtoLink)
+                    navigator.clipboard.writeText(gmailLink)
                     toast({
                       title: "Copied",
-                      description: "Mailto link copied to clipboard",
+                      description: "Gmail link copied to clipboard",
                     })
                   }}
                 >
@@ -238,10 +224,10 @@ const EmailDialog = ({ open, onOpenChange, invoice, client, onSuccess }) => {
           </Button>
           <Button
             onClick={handleOpenEmail}
-            disabled={!selectedTemplate || !mailtoLink}
+            disabled={!selectedTemplate || !gmailLink}
           >
             <Mail className="mr-2 h-4 w-4" />
-            Open Email Client
+            Open Gmail
           </Button>
         </DialogFooter>
       </DialogContent>
