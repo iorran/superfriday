@@ -16,66 +16,28 @@ export const replaceTemplateVariables = (template, variables) => {
 }
 
 /**
- * Send email using the API
+ * Send email using the API endpoint
  */
 export const sendEmail = async (to, subject, body, html = null) => {
-  try {
-    // For local development, we'll use Resend API directly
-    // In production, use the Cloudflare Pages Function
-    const RESEND_API_KEY = import.meta.env.VITE_RESEND_API_KEY
-    
-    if (!RESEND_API_KEY) {
-      throw new Error('RESEND_API_KEY not configured')
-    }
+  const response = await fetch('/api/send-email', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      to,
+      subject,
+      body,
+      html,
+    }),
+  })
 
-    // Try using the API endpoint first (for production)
-    try {
-      const response = await fetch('/api/send-email', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          to,
-          subject,
-          body,
-          html,
-        }),
-      })
-
-      if (response.ok) {
-        return await response.json()
-      }
-    } catch (apiError) {
-      console.warn('API endpoint not available, using direct Resend API')
-    }
-
-    // Fallback to direct Resend API (for local development)
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${RESEND_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: import.meta.env.VITE_FROM_EMAIL || 'onboarding@resend.dev',
-        to: Array.isArray(to) ? to : [to],
-        subject,
-        html: html || body.replace(/\n/g, '<br>'),
-        text: body,
-      }),
-    })
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || 'Failed to send email')
-    }
-
-    return await response.json()
-  } catch (error) {
-    console.error('Email send error:', error)
-    throw error
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Failed to send email' }))
+    throw new Error(error.message || `Email send failed with status ${response.status}`)
   }
+
+  return await response.json()
 }
 
 /**

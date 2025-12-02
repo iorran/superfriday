@@ -80,10 +80,13 @@ export async function onRequestPost(context) {
       }
     )
   } catch (error) {
+    console.error('Email send error:', error)
+    console.error('Request data:', { to, subject })
     return new Response(
       JSON.stringify({ 
         error: true, 
-        message: error.message 
+        message: error.message,
+        details: error.stack
       }),
       {
         status: 500,
