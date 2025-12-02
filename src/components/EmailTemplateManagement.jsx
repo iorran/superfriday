@@ -246,7 +246,7 @@ const EmailTemplateManagement = () => {
           <DialogHeader>
             <DialogTitle>{editingTemplate ? 'Edit Email Template' : 'Create Email Template'}</DialogTitle>
             <DialogDescription>
-              {editingTemplate ? 'Update the email template' : 'Create a reusable email template. Use variables like {'{{clientName}}'}, {'{{invoiceName}}'}, {'{{invoiceAmount}}'}, {'{{dueDate}}'}}
+              {editingTemplate ? 'Update the email template' : `Create a reusable email template. Use variables like {{clientName}}, {{invoiceName}}, {{invoiceAmount}}, {{dueDate}}`}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
