@@ -1,5 +1,6 @@
 /**
- * Cloudflare Pages Function to send emails via EmailJS (supports Gmail)
+ * Cloudflare Pages Function to send emails via SMTP (Gmail)
+ * Uses worker-mailer library for SMTP support
  */
 
 // Handle OPTIONS for CORS preflight
@@ -38,53 +39,46 @@ export async function onRequestPost(context) {
   const { to, subject, body, html } = await request.json()
 
   try {
-    // EmailJS configuration
-    const EMAILJS_SERVICE_ID = env.VITE_EMAILJS_SERVICE_ID
-    const EMAILJS_TEMPLATE_ID = env.VITE_EMAILJS_TEMPLATE_ID
-    const EMAILJS_USER_ID = env.VITE_EMAILJS_USER_ID
+    // Gmail SMTP configuration
+    const GMAIL_USER = env.VITE_GMAIL_USER
+    const GMAIL_APP_PASSWORD = env.VITE_GMAIL_APP_PASSWORD
+    const FROM_EMAIL = env.VITE_FROM_EMAIL || GMAIL_USER
     
-    if (!EMAILJS_SERVICE_ID || !EMAILJS_TEMPLATE_ID || !EMAILJS_USER_ID) {
-      throw new Error('EmailJS not configured. Set VITE_EMAILJS_SERVICE_ID, VITE_EMAILJS_TEMPLATE_ID, and VITE_EMAILJS_USER_ID in Pages environment variables.')
+    if (!GMAIL_USER || !GMAIL_APP_PASSWORD) {
+      throw new Error('Gmail SMTP not configured. Set VITE_GMAIL_USER and VITE_GMAIL_APP_PASSWORD in Pages environment variables.')
     }
 
-    const FROM_EMAIL = env.VITE_FROM_EMAIL
-    
-    if (!FROM_EMAIL) {
-      throw new Error('VITE_FROM_EMAIL not configured. Set VITE_FROM_EMAIL in Pages environment variables.')
-    }
+    // Import worker-mailer
+    const { WorkerMailer } = await import('worker-mailer')
 
-    // EmailJS API
-    const response = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+    // Connect to Gmail SMTP
+    const mailer = await WorkerMailer.connect({
+      credentials: {
+        username: GMAIL_USER,
+        password: GMAIL_APP_PASSWORD,
       },
-      body: JSON.stringify({
-        service_id: EMAILJS_SERVICE_ID,
-        template_id: EMAILJS_TEMPLATE_ID,
-        user_id: EMAILJS_USER_ID,
-        template_params: {
-          from_email: FROM_EMAIL,
-          to_email: Array.isArray(to) ? to[0] : to,
-          to_email_list: Array.isArray(to) ? to : [to],
-          subject: subject,
-          message: html || body.replace(/\n/g, '<br>'),
-          message_html: html || body.replace(/\n/g, '<br>'),
-          message_text: body,
-        }
-      }),
+      authType: 'plain',
+      host: 'smtp.gmail.com',
+      port: 587,
+      secure: false, // Use STARTTLS on port 587
     })
 
-    const data = await response.json()
+    // Send email
+    await mailer.send({
+      from: { email: FROM_EMAIL },
+      to: Array.isArray(to) ? to.map(email => ({ email })) : [{ email: to }],
+      subject: subject,
+      text: body,
+      html: html || body.replace(/\n/g, '<br>'),
+    })
 
-    if (!response.ok) {
-      throw new Error(data.text || 'Failed to send email via EmailJS')
-    }
+    // Close connection
+    await mailer.close()
 
     return new Response(
       JSON.stringify({ 
         success: true, 
-        id: data.text || 'sent'
+        id: 'sent'
       }),
       {
         headers: { 
@@ -94,7 +88,7 @@ export async function onRequestPost(context) {
       }
     )
   } catch (error) {
-    console.error('Email send error:', error)
+    console.error('SMTP send error:', error)
     console.error('Request data:', { to, subject })
     return new Response(
       JSON.stringify({ 
