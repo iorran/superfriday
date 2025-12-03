@@ -6,17 +6,9 @@
 /**
  * Upload a file
  */
-export async function uploadFile(
-  file: File,
-  clientId: string,
-  invoiceAmount?: string,
-  dueDate?: string
-): Promise<{ fileKey: string; fileName: string }> {
+export async function uploadFile(file: File): Promise<{ fileKey: string; fileName: string; fileSize: number }> {
   const formData = new FormData()
   formData.append('file', file)
-  formData.append('clientId', clientId)
-  if (invoiceAmount) formData.append('invoiceAmount', invoiceAmount)
-  if (dueDate) formData.append('dueDate', dueDate)
 
   const response = await fetch('/api/upload', {
     method: 'POST',
@@ -50,4 +42,3 @@ export async function downloadFileAsBlob(fileKey: string): Promise<Blob> {
   
   return await response.blob()
 }
-

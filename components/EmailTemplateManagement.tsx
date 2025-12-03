@@ -7,7 +7,8 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/components/ui/use-toast'
 import { getEmailTemplates, createEmailTemplate, updateEmailTemplate, deleteEmailTemplate } from '@/lib/client/db-client'
-import { FileText, Plus, Edit, Trash2 } from 'lucide-react'
+import { EMAIL_TEMPLATE_VARIABLES } from '@/lib/email-template-variables'
+import { FileText, Plus, Edit, Trash2, Info, Copy } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -34,7 +35,6 @@ export default function EmailTemplateManagement() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [editingTemplate, setEditingTemplate] = useState(null)
   const [newTemplate, setNewTemplate] = useState({
-    name: '',
     subject: '',
     body: '',
     type: 'to_client',
@@ -64,10 +64,21 @@ export default function EmailTemplateManagement() {
   }
 
   const handleCreateTemplate = async () => {
-    if (!newTemplate.name.trim() || !newTemplate.subject.trim() || !newTemplate.body.trim()) {
+    if (!newTemplate.subject.trim() || !newTemplate.body.trim()) {
       toast({
         title: "Validation Error",
-        description: "Please fill in all fields",
+        description: "Please fill in subject and body",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Check if a template of this type already exists
+    const existingTemplate = templates.find((t: any) => t.type === newTemplate.type)
+    if (existingTemplate) {
+      toast({
+        title: "Template Already Exists",
+        description: `A template for ${newTemplate.type === 'to_client' ? 'client' : 'account manager'} already exists. Please edit the existing template instead.`,
         variant: "destructive",
       })
       return
@@ -77,10 +88,10 @@ export default function EmailTemplateManagement() {
       await createEmailTemplate(newTemplate)
       toast({
         title: "Template Created",
-        description: `${newTemplate.name} has been created`,
+        description: `Template for ${newTemplate.type === 'to_client' ? 'client' : 'account manager'} has been created`,
         variant: "success",
       })
-      setNewTemplate({ name: '', subject: '', body: '', type: 'to_client' })
+      setNewTemplate({ subject: '', body: '', type: 'to_client' })
       setDialogOpen(false)
       loadTemplates()
     } catch (error) {
@@ -96,7 +107,6 @@ export default function EmailTemplateManagement() {
   const handleEditTemplate = (template) => {
     setEditingTemplate(template)
     setNewTemplate({
-      name: template.name,
       subject: template.subject,
       body: template.body,
       type: template.type,
@@ -105,10 +115,10 @@ export default function EmailTemplateManagement() {
   }
 
   const handleUpdateTemplate = async () => {
-    if (!newTemplate.name.trim() || !newTemplate.subject.trim() || !newTemplate.body.trim()) {
+    if (!newTemplate.subject.trim() || !newTemplate.body.trim()) {
       toast({
         title: "Validation Error",
-        description: "Please fill in all fields",
+        description: "Please fill in subject and body",
         variant: "destructive",
       })
       return
@@ -118,10 +128,10 @@ export default function EmailTemplateManagement() {
       await updateEmailTemplate(editingTemplate.id, newTemplate)
       toast({
         title: "Template Updated",
-        description: `${newTemplate.name} has been updated`,
+        description: `Template for ${newTemplate.type === 'to_client' ? 'client' : 'account manager'} has been updated`,
         variant: "success",
       })
-      setNewTemplate({ name: '', subject: '', body: '', type: 'to_client' })
+      setNewTemplate({ subject: '', body: '', type: 'to_client' })
       setEditingTemplate(null)
       setDialogOpen(false)
       loadTemplates()
@@ -147,7 +157,7 @@ export default function EmailTemplateManagement() {
       await deleteEmailTemplate(templateToDelete.id)
       toast({
         title: "Template Deleted",
-        description: `${templateToDelete.name} has been deleted`,
+        description: `${templateToDelete.type === 'to_client' ? 'Client' : 'Account Manager'} email template has been deleted`,
         variant: "success",
       })
       setTemplateToDelete(null)
@@ -166,7 +176,7 @@ export default function EmailTemplateManagement() {
   const handleDialogClose = () => {
     setDialogOpen(false)
     setEditingTemplate(null)
-    setNewTemplate({ name: '', subject: '', body: '', type: 'to_client' })
+    setNewTemplate({ subject: '', body: '', type: 'to_client' })
   }
 
   if (loading) {
@@ -188,7 +198,31 @@ export default function EmailTemplateManagement() {
               <FileText className="h-5 w-5" />
               Email Templates
             </CardTitle>
-            <Button onClick={() => setDialogOpen(true)}>
+            <Button 
+              onClick={() => {
+                // Check if both template types already exist
+                const hasClientTemplate = templates.some((t: any) => t.type === 'to_client')
+                const hasAccountManagerTemplate = templates.some((t: any) => t.type === 'to_account_manager')
+                
+                if (hasClientTemplate && hasAccountManagerTemplate) {
+                  toast({
+                    title: "All Templates Created",
+                    description: "Both client and account manager templates already exist. Please edit existing templates.",
+                    variant: "destructive",
+                  })
+                  return
+                }
+                
+                // Set default type to the one that doesn't exist
+                if (!hasClientTemplate) {
+                  setNewTemplate({ subject: '', body: '', type: 'to_client' })
+                } else if (!hasAccountManagerTemplate) {
+                  setNewTemplate({ subject: '', body: '', type: 'to_account_manager' })
+                }
+                
+                setDialogOpen(true)
+              }}
+            >
               <Plus className="h-4 w-4 mr-2" />
               Add Template
             </Button>
@@ -208,9 +242,8 @@ export default function EmailTemplateManagement() {
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <p className="font-medium">{template.name}</p>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Type: {template.type === 'to_client' ? 'To Client' : 'To Account Manager'}
+                      <p className="font-medium">
+                        {template.type === 'to_client' ? 'Client Email Template' : 'Account Manager Email Template'}
                       </p>
                       <p className="text-sm font-medium mt-2">Subject:</p>
                       <p className="text-sm text-muted-foreground">{template.subject}</p>
@@ -248,21 +281,59 @@ export default function EmailTemplateManagement() {
           <DialogHeader>
             <DialogTitle>{editingTemplate ? 'Edit Email Template' : 'Create Email Template'}</DialogTitle>
             <DialogDescription>
-              {editingTemplate ? 'Update the email template' : `Create a reusable email template. Use variables like {{clientName}}, {{invoiceName}}, {{invoiceAmount}}, {{dueDate}}, {{downloadLink}}`}
+              {editingTemplate ? 'Update the email template' : 'Create a reusable email template using the available variables below'}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="templateName">Template Name</Label>
-              <input
-                id="templateName"
-                type="text"
-                value={newTemplate.name}
-                onChange={(e) => setNewTemplate({ ...newTemplate, name: e.target.value })}
-                placeholder="Invoice to Client"
-                className="w-full p-2 border rounded-md"
-              />
+          
+          {/* Available Variables Info */}
+          <div className="bg-muted/50 border rounded-lg p-4 space-y-2">
+            <div className="flex items-center gap-2">
+              <Info className="h-4 w-4 text-muted-foreground" />
+              <Label className="text-sm font-semibold">Variáveis Disponíveis:</Label>
             </div>
+            <div className="flex flex-wrap gap-2">
+              {EMAIL_TEMPLATE_VARIABLES.map((variable) => (
+                <button
+                  key={variable.name}
+                  type="button"
+                  onClick={() => {
+                    const currentField = (window as any).__currentTemplateField || 'body'
+                    const fieldId = currentField === 'subject' ? 'templateSubject' : 'templateBody'
+                    const field = document.getElementById(fieldId) as HTMLInputElement | HTMLTextAreaElement
+                    
+                    if (field) {
+                      const start = field.selectionStart || 0
+                      const end = field.selectionEnd || 0
+                      const text = field.value
+                      const before = text.substring(0, start)
+                      const after = text.substring(end)
+                      const newValue = before + variable.example + after
+                      
+                      field.value = newValue
+                      field.focus()
+                      field.setSelectionRange(start + variable.example.length, start + variable.example.length)
+                      
+                      if (currentField === 'subject') {
+                        setNewTemplate({ ...newTemplate, subject: newValue })
+                      } else {
+                        setNewTemplate({ ...newTemplate, body: newValue })
+                      }
+                    }
+                  }}
+                  className="flex items-center gap-1 px-2 py-1 text-xs bg-background border rounded hover:bg-accent transition-colors group"
+                  title={variable.description}
+                >
+                  <code className="text-primary font-mono">{variable.example}</code>
+                  <Copy className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Clique em uma variável para inserir no corpo do email
+            </p>
+          </div>
+
+          <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label htmlFor="templateType">Type</Label>
               <select
@@ -270,10 +341,26 @@ export default function EmailTemplateManagement() {
                 value={newTemplate.type}
                 onChange={(e) => setNewTemplate({ ...newTemplate, type: e.target.value })}
                 className="w-full p-2 border rounded-md"
+                disabled={!!editingTemplate}
               >
-                <option value="to_client">To Client</option>
-                <option value="to_account_manager">To Account Manager</option>
+                <option 
+                  value="to_client" 
+                  disabled={!editingTemplate && templates.some((t: any) => t.type === 'to_client')}
+                >
+                  To Client {!editingTemplate && templates.some((t: any) => t.type === 'to_client') ? '(Already exists)' : ''}
+                </option>
+                <option 
+                  value="to_account_manager" 
+                  disabled={!editingTemplate && templates.some((t: any) => t.type === 'to_account_manager')}
+                >
+                  To Account Manager {!editingTemplate && templates.some((t: any) => t.type === 'to_account_manager') ? '(Already exists)' : ''}
+                </option>
               </select>
+              {!editingTemplate && templates.some((t: any) => t.type === newTemplate.type) && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  ⚠️ A template of this type already exists. Please edit the existing template instead.
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="templateSubject">Subject</Label>
@@ -284,6 +371,10 @@ export default function EmailTemplateManagement() {
                 onChange={(e) => setNewTemplate({ ...newTemplate, subject: e.target.value })}
                 placeholder="Invoice {{invoiceName}} - Payment Due"
                 className="w-full p-2 border rounded-md"
+                onFocus={(e) => {
+                  // Store reference to subject input for variable insertion
+                  ;(window as any).__currentTemplateField = 'subject'
+                }}
               />
             </div>
             <div className="space-y-2">
@@ -295,6 +386,10 @@ export default function EmailTemplateManagement() {
                 placeholder="Dear {{clientName}},\n\nPlease find attached invoice {{invoiceName}}.\n\nAmount: {{invoiceAmount}}\nDue Date: {{dueDate}}\n\nThank you!"
                 rows={8}
                 className="w-full"
+                onFocus={() => {
+                  // Store reference to body textarea for variable insertion
+                  ;(window as any).__currentTemplateField = 'body'
+                }}
               />
             </div>
           </div>
@@ -314,7 +409,7 @@ export default function EmailTemplateManagement() {
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete the template "{templateToDelete?.name}". This action cannot be undone.
+              This will permanently delete the {templateToDelete?.type === 'to_client' ? 'client' : 'account manager'} email template. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

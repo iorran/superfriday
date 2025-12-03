@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { get } from '@vercel/blob'
+import { head } from '@vercel/blob'
 
 export async function GET(
   request: NextRequest,
@@ -27,19 +27,29 @@ export async function GET(
       )
     }
 
-    const blob = await get(fileKey, {
+    // Get file metadata and URL using head
+    const blob = await head(fileKey, {
       token: process.env.BLOB_READ_WRITE_TOKEN,
     })
 
-    if (!blob) {
+    if (!blob || !blob.url) {
       return NextResponse.json(
         { error: true, message: 'File not found' },
         { status: 404 }
       )
     }
 
-    // Convert Blob to Buffer
-    const arrayBuffer = await blob.arrayBuffer()
+    // Fetch the file from the public URL
+    const response = await fetch(blob.url)
+    if (!response.ok) {
+      return NextResponse.json(
+        { error: true, message: 'Failed to fetch file' },
+        { status: response.status }
+      )
+    }
+
+    // Convert to Buffer
+    const arrayBuffer = await response.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
 
     // Try to detect content type from file extension

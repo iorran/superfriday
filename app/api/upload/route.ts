@@ -1,11 +1,11 @@
 /**
  * File Upload API Route
  * Handles file uploads to Vercel Blob
+ * Returns file key for use in invoice creation
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { put } from '@vercel/blob'
-import { upsertInvoice } from '@/lib/db-client'
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,13 +18,10 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData()
     const file = formData.get('file') as File
-    const clientId = formData.get('clientId') as string
-    const invoiceAmount = formData.get('invoiceAmount') as string
-    const dueDate = formData.get('dueDate') as string
 
-    if (!file || !clientId) {
+    if (!file) {
       return NextResponse.json(
-        { error: true, message: 'File and clientId are required' },
+        { error: true, message: 'File is required' },
         { status: 400 }
       )
     }
@@ -39,20 +36,11 @@ export async function POST(request: NextRequest) {
       token: process.env.BLOB_READ_WRITE_TOKEN,
     })
 
-    // Save invoice metadata to database
-    await upsertInvoice({
-      fileKey,
-      clientId,
-      originalName: file.name,
-      fileSize: file.size,
-      invoiceAmount: invoiceAmount ? parseFloat(invoiceAmount) : null,
-      dueDate: dueDate || null,
-    })
-
     return NextResponse.json({
       success: true,
       fileKey,
       fileName: file.name,
+      fileSize: file.size,
       url: blob.url,
     })
   } catch (error: any) {

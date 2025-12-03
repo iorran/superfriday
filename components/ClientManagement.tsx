@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
 import { getClients, createClient, updateClient, deleteClient } from '@/lib/client/db-client'
-import { UserPlus, Mail, User, Edit, Trash2 } from 'lucide-react'
+import { UserPlus, Mail, User, Edit, Trash2, X, Plus } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -34,6 +34,9 @@ export default function ClientManagement() {
   const [editingClient, setEditingClient] = useState(null)
   const [newClientName, setNewClientName] = useState('')
   const [newClientEmail, setNewClientEmail] = useState('')
+  const [requiresTimesheet, setRequiresTimesheet] = useState(false)
+  const [ccEmails, setCcEmails] = useState<string[]>([])
+  const [newCcEmail, setNewCcEmail] = useState('')
   const [clientToDelete, setClientToDelete] = useState(null)
   const { toast } = useToast()
 
@@ -61,43 +64,50 @@ export default function ClientManagement() {
   const handleCreateClient = async () => {
     if (!newClientName.trim() || !newClientEmail.trim()) {
       toast({
-        title: "Validation Error",
-        description: "Please fill in both name and email",
+        title: "Erro de Validação",
+        description: "Por favor, preencha nome e email",
         variant: "destructive",
       })
       return
     }
 
     try {
-      await createClient(newClientName.trim(), newClientEmail.trim())
+      await createClient({
+        name: newClientName.trim(),
+        email: newClientEmail.trim(),
+        requiresTimesheet: requiresTimesheet,
+        ccEmails: ccEmails,
+      })
       toast({
-        title: "Client Created",
-        description: `${newClientName} has been added`,
-        variant: "success",
+        title: "Cliente Criado",
+        description: `${newClientName} foi adicionado`,
+        variant: "default",
       })
       setNewClientName('')
       setNewClientEmail('')
+      setRequiresTimesheet(false)
       setDialogOpen(false)
       loadClients()
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating client:', error)
       toast({
-        title: "Error",
-        description: error.message || "Failed to create client",
+        title: "Erro",
+        description: error.message || "Falha ao criar cliente",
         variant: "destructive",
       })
     }
   }
 
-  const handleEditClient = (client) => {
+  const handleEditClient = (client: any) => {
     setEditingClient(client)
     setNewClientName(client.name)
     setNewClientEmail(client.email)
+    setRequiresTimesheet(client.requires_timesheet === 1 || client.requires_timesheet === true)
     setDialogOpen(true)
   }
 
   const handleUpdateClient = async () => {
-    if (!newClientName.trim() || !newClientEmail.trim()) {
+    if (!newClientName.trim() || !newClientEmail.trim() || !editingClient) {
       toast({
         title: "Validation Error",
         description: "Please fill in both name and email",
@@ -107,14 +117,22 @@ export default function ClientManagement() {
     }
 
     try {
-      await updateClient(editingClient.id, newClientName.trim(), newClientEmail.trim())
+      await updateClient(editingClient.id, {
+        name: newClientName.trim(),
+        email: newClientEmail.trim(),
+        requiresTimesheet: requiresTimesheet,
+        ccEmails: ccEmails,
+      })
       toast({
-        title: "Client Updated",
-        description: `${newClientName} has been updated`,
-        variant: "success",
+        title: "Cliente Atualizado",
+        description: `${newClientName} foi atualizado`,
+        variant: "default",
       })
       setNewClientName('')
       setNewClientEmail('')
+      setRequiresTimesheet(false)
+      setCcEmails([])
+      setNewCcEmail('')
       setEditingClient(null)
       setDialogOpen(false)
       loadClients()
@@ -161,6 +179,31 @@ export default function ClientManagement() {
     setEditingClient(null)
     setNewClientName('')
     setNewClientEmail('')
+    setRequiresTimesheet(false)
+    setCcEmails([])
+    setNewCcEmail('')
+  }
+
+  const addCcEmail = () => {
+    const email = newCcEmail.trim()
+    if (email && !ccEmails.includes(email)) {
+      // Basic email validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (emailRegex.test(email)) {
+        setCcEmails([...ccEmails, email])
+        setNewCcEmail('')
+      } else {
+        toast({
+          title: "Email Inválido",
+          description: "Por favor, insira um email válido",
+          variant: "destructive",
+        })
+      }
+    }
+  }
+
+  const removeCcEmail = (emailToRemove: string) => {
+    setCcEmails(ccEmails.filter(email => email !== emailToRemove))
   }
 
   if (loading) {
@@ -205,11 +248,34 @@ export default function ClientManagement() {
                       <User className="h-5 w-5 text-primary" />
                     </div>
                     <div>
-                      <p className="font-medium">{client.name}</p>
+                      <p className="font-medium">
+                        {client.name}
+                        {(client.requires_timesheet === 1 || client.requires_timesheet === true) && (
+                          <span className="ml-2 text-xs bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 px-2 py-0.5 rounded">
+                            Requer Timesheet
+                          </span>
+                        )}
+                      </p>
                       <p className="text-sm text-muted-foreground flex items-center gap-1">
                         <Mail className="h-3 w-3" />
                         {client.email}
                       </p>
+                      {client.cc_emails && (() => {
+                        try {
+                          const ccEmails = JSON.parse(client.cc_emails)
+                          if (Array.isArray(ccEmails) && ccEmails.length > 0) {
+                            return (
+                              <p className="text-xs text-muted-foreground/70 flex items-center gap-1 mt-1">
+                                <Mail className="h-3 w-3" />
+                                CC: {ccEmails.join(', ')}
+                              </p>
+                            )
+                          }
+                        } catch {
+                          // Ignore parse errors
+                        }
+                        return null
+                      })()}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -240,14 +306,14 @@ export default function ClientManagement() {
       <Dialog open={dialogOpen} onOpenChange={handleDialogClose}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editingClient ? 'Edit Client' : 'Add New Client'}</DialogTitle>
+            <DialogTitle>{editingClient ? 'Editar Cliente' : 'Adicionar Novo Cliente'}</DialogTitle>
             <DialogDescription>
-              {editingClient ? 'Update client information' : 'Add a new client to your invoice system'}
+              {editingClient ? 'Atualize as informações do cliente' : 'Adicione um novo cliente ao sistema'}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="clientName">Client Name</Label>
+              <Label htmlFor="clientName">Nome do Cliente *</Label>
               <input
                 id="clientName"
                 type="text"
@@ -258,15 +324,77 @@ export default function ClientManagement() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="clientEmail">Email Address</Label>
+              <Label htmlFor="clientEmail">Email do Cliente *</Label>
               <input
                 id="clientEmail"
                 type="email"
                 value={newClientEmail}
                 onChange={(e) => setNewClientEmail(e.target.value)}
-                placeholder="client@example.com"
-                className="w-full p-2 border rounded-md"
+                placeholder="cliente@exemplo.com"
+                className="w-full p-2 border rounded-md bg-background"
+                required
               />
+            </div>
+            <div className="flex items-center space-x-2">
+              <input
+                id="requiresTimesheet"
+                type="checkbox"
+                checked={requiresTimesheet}
+                onChange={(e) => setRequiresTimesheet(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300"
+              />
+              <Label htmlFor="requiresTimesheet" className="text-sm font-normal cursor-pointer">
+                Requer timesheet (ex: INDRA)
+              </Label>
+            </div>
+            
+            {/* CC Emails Section */}
+            <div className="space-y-2">
+              <Label htmlFor="ccEmails">Emails CC (Cópia)</Label>
+              <div className="flex gap-2 items-stretch">
+                <input
+                  id="ccEmails"
+                  type="email"
+                  value={newCcEmail}
+                  onChange={(e) => setNewCcEmail(e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      addCcEmail()
+                    }
+                  }}
+                  placeholder="cc@exemplo.com"
+                  className="flex-1 p-2 border rounded-md bg-background"
+                />
+                <Button
+                  type="button"
+                  onClick={addCcEmail}
+                  variant="outline"
+                  className="shrink-0 px-3 h-auto"
+                  style={{ height: 'auto', minHeight: '2.5rem' }}
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+              {ccEmails.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {ccEmails.map((email, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center gap-1 px-2 py-1 bg-muted rounded-md text-sm"
+                    >
+                      <span>{email}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeCcEmail(email)}
+                        className="hover:text-destructive"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter>
@@ -274,7 +402,7 @@ export default function ClientManagement() {
               Cancel
             </Button>
             <Button onClick={editingClient ? handleUpdateClient : handleCreateClient}>
-              {editingClient ? 'Update Client' : 'Create Client'}
+              {editingClient ? 'Atualizar Cliente' : 'Criar Cliente'}
             </Button>
           </DialogFooter>
         </DialogContent>

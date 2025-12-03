@@ -19,9 +19,18 @@ import {
 import { 
   getAllInvoices, 
   updateInvoiceState, 
-  deleteInvoice
+  deleteInvoice,
+  sendEmail,
+  getEmailTemplates
 } from '@/lib/client/db-client'
-import { FileText, Calendar, Trash2, Mail, User } from 'lucide-react'
+import { FileText, Calendar, Trash2, Mail, User, CheckCircle2, Send, Edit, Loader2 } from 'lucide-react'
+import FileUpload from './FileUpload'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 interface FileListProps {
   refreshTrigger?: number
@@ -31,7 +40,9 @@ export default function FileList({ refreshTrigger }: FileListProps) {
   const [invoices, setInvoices] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set())
-  const [deletingFile, setDeletingFile] = useState<string | null>(null)
+  const [deletingInvoice, setDeletingInvoice] = useState<string | null>(null)
+  const [sendingEmail, setSendingEmail] = useState<string | null>(null)
+  const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null)
   const { toast } = useToast()
 
   // Get current month key (YYYY-MM format)
@@ -50,12 +61,18 @@ export default function FileList({ refreshTrigger }: FileListProps) {
       setLoading(true)
       const invoicesList = await getAllInvoices()
       
-      // Parse and format invoices
+      // Format invoices
       const formattedInvoices = invoicesList.map((inv: any) => {
-        const timestamp = parseInt(inv.file_key.split('-')[0])
-        const date = isNaN(timestamp) ? new Date(inv.uploaded_at) : new Date(timestamp)
-        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-        const monthName = date.toLocaleString('default', { month: 'long', year: 'numeric' })
+        // Use month/year from invoice, or fallback to uploaded_at
+        const monthKey = inv.year && inv.month 
+          ? `${inv.year}-${String(inv.month).padStart(2, '0')}`
+          : currentMonthKey
+        
+        const monthName = inv.year && inv.month
+          ? new Date(inv.year, inv.month - 1).toLocaleString('default', { month: 'long', year: 'numeric' })
+          : new Date().toLocaleString('default', { month: 'long', year: 'numeric' })
+
+        const date = inv.uploaded_at ? new Date(inv.uploaded_at) : new Date()
 
         return {
           ...inv,
@@ -63,7 +80,8 @@ export default function FileList({ refreshTrigger }: FileListProps) {
           monthKey,
           monthName,
           sentToClient: inv.sent_to_client === 1 || inv.sent_to_client === true,
-          sentToAccountManager: inv.sent_to_account_manager === 1 || inv.sent_to_account_manager === true,
+          paymentReceived: inv.payment_received === 1 || inv.payment_received === true,
+          sentToAccountant: inv.sent_to_accountant === 1 || inv.sent_to_accountant === true,
         }
       })
 
@@ -71,14 +89,14 @@ export default function FileList({ refreshTrigger }: FileListProps) {
     } catch (error) {
       console.error('Error fetching invoices:', error)
       toast({
-        title: "Error",
-        description: "Failed to fetch invoices",
+        title: "Erro",
+        description: "Falha ao carregar invoices",
         variant: "destructive",
       })
     } finally {
       setLoading(false)
     }
-  }, [toast])
+  }, [toast, currentMonthKey])
 
   useEffect(() => {
     fetchInvoices()
@@ -111,73 +129,151 @@ export default function FileList({ refreshTrigger }: FileListProps) {
     })
   }
 
-  const handleStateChange = useCallback(async (fileKey: string, stateName: string, value: boolean) => {
+  const handleStateChange = useCallback(async (invoiceId: string, updates: {
+    sentToClient?: boolean
+    paymentReceived?: boolean
+    sentToAccountant?: boolean
+  }) => {
     try {
-      const updates: any = { [stateName]: value }
-      await updateInvoiceState(fileKey, updates)
+      await updateInvoiceState(invoiceId, updates)
       
       // Update local state
       setInvoices((prev) =>
         prev.map((inv) =>
-          inv.file_key === fileKey
-            ? { ...inv, [stateName]: value }
+          inv.id === invoiceId
+            ? { 
+                ...inv, 
+                sentToClient: updates.sentToClient !== undefined ? updates.sentToClient : inv.sentToClient,
+                paymentReceived: updates.paymentReceived !== undefined ? updates.paymentReceived : inv.paymentReceived,
+                sentToAccountant: updates.sentToAccountant !== undefined ? updates.sentToAccountant : inv.sentToAccountant,
+              }
             : inv
         )
       )
 
-      const stateLabels: Record<string, string> = {
-        sentToClient: 'Sent to Client',
-        sentToAccountManager: 'Sent to Account Manager',
-      }
-
       toast({
-        title: "State Updated",
-        description: `${stateLabels[stateName]} ${value ? 'marked' : 'unmarked'}`,
+        title: "Estado Atualizado",
+        description: "Estado da invoice atualizado com sucesso",
         variant: "default",
       })
     } catch (error: any) {
       console.error('Error updating invoice state:', error)
       toast({
-        title: "Update Failed",
-        description: error.message || "Failed to update invoice state",
+        title: "Erro",
+        description: error.message || "Falha ao atualizar estado",
         variant: "destructive",
       })
     }
   }, [toast])
 
-  const handleDelete = useCallback(async (fileKey: string, fileName: string) => {
+  const handleSendEmail = useCallback(async (invoiceId: string, recipientType: 'client' | 'accountant') => {
     try {
-      setDeletingFile(fileKey)
+      setSendingEmail(`${invoiceId}-${recipientType}`)
       
-      // Delete from storage via API
-      const response = await fetch(`/api/files/${fileKey}`, {
-        method: 'DELETE',
-      })
-
-      if (!response.ok && response.status !== 404) {
-        throw new Error('Failed to delete file from storage')
+      const invoice = invoices.find(inv => inv.id === invoiceId)
+      if (!invoice) {
+        throw new Error('Invoice not found')
       }
 
-      // Delete from database
-      await deleteInvoice(fileKey)
+      // Get templates for this recipient type
+      // Templates are stored with type 'to_client' or 'to_account_manager'
+      const templates = await getEmailTemplates()
+      const templateType = recipientType === 'client' ? 'to_client' : 'to_account_manager'
+      const recipientTemplates = templates.filter((t: any) => t.type === templateType)
+      
+      // Use the first template if available, otherwise use default
+      let template = recipientTemplates.length > 0 ? recipientTemplates[0] : null
+      let templateId: string | null = null
+      let subject = ''
+      let body = ''
+
+      if (template) {
+        templateId = template.id
+        
+        // Replace template variables in subject
+        subject = template.subject
+          .replace(/\{\{clientName\}\}/g, invoice.client_name || '')
+          .replace(/\{\{invoiceName\}\}/g, invoice.id || '')
+          .replace(/\{\{invoiceAmount\}\}/g, invoice.invoice_amount ? new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(invoice.invoice_amount) : '')
+          .replace(/\{\{dueDate\}\}/g, invoice.due_date ? new Date(invoice.due_date).toLocaleDateString('pt-PT') : '')
+          .replace(/\{\{downloadLink\}\}/g, '') // Not applicable for attachments
+        
+        // Replace template variables in body
+        body = template.body
+          .replace(/\{\{clientName\}\}/g, invoice.client_name || '')
+          .replace(/\{\{invoiceName\}\}/g, invoice.id || '')
+          .replace(/\{\{invoiceAmount\}\}/g, invoice.invoice_amount ? new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(invoice.invoice_amount) : '')
+          .replace(/\{\{dueDate\}\}/g, invoice.due_date ? new Date(invoice.due_date).toLocaleDateString('pt-PT') : '')
+          .replace(/\{\{downloadLink\}\}/g, '') // Not applicable for attachments
+      } else {
+        // Fallback to default if no template found
+        subject = recipientType === 'client' 
+          ? `Invoice - ${invoice.client_name}`
+          : `Invoice para ${invoice.client_name}`
+
+        body = recipientType === 'client'
+          ? `Olá,\n\nSegue em anexo a invoice solicitada.\n\nAtenciosamente`
+          : `Olá,\n\nSegue em anexo a invoice de ${invoice.client_name}.\n\nAtenciosamente`
+      }
+
+      await sendEmail({
+        invoiceId,
+        recipientType,
+        templateId,
+        subject,
+        body,
+      })
+
+      // Update state based on recipient type
+      if (recipientType === 'client') {
+        await handleStateChange(invoiceId, { sentToClient: true })
+      } else {
+        await handleStateChange(invoiceId, { sentToAccountant: true })
+      }
 
       toast({
-        title: "File Deleted",
-        description: `"${fileName}" has been deleted successfully`,
+        title: "Email Enviado",
+        description: `Email enviado para ${recipientType === 'client' ? 'cliente' : 'contador'} com sucesso`,
+        variant: "default",
+      })
+
+      // Refresh invoices
+      fetchInvoices()
+    } catch (error: any) {
+      console.error('Error sending email:', error)
+      toast({
+        title: "Erro ao Enviar Email",
+        description: error.message || "Falha ao enviar email",
+        variant: "destructive",
+      })
+    } finally {
+      setSendingEmail(null)
+    }
+  }, [invoices, toast, handleStateChange, fetchInvoices])
+
+  const handleDelete = useCallback(async (invoiceId: string, clientName: string) => {
+    try {
+      setDeletingInvoice(invoiceId)
+      
+      await deleteInvoice(invoiceId)
+
+      toast({
+        title: "Invoice Deletada",
+        description: `Invoice de ${clientName} foi deletada com sucesso`,
         variant: "default",
       })
 
       // Remove from local state
-      setInvoices((prev) => prev.filter((inv) => inv.file_key !== fileKey))
+      setInvoices((prev) => prev.filter((inv) => inv.id !== invoiceId))
     } catch (error: any) {
-      console.error('Error deleting file:', error)
+      console.error('Error deleting invoice:', error)
       toast({
-        title: "Delete Failed",
-        description: error.message || "Failed to delete file",
+        title: "Erro",
+        description: error.message || "Falha ao deletar invoice",
         variant: "destructive",
       })
     } finally {
-      setDeletingFile(null)
+      setDeletingInvoice(null)
     }
   }, [toast])
 
@@ -194,16 +290,26 @@ export default function FileList({ refreshTrigger }: FileListProps) {
       day: 'numeric',
       month: 'short',
       year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
     })
+  }
+
+  const formatCurrency = (amount: number | null | undefined) => {
+    if (amount === null || amount === undefined) return '€0,00'
+    return new Intl.NumberFormat('pt-PT', {
+      style: 'currency',
+      currency: 'EUR',
+    }).format(amount)
+  }
+
+  const getTotalFileSize = (files: any[]) => {
+    return files?.reduce((total, file) => total + (file.file_size || 0), 0) || 0
   }
 
   if (loading) {
     return (
-      <Card className="w-full max-w-4xl mx-auto">
+      <Card className="w-full">
         <CardContent className="p-6">
-          <p className="text-center text-muted-foreground">Loading invoices...</p>
+          <p className="text-center text-muted-foreground">Carregando invoices...</p>
         </CardContent>
       </Card>
     )
@@ -211,22 +317,22 @@ export default function FileList({ refreshTrigger }: FileListProps) {
 
   if (invoices.length === 0) {
     return (
-      <Card className="w-full max-w-4xl mx-auto">
+      <Card className="w-full">
         <CardContent className="p-6">
-          <p className="text-center text-muted-foreground">No invoices uploaded yet.</p>
+          <p className="text-center text-muted-foreground">Nenhuma invoice criada ainda.</p>
         </CardContent>
       </Card>
     )
   }
 
   return (
-    <div className="w-full max-w-4xl mx-auto space-y-4">
+    <div className="w-full space-y-4">
       {Object.entries(invoicesByMonth).map(([monthKey, group]) => {
         const isExpanded = expandedMonths.has(monthKey)
         return (
           <Card key={monthKey}>
             <Collapsible open={isExpanded} onOpenChange={() => toggleMonth(monthKey)}>
-              <CollapsibleTrigger className="w-full">
+              <CollapsibleTrigger className="w-full p-4">
                 <div className="flex items-center gap-2">
                   <Calendar className="h-4 w-4" />
                   <span className="font-semibold">{group.monthName}</span>
@@ -235,99 +341,212 @@ export default function FileList({ refreshTrigger }: FileListProps) {
                   </span>
                 </div>
               </CollapsibleTrigger>
-              <CollapsibleContent open={isExpanded}>
-                <div className="p-4 space-y-2">
-                  {group.invoices.map((invoice) => (
-                    <div
-                      key={invoice.file_key}
-                      className="flex items-center justify-between p-3 rounded-md border bg-card hover:bg-accent transition-colors"
-                    >
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <FileText className="h-5 w-5 text-muted-foreground shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium truncate">{invoice.original_name}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {invoice.client_name || 'No client'} • {formatDate(invoice.lastModified)} • {formatFileSize(invoice.file_size)}
-                          </p>
-                          {/* Invoice States */}
-                          <div className="flex items-center gap-2 mt-2 flex-wrap">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleStateChange(invoice.file_key, 'sentToClient', !invoice.sentToClient)
-                              }}
-                              className={`flex items-center gap-1 text-xs px-2 py-1 rounded transition-colors ${
-                                invoice.sentToClient
-                                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
-                                  : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
-                              }`}
-                            >
-                              <Mail className="h-3 w-3" />
-                              Sent to Client
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleStateChange(invoice.file_key, 'sentToAccountManager', !invoice.sentToAccountManager)
-                              }}
-                              disabled={!invoice.sentToClient}
-                              className={`flex items-center gap-1 text-xs px-2 py-1 rounded transition-colors ${
-                                invoice.sentToAccountManager
-                                  ? 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300'
-                                  : invoice.sentToClient
-                                  ? 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
-                                  : 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-600 cursor-not-allowed opacity-50'
-                              }`}
-                            >
-                              <User className="h-3 w-3" />
-                              Sent to Account Manager
-                            </button>
+              <CollapsibleContent>
+                <div className="p-4 space-y-3">
+                  {group.invoices.map((invoice) => {
+                    const invoiceFiles = invoice.files?.filter((f: any) => f.file_type === 'invoice') || []
+                    const timesheetFiles = invoice.files?.filter((f: any) => f.file_type === 'timesheet') || []
+                    const totalSize = getTotalFileSize(invoice.files || [])
+
+                    return (
+                      <div
+                        key={invoice.id}
+                        className="p-4 rounded-md border bg-card hover:bg-accent/50 transition-colors"
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-2">
+                              <FileText className="h-5 w-5 text-muted-foreground shrink-0" />
+                              <div>
+                                <p className="font-medium">{invoice.client_name || 'Sem cliente'}</p>
+                                <p className="text-sm text-muted-foreground">
+                                  {formatDate(invoice.lastModified)} • {formatCurrency(invoice.invoice_amount)}
+                                  {totalSize > 0 && ` • ${formatFileSize(totalSize)}`}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Files list */}
+                            {invoice.files && invoice.files.length > 0 && (
+                              <div className="mt-2 space-y-1">
+                                {invoiceFiles.map((file: any) => (
+                                  <p key={file.id} className="text-xs text-muted-foreground">
+                                    📄 Invoice: {file.original_name}
+                                  </p>
+                                ))}
+                                {timesheetFiles.map((file: any) => (
+                                  <p key={file.id} className="text-xs text-muted-foreground">
+                                    📋 Timesheet: {file.original_name}
+                                  </p>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Workflow States */}
+                            <div className="flex items-center gap-2 mt-3 flex-wrap">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  if (!invoice.sentToClient && sendingEmail !== `${invoice.id}-client`) {
+                                    handleSendEmail(invoice.id, 'client')
+                                  }
+                                }}
+                                disabled={sendingEmail === `${invoice.id}-client` || invoice.sentToClient}
+                                className={`flex items-center gap-1 text-xs px-3 py-1.5 rounded transition-all ${
+                                  sendingEmail === `${invoice.id}-client`
+                                    ? 'bg-blue-200 text-blue-800 dark:bg-blue-800 dark:text-blue-200 cursor-wait opacity-75'
+                                    : invoice.sentToClient
+                                    ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 cursor-default opacity-75'
+                                    : 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800 cursor-pointer'
+                                } ${sendingEmail === `${invoice.id}-client` ? 'animate-pulse' : ''}`}
+                              >
+                                {sendingEmail === `${invoice.id}-client` ? (
+                                  <>
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                    Enviando...
+                                  </>
+                                ) : invoice.sentToClient ? (
+                                  <>
+                                    <CheckCircle2 className="h-3 w-3" />
+                                    Enviado para Cliente
+                                  </>
+                                ) : (
+                                  <>
+                                    <Send className="h-3 w-3" />
+                                    Enviar para Cliente
+                                  </>
+                                )}
+                              </button>
+
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleStateChange(invoice.id, { paymentReceived: !invoice.paymentReceived })
+                                }}
+                                className={`flex items-center gap-1 text-xs px-3 py-1.5 rounded transition-colors ${
+                                  invoice.paymentReceived
+                                    ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300'
+                                    : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                                }`}
+                              >
+                                <CheckCircle2 className="h-3 w-3" />
+                                Pagamento Recebido
+                              </button>
+
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  if (!invoice.sentToAccountant && invoice.paymentReceived && sendingEmail !== `${invoice.id}-accountant`) {
+                                    handleSendEmail(invoice.id, 'accountant')
+                                  }
+                                }}
+                                disabled={!invoice.paymentReceived || sendingEmail === `${invoice.id}-accountant` || invoice.sentToAccountant}
+                                className={`flex items-center gap-1 text-xs px-3 py-1.5 rounded transition-all ${
+                                  sendingEmail === `${invoice.id}-accountant`
+                                    ? 'bg-purple-200 text-purple-800 dark:bg-purple-800 dark:text-purple-200 cursor-wait opacity-75'
+                                    : invoice.sentToAccountant
+                                    ? 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 cursor-default opacity-75'
+                                    : invoice.paymentReceived
+                                    ? 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-800 cursor-pointer'
+                                    : 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-600 cursor-not-allowed opacity-50'
+                                } ${sendingEmail === `${invoice.id}-accountant` ? 'animate-pulse' : ''}`}
+                              >
+                                {sendingEmail === `${invoice.id}-accountant` ? (
+                                  <>
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                    Enviando...
+                                  </>
+                                ) : invoice.sentToAccountant ? (
+                                  <>
+                                    <CheckCircle2 className="h-3 w-3" />
+                                    Enviado para Contador
+                                  </>
+                                ) : (
+                                  <>
+                                    <Send className="h-3 w-3" />
+                                    Enviar para Contador
+                                  </>
+                                )}
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 ml-4">
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
+
+                          <div className="flex items-center gap-2">
                             <Button
                               variant="outline"
                               size="sm"
-                              className="text-destructive hover:text-destructive"
-                              disabled={deletingFile === invoice.file_key}
-                              onClick={(e) => e.stopPropagation()}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setEditingInvoiceId(invoice.id)
+                              }}
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <Edit className="h-4 w-4" />
                             </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                This action cannot be undone. This will permanently delete the invoice
-                                <strong className="block mt-2">"{invoice.original_name}"</strong>
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() => handleDelete(invoice.file_key, invoice.original_name)}
-                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                disabled={deletingFile === invoice.file_key}
-                              >
-                                {deletingFile === invoice.file_key ? 'Deleting...' : 'Delete'}
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-destructive hover:text-destructive"
+                                  disabled={deletingInvoice === invoice.id}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Tem certeza?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Esta ação não pode ser desfeita. Isso irá deletar permanentemente a invoice
+                                    <strong className="block mt-2">"{invoice.client_name}"</strong>
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => handleDelete(invoice.id, invoice.client_name)}
+                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                    disabled={deletingInvoice === invoice.id}
+                                  >
+                                    {deletingInvoice === invoice.id ? 'Deletando...' : 'Deletar'}
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </CollapsibleContent>
             </Collapsible>
           </Card>
         )
       })}
+
+      <Dialog open={editingInvoiceId !== null} onOpenChange={(open) => {
+        if (!open) {
+          setEditingInvoiceId(null)
+        }
+      }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar Invoice</DialogTitle>
+          </DialogHeader>
+          <FileUpload
+            editingInvoiceId={editingInvoiceId}
+            onUploadSuccess={() => {
+              setEditingInvoiceId(null)
+              fetchInvoices()
+            }}
+            onCancel={() => {
+              setEditingInvoiceId(null)
+            }}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
-

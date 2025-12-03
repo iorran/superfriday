@@ -45,11 +45,18 @@ export async function getClient(clientId: string) {
 /**
  * Create a new client
  */
-export async function createClient(name: string, email: string) {
+export async function createClient(data: {
+  name: string
+  email: string
+  requiresTimesheet?: boolean
+  ccEmails?: string[]
+}) {
   const id = `client-${Date.now()}`
+  const { name, email, requiresTimesheet, ccEmails } = data
+  const ccEmailsJson = ccEmails && ccEmails.length > 0 ? JSON.stringify(ccEmails) : null
   await executeQuery(
-    'INSERT INTO clients (id, name, email) VALUES (?, ?, ?)',
-    [id, name, email]
+    'INSERT INTO clients (id, name, email, requires_timesheet, cc_emails, created_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)',
+    [id, name, email, requiresTimesheet ? 1 : 0, ccEmailsJson]
   )
   return id
 }
@@ -57,10 +64,17 @@ export async function createClient(name: string, email: string) {
 /**
  * Update a client
  */
-export async function updateClient(clientId: string, name: string, email: string) {
+export async function updateClient(clientId: string, data: {
+  name: string
+  email: string
+  requiresTimesheet?: boolean
+  ccEmails?: string[]
+}) {
+  const { name, email, requiresTimesheet, ccEmails } = data
+  const ccEmailsJson = ccEmails && ccEmails.length > 0 ? JSON.stringify(ccEmails) : null
   await executeQuery(
-    'UPDATE clients SET name = ?, email = ? WHERE id = ?',
-    [name, email, clientId]
+    'UPDATE clients SET name = ?, email = ?, requires_timesheet = ?, cc_emails = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    [name, email, requiresTimesheet ? 1 : 0, ccEmailsJson, clientId]
   )
 }
 
@@ -72,111 +86,200 @@ export async function deleteClient(clientId: string) {
 }
 
 /**
- * Get invoice by file key
+ * Get invoice by ID with files
  */
-export async function getInvoice(fileKey: string) {
-  const result = await executeQuery(
-    `SELECT i.*, c.name as client_name, c.email as client_email 
+export async function getInvoice(invoiceId: string) {
+  const invoiceResult = await executeQuery(
+    `SELECT i.*, c.name as client_name, c.email as client_email, c.requires_timesheet
      FROM invoices i 
      LEFT JOIN clients c ON i.client_id = c.id 
-     WHERE i.file_key = ?`,
-    [fileKey]
+     WHERE i.id = ?`,
+    [invoiceId]
   )
-  return result.results?.[0] || null
+  const invoice = invoiceResult.results?.[0]
+  
+  if (!invoice) return null
+  
+  // Get files for this invoice
+  const filesResult = await executeQuery(
+    'SELECT * FROM invoice_files WHERE invoice_id = ? ORDER BY file_type, uploaded_at',
+    [invoiceId]
+  )
+  invoice.files = filesResult.results || []
+  
+  return invoice
 }
 
 /**
- * Get all invoices with client info
+ * Get all invoices with client info and files
  */
 export async function getAllInvoices() {
   const result = await executeQuery(
-    `SELECT i.*, c.name as client_name, c.email as client_email 
+    `SELECT i.*, c.name as client_name, c.email as client_email, c.requires_timesheet
      FROM invoices i 
      LEFT JOIN clients c ON i.client_id = c.id 
-     ORDER BY i.uploaded_at DESC`
+     ORDER BY i.year DESC, i.month DESC, i.uploaded_at DESC`
   )
-  return result.results || []
+  const invoices = result.results || []
+  
+  // Get files for each invoice
+  for (const invoice of invoices) {
+    const filesResult = await executeQuery(
+      'SELECT * FROM invoice_files WHERE invoice_id = ? ORDER BY file_type, uploaded_at',
+      [invoice.id]
+    )
+    invoice.files = filesResult.results || []
+  }
+  
+  return invoices
 }
 
 /**
- * Create or update invoice
+ * Create invoice with files
  */
-export async function upsertInvoice(invoiceData: {
-  fileKey: string
+export async function createInvoice(invoiceData: {
   clientId: string
-  originalName: string
-  fileSize: number
-  invoiceAmount?: number | null
-  dueDate?: string | null
+  invoiceAmount: number
+  dueDate: string
+  month: number
+  year: number
+  notes?: string | null
+  files: Array<{
+    fileKey: string
+    fileType: 'invoice' | 'timesheet'
+    originalName: string
+    fileSize: number
+  }>
 }) {
-  const {
-    fileKey,
-    clientId,
-    originalName,
-    fileSize,
-    invoiceAmount,
-    dueDate,
-  } = invoiceData
+  const response = await fetch('/api/invoices', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(invoiceData),
+  })
 
-  await executeQuery(
-    `INSERT INTO invoices 
-     (file_key, client_id, original_name, file_size, invoice_amount, due_date, uploaded_at)
-     VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-     ON CONFLICT(file_key) DO UPDATE SET
-       client_id = excluded.client_id,
-       original_name = excluded.original_name,
-       file_size = excluded.file_size,
-       invoice_amount = excluded.invoice_amount,
-       due_date = excluded.due_date`,
-    [fileKey, clientId, originalName, fileSize, invoiceAmount, dueDate]
-  )
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Failed to create invoice' }))
+    throw new Error(error.message || `Failed to create invoice: ${response.status}`)
+  }
+
+  return await response.json()
 }
 
 /**
  * Update invoice state
  */
-export async function updateInvoiceState(fileKey: string, updates: {
+export async function updateInvoiceState(invoiceId: string, updates: {
   sentToClient?: boolean
-  sentToAccountManager?: boolean
+  paymentReceived?: boolean
+  sentToAccountant?: boolean
 }) {
-  const {
-    sentToClient,
-    sentToAccountManager,
-  } = updates
+  const response = await fetch(`/api/invoices/${invoiceId}/state`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(updates),
+  })
 
-  const updatesList: string[] = []
-  const params: any[] = []
-
-  if (sentToClient !== undefined) {
-    updatesList.push('sent_to_client = ?')
-    params.push(sentToClient ? 1 : 0)
-    if (sentToClient) {
-      updatesList.push('sent_to_client_at = CURRENT_TIMESTAMP')
-    }
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Failed to update invoice state' }))
+    throw new Error(error.message || `Failed to update invoice state: ${response.status}`)
   }
 
-  if (sentToAccountManager !== undefined) {
-    updatesList.push('sent_to_account_manager = ?')
-    params.push(sentToAccountManager ? 1 : 0)
-    if (sentToAccountManager) {
-      updatesList.push('sent_to_account_manager_at = CURRENT_TIMESTAMP')
-    }
-  }
-
-  if (updatesList.length === 0) return
-
-  params.push(fileKey)
-  const sql = `UPDATE invoices SET ${updatesList.join(', ')} WHERE file_key = ?`
-  
-  await executeQuery(sql, params)
+  return await response.json()
 }
 
 /**
- * Delete invoice
+ * Update invoice details
  */
-export async function deleteInvoice(fileKey: string) {
-  await executeQuery('DELETE FROM invoices WHERE file_key = ?', [fileKey])
-  await executeQuery('DELETE FROM email_history WHERE invoice_file_key = ?', [fileKey])
+export async function updateInvoice(invoiceId: string, updates: {
+  clientId?: string
+  invoiceAmount?: number
+  dueDate?: string
+  month?: number
+  year?: number
+  filesToDelete?: string[]
+  newFiles?: Array<{
+    fileKey: string
+    fileType: 'invoice' | 'timesheet'
+    originalName: string
+    fileSize: number
+  }>
+}) {
+  const response = await fetch(`/api/invoices/${invoiceId}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(updates),
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Failed to update invoice' }))
+    throw new Error(error.message || `Failed to update invoice: ${response.status}`)
+  }
+
+  return await response.json()
+}
+
+/**
+ * Delete an invoice file
+ */
+export async function deleteInvoiceFile(invoiceId: string, fileId: string) {
+  const response = await fetch(`/api/invoices/${invoiceId}/files?fileId=${fileId}`, {
+    method: 'DELETE',
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Failed to delete file' }))
+    throw new Error(error.message || `Failed to delete file: ${response.status}`)
+  }
+
+  return await response.json()
+}
+
+/**
+ * Delete invoice and its files
+ */
+export async function deleteInvoice(invoiceId: string) {
+  const response = await fetch(`/api/invoices/${invoiceId}`, {
+    method: 'DELETE',
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Failed to delete invoice' }))
+    throw new Error(error.message || `Failed to delete invoice: ${response.status}`)
+  }
+
+  return await response.json()
+}
+
+/**
+ * Send email
+ */
+export async function sendEmail(data: {
+  invoiceId: string
+  recipientType: 'client' | 'accountant'
+  templateId?: string | null
+  subject: string
+  body: string
+}) {
+  const response = await fetch('/api/email/send', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Failed to send email' }))
+    throw new Error(error.message || `Failed to send email: ${response.status}`)
+  }
+
+  return await response.json()
 }
 
 /**
@@ -199,16 +302,15 @@ export async function getEmailTemplate(templateId: string) {
  * Create email template
  */
 export async function createEmailTemplate(templateData: {
-  name: string
   subject: string
   body: string
   type: string
 }) {
   const id = `template-${Date.now()}`
-  const { name, subject, body, type } = templateData
+  const { subject, body, type } = templateData
   await executeQuery(
-    'INSERT INTO email_templates (id, name, subject, body, type) VALUES (?, ?, ?, ?, ?)',
-    [id, name, subject, body, type]
+    'INSERT INTO email_templates (id, subject, body, type, created_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)',
+    [id, subject, body, type]
   )
   return id
 }
@@ -217,15 +319,14 @@ export async function createEmailTemplate(templateData: {
  * Update email template
  */
 export async function updateEmailTemplate(templateId: string, templateData: {
-  name: string
   subject: string
   body: string
   type: string
 }) {
-  const { name, subject, body, type } = templateData
+  const { subject, body, type } = templateData
   await executeQuery(
-    'UPDATE email_templates SET name = ?, subject = ?, body = ?, type = ? WHERE id = ?',
-    [name, subject, body, type, templateId]
+    'UPDATE email_templates SET subject = ?, body = ?, type = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    [subject, body, type, templateId]
   )
 }
 
@@ -237,52 +338,50 @@ export async function deleteEmailTemplate(templateId: string) {
 }
 
 /**
- * Record email in history
- */
-export async function recordEmail(emailData: {
-  invoiceFileKey: string
-  templateId?: string | null
-  recipientEmail: string
-  recipientName?: string | null
-  subject: string
-  body: string
-  status?: string
-  errorMessage?: string | null
-}) {
-  const id = `email-${Date.now()}`
-  const {
-    invoiceFileKey,
-    templateId,
-    recipientEmail,
-    recipientName,
-    subject,
-    body,
-    status = 'sent',
-    errorMessage,
-  } = emailData
-
-  await executeQuery(
-    `INSERT INTO email_history 
-     (id, invoice_file_key, template_id, recipient_email, recipient_name, subject, body, status, error_message)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [id, invoiceFileKey, templateId, recipientEmail, recipientName, subject, body, status, errorMessage]
-  )
-  
-  return id
-}
-
-/**
  * Get email history for an invoice
  */
-export async function getEmailHistory(invoiceFileKey: string) {
+export async function getEmailHistory(invoiceId: string) {
   const result = await executeQuery(
     `SELECT eh.*, et.name as template_name
      FROM email_history eh
      LEFT JOIN email_templates et ON eh.template_id = et.id
-     WHERE eh.invoice_file_key = ?
+     WHERE eh.invoice_id = ?
      ORDER BY eh.sent_at DESC`,
-    [invoiceFileKey]
+    [invoiceId]
   )
   return result.results || []
 }
 
+/**
+ * Get accountant email from settings
+ */
+export async function getAccountantEmail(): Promise<string | null> {
+  const response = await fetch('/api/settings?key=accountant_email', {
+    method: 'GET',
+  })
+
+  if (!response.ok) {
+    return null
+  }
+
+  const data = await response.json()
+  return data.value || null
+}
+
+/**
+ * Set accountant email in settings
+ */
+export async function setAccountantEmail(email: string): Promise<void> {
+  const response = await fetch('/api/settings', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ key: 'accountant_email', value: email }),
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Failed to save settings' }))
+    throw new Error(error.message || `Failed to save settings: ${response.status}`)
+  }
+}

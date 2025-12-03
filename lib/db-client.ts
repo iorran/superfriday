@@ -24,11 +24,18 @@ export async function getClient(clientId: string) {
 /**
  * Create a new client
  */
-export async function createClient(name: string, email: string) {
+export async function createClient(data: {
+  name: string
+  email: string
+  requiresTimesheet?: boolean
+  ccEmails?: string[]
+}) {
   const id = `client-${Date.now()}`
+  const { name, email, requiresTimesheet, ccEmails } = data
+  const ccEmailsJson = ccEmails && ccEmails.length > 0 ? JSON.stringify(ccEmails) : null
   executeQuery(
-    'INSERT INTO clients (id, name, email) VALUES (?, ?, ?)',
-    [id, name, email]
+    'INSERT INTO clients (id, name, email, requires_timesheet, cc_emails, created_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)',
+    [id, name, email, requiresTimesheet ? 1 : 0, ccEmailsJson]
   )
   return id
 }
@@ -36,10 +43,17 @@ export async function createClient(name: string, email: string) {
 /**
  * Update a client
  */
-export async function updateClient(clientId: string, name: string, email: string) {
+export async function updateClient(clientId: string, data: {
+  name: string
+  email: string
+  requiresTimesheet?: boolean
+  ccEmails?: string[]
+}) {
+  const { name, email, requiresTimesheet, ccEmails } = data
+  const ccEmailsJson = ccEmails && ccEmails.length > 0 ? JSON.stringify(ccEmails) : null
   executeQuery(
-    'UPDATE clients SET name = ?, email = ? WHERE id = ?',
-    [name, email, clientId]
+    'UPDATE clients SET name = ?, email = ?, requires_timesheet = ?, cc_emails = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    [name, email, requiresTimesheet ? 1 : 0, ccEmailsJson, clientId]
   )
 }
 
@@ -51,76 +65,149 @@ export async function deleteClient(clientId: string) {
 }
 
 /**
- * Get invoice by file key
+ * Get setting value
  */
-export async function getInvoice(fileKey: string) {
-  const result = executeQuery(
-    `SELECT i.*, c.name as client_name, c.email as client_email 
-     FROM invoices i 
-     LEFT JOIN clients c ON i.client_id = c.id 
-     WHERE i.file_key = ?`,
-    [fileKey]
-  )
-  return result.results?.[0] || null
+export async function getSetting(key: string): Promise<string | null> {
+  const result = executeQuery('SELECT value FROM settings WHERE key = ?', [key])
+  return result.results?.[0]?.value || null
 }
 
 /**
- * Get all invoices with client info
+ * Set setting value
+ */
+export async function setSetting(key: string, value: string) {
+  executeQuery(
+    'INSERT INTO settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP',
+    [key, value]
+  )
+}
+
+/**
+ * Get accountant email (from settings)
+ */
+export async function getAccountantEmail(): Promise<string | null> {
+  return await getSetting('accountant_email')
+}
+
+/**
+ * Set accountant email (in settings)
+ */
+export async function setAccountantEmail(email: string) {
+  await setSetting('accountant_email', email)
+}
+
+/**
+ * Get invoice by ID with files
+ */
+export async function getInvoice(invoiceId: string) {
+  const invoiceResult = executeQuery(
+    `SELECT i.*, c.name as client_name, c.email as client_email, c.requires_timesheet
+     FROM invoices i 
+     LEFT JOIN clients c ON i.client_id = c.id 
+     WHERE i.id = ?`,
+    [invoiceId]
+  )
+  const invoice = invoiceResult.results?.[0]
+  
+  if (!invoice) return null
+  
+  // Get files for this invoice
+  const filesResult = executeQuery(
+    'SELECT * FROM invoice_files WHERE invoice_id = ? ORDER BY file_type, uploaded_at',
+    [invoiceId]
+  )
+  invoice.files = filesResult.results || []
+  
+  return invoice
+}
+
+/**
+ * Get all invoices with client info and files
  */
 export async function getAllInvoices() {
   const result = executeQuery(
-    `SELECT i.*, c.name as client_name, c.email as client_email 
+    `SELECT i.*, c.name as client_name, c.email as client_email, c.requires_timesheet
      FROM invoices i 
      LEFT JOIN clients c ON i.client_id = c.id 
-     ORDER BY i.uploaded_at DESC`
+     ORDER BY i.year DESC, i.month DESC, i.uploaded_at DESC`
   )
-  return result.results || []
+  const invoices = result.results || []
+  
+  // Get files for each invoice
+  for (const invoice of invoices) {
+    const filesResult = executeQuery(
+      'SELECT * FROM invoice_files WHERE invoice_id = ? ORDER BY file_type, uploaded_at',
+      [invoice.id]
+    )
+    invoice.files = filesResult.results || []
+  }
+  
+  return invoices
 }
 
 /**
- * Create or update invoice
+ * Create invoice with files
  */
-export async function upsertInvoice(invoiceData: {
-  fileKey: string
+export async function createInvoice(invoiceData: {
   clientId: string
-  originalName: string
-  fileSize: number
-  invoiceAmount?: number | null
-  dueDate?: string | null
+  invoiceAmount: number
+  dueDate: string
+  month: number
+  year: number
+  notes?: string | null
+  files: Array<{
+    fileKey: string
+    fileType: 'invoice' | 'timesheet'
+    originalName: string
+    fileSize: number
+  }>
 }) {
   const {
-    fileKey,
     clientId,
-    originalName,
-    fileSize,
     invoiceAmount,
     dueDate,
+    month,
+    year,
+    notes,
+    files,
   } = invoiceData
 
+  const invoiceId = `invoice-${Date.now()}`
+  
+  // Create invoice
   executeQuery(
     `INSERT INTO invoices 
-     (file_key, client_id, original_name, file_size, invoice_amount, due_date, uploaded_at)
-     VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-     ON CONFLICT(file_key) DO UPDATE SET
-       client_id = excluded.client_id,
-       original_name = excluded.original_name,
-       file_size = excluded.file_size,
-       invoice_amount = excluded.invoice_amount,
-       due_date = excluded.due_date`,
-    [fileKey, clientId, originalName, fileSize, invoiceAmount, dueDate]
+     (id, client_id, invoice_amount, due_date, month, year, notes, uploaded_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+    [invoiceId, clientId, invoiceAmount, dueDate, month, year, notes || null]
   )
+  
+  // Create invoice files
+  for (const file of files) {
+    const fileId = `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    executeQuery(
+      `INSERT INTO invoice_files 
+       (id, invoice_id, file_key, file_type, original_name, file_size, uploaded_at)
+       VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+      [fileId, invoiceId, file.fileKey, file.fileType, file.originalName, file.fileSize]
+    )
+  }
+  
+  return invoiceId
 }
 
 /**
  * Update invoice state
  */
-export async function updateInvoiceState(fileKey: string, updates: {
+export async function updateInvoiceState(invoiceId: string, updates: {
   sentToClient?: boolean
-  sentToAccountManager?: boolean
+  paymentReceived?: boolean
+  sentToAccountant?: boolean
 }) {
   const {
     sentToClient,
-    sentToAccountManager,
+    paymentReceived,
+    sentToAccountant,
   } = updates
 
   const updatesList: string[] = []
@@ -134,28 +221,121 @@ export async function updateInvoiceState(fileKey: string, updates: {
     }
   }
 
-  if (sentToAccountManager !== undefined) {
-    updatesList.push('sent_to_account_manager = ?')
-    params.push(sentToAccountManager ? 1 : 0)
-    if (sentToAccountManager) {
-      updatesList.push('sent_to_account_manager_at = CURRENT_TIMESTAMP')
+  if (paymentReceived !== undefined) {
+    updatesList.push('payment_received = ?')
+    params.push(paymentReceived ? 1 : 0)
+    if (paymentReceived) {
+      updatesList.push('payment_received_at = CURRENT_TIMESTAMP')
+    }
+  }
+
+  if (sentToAccountant !== undefined) {
+    updatesList.push('sent_to_accountant = ?')
+    params.push(sentToAccountant ? 1 : 0)
+    if (sentToAccountant) {
+      updatesList.push('sent_to_accountant_at = CURRENT_TIMESTAMP')
     }
   }
 
   if (updatesList.length === 0) return
 
-  params.push(fileKey)
-  const sql = `UPDATE invoices SET ${updatesList.join(', ')} WHERE file_key = ?`
+  params.push(invoiceId)
+  const sql = `UPDATE invoices SET ${updatesList.join(', ')} WHERE id = ?`
   
   executeQuery(sql, params)
 }
 
 /**
- * Delete invoice
+ * Update invoice details
  */
-export async function deleteInvoice(fileKey: string) {
-  executeQuery('DELETE FROM invoices WHERE file_key = ?', [fileKey])
-  executeQuery('DELETE FROM email_history WHERE invoice_file_key = ?', [fileKey])
+export async function updateInvoice(invoiceId: string, updates: {
+  clientId?: string
+  invoiceAmount?: number
+  dueDate?: string
+  month?: number
+  year?: number
+  filesToDelete?: string[]
+  newFiles?: Array<{
+    fileKey: string
+    fileType: 'invoice' | 'timesheet'
+    originalName: string
+    fileSize: number
+  }>
+}) {
+  const {
+    clientId,
+    invoiceAmount,
+    dueDate,
+    month,
+    year,
+    filesToDelete,
+    newFiles,
+  } = updates
+
+  const updatesList: string[] = []
+  const params: any[] = []
+
+  if (clientId !== undefined) {
+    updatesList.push('client_id = ?')
+    params.push(clientId)
+  }
+
+  if (invoiceAmount !== undefined) {
+    updatesList.push('invoice_amount = ?')
+    params.push(invoiceAmount)
+  }
+
+  if (dueDate !== undefined) {
+    updatesList.push('due_date = ?')
+    params.push(dueDate)
+  }
+
+  if (month !== undefined) {
+    updatesList.push('month = ?')
+    params.push(month)
+  }
+
+  if (year !== undefined) {
+    updatesList.push('year = ?')
+    params.push(year)
+  }
+
+  // Update invoice fields if any
+  if (updatesList.length > 0) {
+    params.push(invoiceId)
+    const sql = `UPDATE invoices SET ${updatesList.join(', ')} WHERE id = ?`
+    executeQuery(sql, params)
+  }
+
+  // Delete files (deletion from storage is handled by API route)
+  if (filesToDelete && filesToDelete.length > 0) {
+    for (const fileId of filesToDelete) {
+      // Delete from database (storage deletion handled by API route)
+      executeQuery('DELETE FROM invoice_files WHERE id = ?', [fileId])
+    }
+  }
+
+  // Add new files
+  if (newFiles && newFiles.length > 0) {
+    for (const file of newFiles) {
+      const fileId = `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      executeQuery(
+        `INSERT INTO invoice_files 
+         (id, invoice_id, file_key, file_type, original_name, file_size, uploaded_at)
+         VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+        [fileId, invoiceId, file.fileKey, file.fileType, file.originalName, file.fileSize]
+      )
+    }
+  }
+}
+
+/**
+ * Delete invoice and its files
+ */
+export async function deleteInvoice(invoiceId: string) {
+  executeQuery('DELETE FROM invoice_files WHERE invoice_id = ?', [invoiceId])
+  executeQuery('DELETE FROM email_history WHERE invoice_id = ?', [invoiceId])
+  executeQuery('DELETE FROM invoices WHERE id = ?', [invoiceId])
 }
 
 /**
@@ -178,16 +358,15 @@ export async function getEmailTemplate(templateId: string) {
  * Create email template
  */
 export async function createEmailTemplate(templateData: {
-  name: string
   subject: string
   body: string
   type: string
 }) {
   const id = `template-${Date.now()}`
-  const { name, subject, body, type } = templateData
+  const { subject, body, type } = templateData
   executeQuery(
-    'INSERT INTO email_templates (id, name, subject, body, type) VALUES (?, ?, ?, ?, ?)',
-    [id, name, subject, body, type]
+    'INSERT INTO email_templates (id, subject, body, type, created_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)',
+    [id, subject, body, type]
   )
   return id
 }
@@ -196,15 +375,14 @@ export async function createEmailTemplate(templateData: {
  * Update email template
  */
 export async function updateEmailTemplate(templateId: string, templateData: {
-  name: string
   subject: string
   body: string
   type: string
 }) {
-  const { name, subject, body, type } = templateData
+  const { subject, body, type } = templateData
   executeQuery(
-    'UPDATE email_templates SET name = ?, subject = ?, body = ?, type = ? WHERE id = ?',
-    [name, subject, body, type, templateId]
+    'UPDATE email_templates SET subject = ?, body = ?, type = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    [subject, body, type, templateId]
   )
 }
 
@@ -219,10 +397,11 @@ export async function deleteEmailTemplate(templateId: string) {
  * Record email in history
  */
 export async function recordEmail(emailData: {
-  invoiceFileKey: string
+  invoiceId: string
   templateId?: string | null
   recipientEmail: string
   recipientName?: string | null
+  recipientType: 'client' | 'accountant'
   subject: string
   body: string
   status?: string
@@ -230,10 +409,11 @@ export async function recordEmail(emailData: {
 }) {
   const id = `email-${Date.now()}`
   const {
-    invoiceFileKey,
+    invoiceId,
     templateId,
     recipientEmail,
     recipientName,
+    recipientType,
     subject,
     body,
     status = 'sent',
@@ -242,9 +422,9 @@ export async function recordEmail(emailData: {
 
   executeQuery(
     `INSERT INTO email_history 
-     (id, invoice_file_key, template_id, recipient_email, recipient_name, subject, body, status, error_message)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [id, invoiceFileKey, templateId, recipientEmail, recipientName, subject, body, status, errorMessage]
+     (id, invoice_id, template_id, recipient_email, recipient_name, recipient_type, subject, body, status, error_message, sent_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+    [id, invoiceId, templateId, recipientEmail, recipientName, recipientType, subject, body, status, errorMessage]
   )
   
   return id
@@ -253,15 +433,14 @@ export async function recordEmail(emailData: {
 /**
  * Get email history for an invoice
  */
-export async function getEmailHistory(invoiceFileKey: string) {
+export async function getEmailHistory(invoiceId: string) {
   const result = executeQuery(
     `SELECT eh.*, et.name as template_name
      FROM email_history eh
      LEFT JOIN email_templates et ON eh.template_id = et.id
-     WHERE eh.invoice_file_key = ?
+     WHERE eh.invoice_id = ?
      ORDER BY eh.sent_at DESC`,
-    [invoiceFileKey]
+    [invoiceId]
   )
   return result.results || []
 }
-

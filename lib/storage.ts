@@ -3,7 +3,7 @@
  * Uses Vercel Blob for file storage
  */
 
-import { put, get, del, head } from '@vercel/blob'
+import { put, del, head } from '@vercel/blob'
 
 /**
  * Upload a file to Vercel Blob
@@ -22,6 +22,7 @@ export async function uploadFile(fileKey: string, fileBuffer: Buffer, contentTyp
 
 /**
  * Get a file from Vercel Blob
+ * Uses head to get URL, then fetches the file
  */
 export async function getFile(fileKey: string): Promise<Buffer | null> {
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
@@ -29,18 +30,26 @@ export async function getFile(fileKey: string): Promise<Buffer | null> {
   }
 
   try {
-    const blob = await get(fileKey, {
+    // Get file metadata and URL using head
+    const blob = await head(fileKey, {
       token: process.env.BLOB_READ_WRITE_TOKEN,
     })
 
-    if (!blob) return null
+    if (!blob || !blob.url) return null
 
-    // Convert Blob to Buffer
-    const arrayBuffer = await blob.arrayBuffer()
+    // Fetch the file from the public URL
+    const response = await fetch(blob.url)
+    if (!response.ok) {
+      if (response.status === 404) return null
+      throw new Error(`Failed to fetch file: ${response.statusText}`)
+    }
+
+    // Convert to Buffer
+    const arrayBuffer = await response.arrayBuffer()
     return Buffer.from(arrayBuffer)
   } catch (error: any) {
     // Return null if file not found
-    if (error.status === 404 || error.message?.includes('not found')) {
+    if (error.status === 404 || error.message?.includes('not found') || error.message?.includes('404')) {
       return null
     }
     throw error
