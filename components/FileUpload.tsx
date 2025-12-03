@@ -9,9 +9,9 @@ import { Progress } from '@/components/ui/progress'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/use-toast'
-import { getClients, getInvoice, updateInvoice, deleteInvoiceFile } from '@/lib/client/db-client'
 import { uploadFile } from '@/lib/client/storage-client'
-import { createInvoice } from '@/lib/client/db-client'
+import { useClients } from '@/lib/hooks/use-clients'
+import { useInvoice, useCreateInvoice, useUpdateInvoice, useDeleteInvoiceFile } from '@/lib/hooks/use-invoices'
 import { Upload, X, FileText, Trash2 } from 'lucide-react'
 import type { Client, InvoiceFile } from '@/types'
 import { invoiceSchema, type InvoiceFormData } from '@/lib/validations'
@@ -40,15 +40,20 @@ interface ExistingFile {
 }
 
 export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel }: FileUploadProps) {
-  const [clients, setClients] = useState<Client[]>([])
+  const { data: clients = [] } = useClients()
+  const { data: invoiceData, isLoading: loadingInvoice } = useInvoice(editingInvoiceId)
+  const createInvoiceMutation = useCreateInvoice()
+  const updateInvoiceMutation = useUpdateInvoice()
+  const deleteInvoiceFileMutation = useDeleteInvoiceFile()
+  
   const [selectedClient, setSelectedClient] = useState<Client | null>(null)
   const [files, setFiles] = useState<UploadedFile[]>([])
   const [existingFiles, setExistingFiles] = useState<ExistingFile[]>([])
   const [filesToDelete, setFilesToDelete] = useState<Set<string>>(new Set())
   const [isUploading, setIsUploading] = useState(false)
-  const [isCreatingInvoice, setIsCreatingInvoice] = useState(false)
-  const [loadingInvoice, setLoadingInvoice] = useState(false)
   const { toast } = useToast()
+  
+  const isCreatingInvoice = createInvoiceMutation.isPending
 
   const form = useForm({
     defaultValues: {
@@ -66,68 +71,35 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
     },
   })
 
-  const loadClients = useCallback(async () => {
-    try {
-      const clientsList = await getClients()
-      setClients(clientsList)
-    } catch (error) {
-      console.error('Error loading clients:', error)
-    }
-  }, [])
-
-  const loadInvoiceForEdit = useCallback(async () => {
-    if (!editingInvoiceId) return
-
-    try {
-      setLoadingInvoice(true)
-      const invoice = await getInvoice(editingInvoiceId)
-      if (invoice) {
-        form.setFieldValue('clientId', invoice.client_id)
-        form.setFieldValue('invoiceAmount', invoice.invoice_amount || 0)
-        form.setFieldValue('dueDate', invoice.due_date || '')
-        form.setFieldValue('month', invoice.month || new Date().getMonth() + 1)
-        form.setFieldValue('year', invoice.year || new Date().getFullYear())
-        
-        // Load existing files
-        if (invoice.files && invoice.files.length > 0) {
-          const existing = invoice.files.map((f: InvoiceFile) => ({
-            id: f.id,
-            fileKey: f.file_key,
-            fileType: f.file_type,
-            originalName: f.original_name,
-            fileSize: f.file_size || 0,
-          }))
-          setExistingFiles(existing)
-          setFilesToDelete(new Set())
-        }
+  // Load invoice data when editing
+  useEffect(() => {
+    if (invoiceData) {
+      form.setFieldValue('clientId', invoiceData.client_id)
+      form.setFieldValue('invoiceAmount', invoiceData.invoice_amount || 0)
+      form.setFieldValue('dueDate', invoiceData.due_date || '')
+      form.setFieldValue('month', invoiceData.month || new Date().getMonth() + 1)
+      form.setFieldValue('year', invoiceData.year || new Date().getFullYear())
+      
+      // Load existing files
+      if (invoiceData.files && invoiceData.files.length > 0) {
+        const existing = invoiceData.files.map((f: InvoiceFile) => ({
+          id: f.id,
+          fileKey: f.file_key,
+          fileType: f.file_type,
+          originalName: f.original_name,
+          fileSize: f.file_size || 0,
+        }))
+        setExistingFiles(existing)
+        setFilesToDelete(new Set())
       }
-    } catch (error: unknown) {
-      console.error('Error loading invoice for edit:', error)
-      toast({
-        title: "Erro",
-        description: error instanceof Error ? error.message : "Falha ao carregar invoice para edição",
-        variant: "destructive",
-      })
-    } finally {
-      setLoadingInvoice(false)
-    }
-  }, [editingInvoiceId, toast, form])
-
-  useEffect(() => {
-    loadClients()
-  }, [loadClients])
-
-  useEffect(() => {
-    if (editingInvoiceId) {
-      loadInvoiceForEdit()
-    } else {
+    } else if (!editingInvoiceId) {
       // Reset form when not editing
       setFiles([])
       setExistingFiles([])
       setFilesToDelete(new Set())
       form.reset()
     }
-  }, [editingInvoiceId, loadInvoiceForEdit, form])
+  }, [invoiceData, editingInvoiceId, form])
 
   // Subscribe to clientId changes from form
   const clientId = useStore(form.store, (state) => state.values.clientId || '')
@@ -220,7 +192,6 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
     if (editingInvoiceId) {
       // Update existing invoice
       try {
-        setIsCreatingInvoice(true)
 
         // Upload new files if any
         let uploadedNewFiles: Array<{
@@ -259,7 +230,7 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
         if (filesToDelete.size > 0) {
           await Promise.all(
             Array.from(filesToDelete).map(fileId => 
-              deleteInvoiceFile(editingInvoiceId, fileId).catch(err => {
+              deleteInvoiceFileMutation.mutateAsync({ invoiceId: editingInvoiceId, fileId }).catch(err => {
                 console.warn('Error deleting file:', err)
                 // Continue even if some deletions fail
               })
@@ -268,13 +239,16 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
         }
 
         // Update invoice
-        await updateInvoice(editingInvoiceId, {
-          clientId: value.clientId,
-          invoiceAmount: value.invoiceAmount,
-          dueDate: value.dueDate,
-          month: value.month,
-          year: value.year,
-          newFiles: uploadedNewFiles,
+        await updateInvoiceMutation.mutateAsync({
+          invoiceId: editingInvoiceId,
+          updates: {
+            clientId: value.clientId,
+            invoiceAmount: value.invoiceAmount,
+            dueDate: value.dueDate,
+            month: value.month,
+            year: value.year,
+            newFiles: uploadedNewFiles,
+          },
         })
 
         toast({
@@ -298,7 +272,6 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
         })
       } finally {
         setIsUploading(false)
-        setIsCreatingInvoice(false)
       }
     } else {
       // Create new invoice
@@ -352,10 +325,9 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
         )
 
         setIsUploading(false)
-        setIsCreatingInvoice(true)
 
         // Create invoice
-        await createInvoice({
+        await createInvoiceMutation.mutateAsync({
           clientId: value.clientId,
           invoiceAmount: value.invoiceAmount,
           dueDate: value.dueDate,
@@ -386,7 +358,6 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
       })
       } finally {
         setIsUploading(false)
-        setIsCreatingInvoice(false)
       }
     }
   }

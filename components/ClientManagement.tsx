@@ -1,12 +1,12 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState } from 'react'
 import { useForm } from '@tanstack/react-form'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
-import { getClients, createClient, updateClient, deleteClient } from '@/lib/client/db-client'
+import { useClients, useCreateClient, useUpdateClient, useDeleteClient } from '@/lib/hooks/use-clients'
 import { UserPlus, Mail, User, Edit, Trash2, X, Plus } from 'lucide-react'
 import type { Client } from '@/types'
 import { clientSchema, type ClientFormData } from '@/lib/validations'
@@ -31,8 +31,11 @@ import {
 } from '@/components/ui/alert-dialog'
 
 export default function ClientManagement() {
-  const [clients, setClients] = useState<Client[]>([])
-  const [loading, setLoading] = useState(true)
+  const { data: clients = [], isLoading: loading } = useClients()
+  const createClientMutation = useCreateClient()
+  const updateClientMutation = useUpdateClient()
+  const deleteClientMutation = useDeleteClient()
+  
   const [dialogOpen, setDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [editingClient, setEditingClient] = useState<Client | null>(null)
@@ -59,30 +62,9 @@ export default function ClientManagement() {
     },
   })
 
-  const loadClients = useCallback(async () => {
-    try {
-      setLoading(true)
-      const clientsList = await getClients()
-      setClients(clientsList)
-    } catch (error) {
-      console.error('Error loading clients:', error)
-      toast({
-        title: "Error",
-        description: "Failed to load clients",
-        variant: "destructive",
-      })
-    } finally {
-      setLoading(false)
-    }
-  }, [toast])
-
-  useEffect(() => {
-    loadClients()
-  }, [loadClients])
-
   const handleCreateClient = async (value: ClientFormData) => {
     try {
-      await createClient({
+      await createClientMutation.mutateAsync({
         name: value.name,
         email: value.email,
         requiresTimesheet: value.requiresTimesheet,
@@ -96,7 +78,6 @@ export default function ClientManagement() {
       form.reset()
       setNewCcEmail('')
       setDialogOpen(false)
-      loadClients()
     } catch (error: unknown) {
       console.error('Error creating client:', error)
       const errorMessage = error instanceof Error ? error.message : "Falha ao criar cliente"
@@ -133,11 +114,14 @@ export default function ClientManagement() {
     if (!editingClient) return
 
     try {
-      await updateClient(editingClient.id, {
-        name: value.name,
-        email: value.email,
-        requiresTimesheet: value.requiresTimesheet,
-        ccEmails: value.ccEmails,
+      await updateClientMutation.mutateAsync({
+        clientId: editingClient.id,
+        data: {
+          name: value.name,
+          email: value.email,
+          requiresTimesheet: value.requiresTimesheet,
+          ccEmails: value.ccEmails,
+        },
       })
       toast({
         title: "Cliente Atualizado",
@@ -148,7 +132,6 @@ export default function ClientManagement() {
       setNewCcEmail('')
       setEditingClient(null)
       setDialogOpen(false)
-      loadClients()
     } catch (error: unknown) {
       console.error('Error updating client:', error)
       toast({
@@ -168,7 +151,7 @@ export default function ClientManagement() {
     if (!clientToDelete) return
 
     try {
-      await deleteClient(clientToDelete.id)
+      await deleteClientMutation.mutateAsync(clientToDelete.id)
       toast({
         title: "Client Deleted",
         description: `${clientToDelete.name} has been deleted`,
@@ -176,7 +159,6 @@ export default function ClientManagement() {
       })
       setClientToDelete(null)
       setDeleteDialogOpen(false)
-      loadClients()
     } catch (error: unknown) {
       console.error('Error deleting client:', error)
       toast({

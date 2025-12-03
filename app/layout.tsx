@@ -4,6 +4,7 @@ import Script from 'next/script'
 import './globals.css'
 import DashboardLayout from '@/components/DashboardLayout'
 import { Toaster } from '@/components/ui/toaster'
+import { QueryProvider } from '@/components/providers/QueryProvider'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -29,10 +30,12 @@ export default function RootLayout({
         )}
       </head>
       <body className={inter.className}>
-        <DashboardLayout>
-          {children}
-        </DashboardLayout>
-        <Toaster />
+        <QueryProvider>
+          <DashboardLayout>
+            {children}
+          </DashboardLayout>
+          <Toaster />
+        </QueryProvider>
       </body>
     </html>
   )

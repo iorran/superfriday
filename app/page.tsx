@@ -1,17 +1,10 @@
 'use client'
 
-import { useState } from 'react'
 import FileList from '@/components/FileList'
 import FloatingUploadButton from '@/components/FloatingUploadButton'
 import BuildInfo from '@/components/BuildInfo'
 
 export default function Home() {
-  const [refreshTrigger, setRefreshTrigger] = useState(0)
-
-  const handleUploadSuccess = () => {
-    setRefreshTrigger((prev) => prev + 1)
-  }
-
   return (
     <div className="flex flex-col h-full space-y-6">
       <div>
@@ -22,9 +15,9 @@ export default function Home() {
       </div>
 
       <div className="flex-1 min-h-0">
-        <FileList refreshTrigger={refreshTrigger} />
+        <FileList />
       </div>
-      <FloatingUploadButton onUploadSuccess={handleUploadSuccess} />
+      <FloatingUploadButton />
       <BuildInfo />
     </div>
   )

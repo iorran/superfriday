@@ -16,13 +16,9 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
-import { 
-  getAllInvoices, 
-  updateInvoiceState, 
-  deleteInvoice,
-  sendEmail,
-  getEmailTemplates
-} from '@/lib/client/db-client'
+import { useInvoices, useUpdateInvoiceState, useDeleteInvoice } from '@/lib/hooks/use-invoices'
+import { useSendEmail } from '@/lib/hooks/use-email'
+import { useEmailTemplates } from '@/lib/hooks/use-email-templates'
 import { FileText, Calendar, Trash2, CheckCircle2, Send, Edit, Loader2 } from 'lucide-react'
 import FileUpload from './FileUpload'
 import type { Invoice, InvoiceFile, EmailTemplate } from '@/types'
@@ -33,21 +29,20 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 
-interface FileListProps {
-  refreshTrigger?: number
-}
-
 interface FormattedInvoice extends Invoice {
   monthKey: string
   monthName: string
   sentToClient: boolean
-  paymentReceived: boolean
   sentToAccountant: boolean
 }
 
-export default function FileList({ refreshTrigger }: FileListProps) {
-  const [invoices, setInvoices] = useState<FormattedInvoice[]>([])
-  const [loading, setLoading] = useState(true)
+export default function FileList() {
+  const { data: invoicesData = [], isLoading: loading } = useInvoices()
+  const updateInvoiceStateMutation = useUpdateInvoiceState()
+  const deleteInvoiceMutation = useDeleteInvoice()
+  const sendEmailMutation = useSendEmail()
+  const { data: emailTemplates = [] } = useEmailTemplates()
+  
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set())
   const [deletingInvoice, setDeletingInvoice] = useState<string | null>(null)
   const [sendingEmail, setSendingEmail] = useState<string | null>(null)
@@ -65,51 +60,30 @@ export default function FileList({ refreshTrigger }: FileListProps) {
     setExpandedMonths(new Set([currentMonthKey]))
   }, [currentMonthKey])
 
-  const fetchInvoices = useCallback(async () => {
-    try {
-      setLoading(true)
-      const invoicesList = await getAllInvoices()
+  // Format invoices
+  const invoices = useMemo(() => {
+    return invoicesData.map((inv: Invoice) => {
+      // Use month/year from invoice, or fallback to uploaded_at
+      const monthKey = inv.year && inv.month 
+        ? `${inv.year}-${String(inv.month).padStart(2, '0')}`
+        : currentMonthKey
       
-      // Format invoices
-      const formattedInvoices = invoicesList.map((inv: Invoice) => {
-        // Use month/year from invoice, or fallback to uploaded_at
-        const monthKey = inv.year && inv.month 
-          ? `${inv.year}-${String(inv.month).padStart(2, '0')}`
-          : currentMonthKey
-        
-        const monthName = inv.year && inv.month
-          ? new Date(inv.year, inv.month - 1).toLocaleString('default', { month: 'long', year: 'numeric' })
-          : new Date().toLocaleString('default', { month: 'long', year: 'numeric' })
+      const monthName = inv.year && inv.month
+        ? new Date(inv.year, inv.month - 1).toLocaleString('default', { month: 'long', year: 'numeric' })
+        : new Date().toLocaleString('default', { month: 'long', year: 'numeric' })
 
-        const date = inv.uploaded_at ? new Date(inv.uploaded_at) : new Date()
+      const date = inv.uploaded_at ? new Date(inv.uploaded_at) : new Date()
 
-        return {
-          ...inv,
-          lastModified: date,
-          monthKey,
-          monthName,
-          sentToClient: inv.sent_to_client === 1 || inv.sent_to_client === true,
-          paymentReceived: inv.payment_received === 1 || inv.payment_received === true,
-          sentToAccountant: inv.sent_to_accountant === 1 || inv.sent_to_accountant === true,
-        }
-      })
-
-      setInvoices(formattedInvoices)
-    } catch (error: unknown) {
-      console.error('Error fetching invoices:', error)
-      toast({
-        title: "Erro",
-        description: error instanceof Error ? error.message : "Falha ao carregar invoices",
-        variant: "destructive",
-      })
-    } finally {
-      setLoading(false)
-    }
-  }, [toast, currentMonthKey])
-
-  useEffect(() => {
-    fetchInvoices()
-  }, [fetchInvoices, refreshTrigger])
+      return {
+        ...inv,
+        lastModified: date,
+        monthKey,
+        monthName,
+        sentToClient: inv.sent_to_client === 1 || inv.sent_to_client === true,
+        sentToAccountant: inv.sent_to_accountant === 1 || inv.sent_to_accountant === true,
+      }
+    })
+  }, [invoicesData, currentMonthKey])
 
   // Group invoices by month
   const invoicesByMonth = useMemo(() => {
@@ -140,29 +114,10 @@ export default function FileList({ refreshTrigger }: FileListProps) {
 
   const handleStateChange = useCallback(async (invoiceId: string, updates: {
     sentToClient?: boolean
-    paymentReceived?: boolean
     sentToAccountant?: boolean
   }) => {
     try {
-      await updateInvoiceState(invoiceId, updates)
-      
-      // Update local state
-      setInvoices((prev) =>
-        prev.map((inv) =>
-          inv.id === invoiceId
-            ? { 
-                ...inv, 
-                sent_to_client: updates.sentToClient !== undefined ? (updates.sentToClient ? 1 : 0) : inv.sent_to_client,
-                payment_received: updates.paymentReceived !== undefined ? (updates.paymentReceived ? 1 : 0) : inv.payment_received,
-                sent_to_accountant: updates.sentToAccountant !== undefined ? (updates.sentToAccountant ? 1 : 0) : inv.sent_to_accountant,
-                sentToClient: updates.sentToClient !== undefined ? updates.sentToClient : inv.sentToClient,
-                paymentReceived: updates.paymentReceived !== undefined ? updates.paymentReceived : inv.paymentReceived,
-                sentToAccountant: updates.sentToAccountant !== undefined ? updates.sentToAccountant : inv.sentToAccountant,
-              }
-            : inv
-        )
-      )
-
+      await updateInvoiceStateMutation.mutateAsync({ invoiceId, updates })
       toast({
         title: "Estado Atualizado",
         description: "Estado da invoice atualizado com sucesso",
@@ -176,7 +131,7 @@ export default function FileList({ refreshTrigger }: FileListProps) {
         variant: "destructive",
       })
     }
-  }, [toast])
+  }, [updateInvoiceStateMutation, toast])
 
   const handleSendEmail = useCallback(async (invoiceId: string, recipientType: 'client' | 'accountant') => {
     try {
@@ -189,9 +144,8 @@ export default function FileList({ refreshTrigger }: FileListProps) {
 
       // Get templates for this recipient type
       // Templates are stored with type 'to_client' or 'to_account_manager'
-      const templates = await getEmailTemplates()
       const templateType = recipientType === 'client' ? 'to_client' : 'to_account_manager'
-      const recipientTemplates = templates.filter((t: EmailTemplate) => t.type === templateType)
+      const recipientTemplates = emailTemplates.filter((t: EmailTemplate) => t.type === templateType)
       
       // Use the first template if available, otherwise use default
       const template = recipientTemplates.length > 0 ? recipientTemplates[0] : null
@@ -228,7 +182,7 @@ export default function FileList({ refreshTrigger }: FileListProps) {
           : `Olá,\n\nSegue em anexo a invoice de ${invoice.client_name}.\n\nAtenciosamente`
       }
 
-      await sendEmail({
+      await sendEmailMutation.mutateAsync({
         invoiceId,
         recipientType,
         templateId,
@@ -248,9 +202,6 @@ export default function FileList({ refreshTrigger }: FileListProps) {
         description: `Email enviado para ${recipientType === 'client' ? 'cliente' : 'contador'} com sucesso`,
         variant: "default",
       })
-
-      // Refresh invoices
-      fetchInvoices()
     } catch (error: unknown) {
       console.error('Error sending email:', error)
       const errorMessage = error instanceof Error ? error.message : "Falha ao enviar email"
@@ -262,22 +213,19 @@ export default function FileList({ refreshTrigger }: FileListProps) {
     } finally {
       setSendingEmail(null)
     }
-  }, [invoices, toast, handleStateChange, fetchInvoices])
+  }, [invoices, toast, handleStateChange, sendEmailMutation, emailTemplates])
 
   const handleDelete = useCallback(async (invoiceId: string, clientName: string) => {
     try {
       setDeletingInvoice(invoiceId)
       
-      await deleteInvoice(invoiceId)
+      await deleteInvoiceMutation.mutateAsync(invoiceId)
 
       toast({
         title: "Invoice Deletada",
         description: `Invoice de ${clientName} foi deletada com sucesso`,
         variant: "default",
       })
-
-      // Remove from local state
-      setInvoices((prev) => prev.filter((inv) => inv.id !== invoiceId))
     } catch (error: unknown) {
       console.error('Error deleting invoice:', error)
       const errorMessage = error instanceof Error ? error.message : "Falha ao deletar invoice"
@@ -289,7 +237,7 @@ export default function FileList({ refreshTrigger }: FileListProps) {
     } finally {
       setDeletingInvoice(null)
     }
-  }, [toast])
+  }, [toast, deleteInvoiceMutation])
 
   const formatFileSize = (bytes: number) => {
     if (!bytes) return '0 Bytes'
@@ -435,34 +383,17 @@ export default function FileList({ refreshTrigger }: FileListProps) {
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation()
-                                  handleStateChange(invoice.id, { paymentReceived: !invoice.paymentReceived })
-                                }}
-                                className={`flex items-center gap-1 text-xs px-3 py-1.5 rounded transition-colors ${
-                                  invoice.paymentReceived
-                                    ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300'
-                                    : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
-                                }`}
-                              >
-                                <CheckCircle2 className="h-3 w-3" />
-                                Pagamento Recebido
-                              </button>
-
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  if (!invoice.sentToAccountant && invoice.paymentReceived && sendingEmail !== `${invoice.id}-accountant`) {
+                                  if (!invoice.sentToAccountant && sendingEmail !== `${invoice.id}-accountant`) {
                                     handleSendEmail(invoice.id, 'accountant')
                                   }
                                 }}
-                                disabled={!invoice.paymentReceived || sendingEmail === `${invoice.id}-accountant` || invoice.sentToAccountant}
+                                disabled={sendingEmail === `${invoice.id}-accountant` || invoice.sentToAccountant}
                                 className={`flex items-center gap-1 text-xs px-3 py-1.5 rounded transition-all ${
                                   sendingEmail === `${invoice.id}-accountant`
                                     ? 'bg-purple-200 text-purple-800 dark:bg-purple-800 dark:text-purple-200 cursor-wait opacity-75'
                                     : invoice.sentToAccountant
                                     ? 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 cursor-default opacity-75'
-                                    : invoice.paymentReceived
-                                    ? 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-800 cursor-pointer'
-                                    : 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-600 cursor-not-allowed opacity-50'
+                                    : 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-800 cursor-pointer'
                                 } ${sendingEmail === `${invoice.id}-accountant` ? 'animate-pulse' : ''}`}
                               >
                                 {sendingEmail === `${invoice.id}-accountant` ? (
@@ -553,7 +484,6 @@ export default function FileList({ refreshTrigger }: FileListProps) {
             editingInvoiceId={editingInvoiceId}
             onUploadSuccess={() => {
               setEditingInvoiceId(null)
-              fetchInvoices()
             }}
             onCancel={() => {
               setEditingInvoiceId(null)

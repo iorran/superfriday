@@ -2172,6 +2172,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@tanstack/query-core@npm:5.90.11":
+  version: 5.90.11
+  resolution: "@tanstack/query-core@npm:5.90.11"
+  checksum: 10c0/c2e44f36cec8957ec382ebcacb955bbb2112d03d475414f041194d05b7256d9ea1cc813eca7095033d36af0ba02c397aa646d976b428ff15b897b025ac53b3e9
+  languageName: node
+  linkType: hard
+
 "@tanstack/react-form@npm:^1.0.0":
   version: 1.27.0
   resolution: "@tanstack/react-form@npm:1.27.0"
@@ -2184,6 +2191,17 @@ __metadata:
     "@tanstack/react-start":
       optional: true
   checksum: 10c0/8aac1ff4286bd799fbda57c25420866a07996e63158e24496f6c93649e7c0f4e921271314fcb5fcf76426db654f0218e2f5cf84783a4d9446c4f72daeda96738
+  languageName: node
+  linkType: hard
+
+"@tanstack/react-query@npm:^5.62.11":
+  version: 5.90.11
+  resolution: "@tanstack/react-query@npm:5.90.11"
+  dependencies:
+    "@tanstack/query-core": "npm:5.90.11"
+  peerDependencies:
+    react: ^18 || ^19
+  checksum: 10c0/2e4b73903c2445672996cfeca69985e92055870594a8b64cc8b960d756d199a023b6cceb9548525ea8cf3f3a1986b5bc3e3ec8d0722615c6ac9ed1478c604b02
   languageName: node
   linkType: hard
 
@@ -6391,6 +6409,7 @@ __metadata:
     "@radix-ui/react-tabs": "npm:^1.1.13"
     "@radix-ui/react-toast": "npm:^1.2.15"
     "@tanstack/react-form": "npm:^1.0.0"
+    "@tanstack/react-query": "npm:^5.62.11"
     "@types/better-sqlite3": "npm:^7.6.12"
     "@types/node": "npm:^22.10.2"
     "@types/nodemailer": "npm:^6.4.14"

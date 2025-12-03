@@ -10,11 +10,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 
-interface FloatingUploadButtonProps {
-  onUploadSuccess?: () => void
-}
-
-export default function FloatingUploadButton({ onUploadSuccess }: FloatingUploadButtonProps) {
+export default function FloatingUploadButton() {
   const [isOpen, setIsOpen] = useState(false)
 
   return (
@@ -35,9 +31,6 @@ export default function FloatingUploadButton({ onUploadSuccess }: FloatingUpload
           <FileUpload
             onUploadSuccess={() => {
               setIsOpen(false)
-              if (onUploadSuccess) {
-                onUploadSuccess()
-              }
             }}
           />
         </DialogContent>

@@ -1,13 +1,13 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState } from 'react'
 import { useForm } from '@tanstack/react-form'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/components/ui/use-toast'
-import { getEmailTemplates, createEmailTemplate, updateEmailTemplate, deleteEmailTemplate } from '@/lib/client/db-client'
+import { useEmailTemplates, useCreateEmailTemplate, useUpdateEmailTemplate, useDeleteEmailTemplate } from '@/lib/hooks/use-email-templates'
 import { EMAIL_TEMPLATE_VARIABLES } from '@/lib/email-template-variables'
 import { FileText, Plus, Edit, Trash2, Info, Copy } from 'lucide-react'
 import type { EmailTemplate, WindowWithTemplateField } from '@/types'
@@ -32,8 +32,11 @@ import {
 } from '@/components/ui/alert-dialog'
 
 export default function EmailTemplateManagement() {
-  const [templates, setTemplates] = useState<EmailTemplate[]>([])
-  const [loading, setLoading] = useState(true)
+  const { data: templates = [], isLoading: loading } = useEmailTemplates()
+  const createTemplateMutation = useCreateEmailTemplate()
+  const updateTemplateMutation = useUpdateEmailTemplate()
+  const deleteTemplateMutation = useDeleteEmailTemplate()
+  
   const [dialogOpen, setDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [editingTemplate, setEditingTemplate] = useState<EmailTemplate | null>(null)
@@ -58,26 +61,6 @@ export default function EmailTemplateManagement() {
     },
   })
 
-  const loadTemplates = useCallback(async () => {
-    try {
-      setLoading(true)
-      const templatesList = await getEmailTemplates()
-      setTemplates(templatesList)
-    } catch (error) {
-      console.error('Error loading templates:', error)
-      toast({
-        title: "Error",
-        description: "Failed to load email templates",
-        variant: "destructive",
-      })
-    } finally {
-      setLoading(false)
-    }
-  }, [toast])
-
-  useEffect(() => {
-    loadTemplates()
-  }, [loadTemplates])
 
   const handleCreateTemplate = async (value: EmailTemplateFormData) => {
     // Check if a template of this type already exists
@@ -92,7 +75,7 @@ export default function EmailTemplateManagement() {
     }
 
     try {
-      await createEmailTemplate(value)
+      await createTemplateMutation.mutateAsync(value)
       toast({
         title: "Template Created",
         description: `Template for ${value.type === 'to_client' ? 'client' : 'account manager'} has been created`,
@@ -100,7 +83,6 @@ export default function EmailTemplateManagement() {
       })
       form.reset()
       setDialogOpen(false)
-      loadTemplates()
     } catch (error: unknown) {
       console.error('Error creating template:', error)
       const errorMessage = error instanceof Error ? error.message : "Failed to create template"
@@ -124,7 +106,10 @@ export default function EmailTemplateManagement() {
     if (!editingTemplate) return
     
     try {
-      await updateEmailTemplate(editingTemplate.id, value)
+      await updateTemplateMutation.mutateAsync({
+        templateId: editingTemplate.id,
+        data: value,
+      })
       toast({
         title: "Template Updated",
         description: `Template for ${value.type === 'to_client' ? 'client' : 'account manager'} has been updated`,
@@ -133,7 +118,6 @@ export default function EmailTemplateManagement() {
       form.reset()
       setEditingTemplate(null)
       setDialogOpen(false)
-      loadTemplates()
     } catch (error: unknown) {
       console.error('Error updating template:', error)
       const errorMessage = error instanceof Error ? error.message : "Failed to update template"
@@ -154,7 +138,7 @@ export default function EmailTemplateManagement() {
     if (!templateToDelete) return
 
     try {
-      await deleteEmailTemplate(templateToDelete.id)
+      await deleteTemplateMutation.mutateAsync(templateToDelete.id)
       toast({
         title: "Template Deleted",
         description: `${templateToDelete.type === 'to_client' ? 'Client' : 'Account Manager'} email template has been deleted`,
@@ -162,7 +146,6 @@ export default function EmailTemplateManagement() {
       })
       setTemplateToDelete(null)
       setDeleteDialogOpen(false)
-      loadTemplates()
     } catch (error: unknown) {
       console.error('Error deleting template:', error)
       toast({
