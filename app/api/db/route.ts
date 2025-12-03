@@ -26,12 +26,13 @@ export async function POST(request: NextRequest) {
         'Access-Control-Allow-Headers': 'Content-Type',
       },
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Database query error:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Database query failed'
     return NextResponse.json(
       {
         error: true,
-        message: error.message || 'Database query failed',
+        message: errorMessage,
       },
       { status: 500 }
     )

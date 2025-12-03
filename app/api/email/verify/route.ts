@@ -3,7 +3,7 @@
  * Verifies SMTP connection
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { verifySMTPConnection } from '@/lib/email-service'
 
 export async function GET() {
@@ -25,12 +25,13 @@ export async function GET() {
         { status: 500 }
       )
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     return NextResponse.json(
       {
         success: false,
         message: 'SMTP verification error',
-        error: error.message,
+        error: errorMessage,
       },
       { status: 500 }
     )

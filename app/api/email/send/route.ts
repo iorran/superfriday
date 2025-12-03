@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { sendInvoiceToClient, sendInvoiceToAccountant } from '@/lib/email-service'
 import { updateInvoiceState, recordEmail, getInvoice, getAccountantEmail, getEmailTemplate } from '@/lib/db-client'
 import { executeQuery } from '@/lib/db'
+import type { Invoice, InvoiceFile } from '@/types'
 
 export async function POST(request: NextRequest) {
   try {
@@ -21,7 +22,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get invoice with client info
-    const invoice = await getInvoice(invoiceId)
+    const invoice = await getInvoice(invoiceId) as Invoice | null
     if (!invoice) {
       return NextResponse.json(
         { error: true, message: 'Invoice not found' },
@@ -78,8 +79,8 @@ export async function POST(request: NextRequest) {
     let recipientName: string
 
     if (recipientType === 'client') {
-      recipientEmail = invoice.client_email
-      recipientName = invoice.client_name
+      recipientEmail = invoice.client_email || ''
+      recipientName = invoice.client_name || ''
 
       if (!recipientEmail) {
         return NextResponse.json(
@@ -89,13 +90,13 @@ export async function POST(request: NextRequest) {
       }
 
       // Get all files for this invoice
-      const fileKeys = invoice.files.map((f: any) => f.file_key)
+      const fileKeys = (invoice.files || []).map((f: InvoiceFile) => f.file_key)
 
       // Get CC emails from client
       let ccEmails: string[] = []
       if (invoice.client_id) {
         const clientResult = executeQuery('SELECT cc_emails FROM clients WHERE id = ?', [invoice.client_id])
-        const client = clientResult.results?.[0]
+        const client = clientResult.results?.[0] as { cc_emails?: string } | undefined
         if (client && client.cc_emails) {
           try {
             const parsed = JSON.parse(client.cc_emails)
@@ -127,7 +128,8 @@ export async function POST(request: NextRequest) {
       // Update invoice state
       await updateInvoiceState(invoiceId, { sentToClient: true })
     } else if (recipientType === 'accountant') {
-      recipientEmail = await getAccountantEmail()
+      const accountantEmailResult = await getAccountantEmail()
+      recipientEmail = accountantEmailResult || ''
 
       if (!recipientEmail) {
         return NextResponse.json(
@@ -139,9 +141,9 @@ export async function POST(request: NextRequest) {
       recipientName = 'Accountant'
 
       // Get only invoice files (not timesheet)
-      const invoiceFileKeys = invoice.files
-        .filter((f: any) => f.file_type === 'invoice')
-        .map((f: any) => f.file_key)
+      const invoiceFileKeys = (invoice.files || [])
+        .filter((f: InvoiceFile) => f.file_type === 'invoice')
+        .map((f: InvoiceFile) => f.file_key)
 
       if (invoiceFileKeys.length === 0) {
         return NextResponse.json(
@@ -153,9 +155,9 @@ export async function POST(request: NextRequest) {
       emailResult = await sendInvoiceToAccountant({
         invoiceId,
         accountantEmail: recipientEmail,
-        clientName: invoice.client_name,
-        subject: finalSubject || `Invoice for ${invoice.client_name}`,
-        body: finalBody || `Please find attached invoice for ${invoice.client_name}.`,
+        clientName: invoice.client_name || '',
+        subject: finalSubject || `Invoice for ${invoice.client_name || ''}`,
+        body: finalBody || `Please find attached invoice for ${invoice.client_name || ''}.`,
         fileKeys: invoiceFileKeys,
       })
 
@@ -184,7 +186,7 @@ export async function POST(request: NextRequest) {
       success: true,
       messageId: emailResult.messageId,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Email send error:', error)
     
     // Try to record failed email
@@ -197,14 +199,14 @@ export async function POST(request: NextRequest) {
         subject: body.subject || '',
         body: body.body || '',
         status: 'failed',
-        errorMessage: error.message,
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
       })
-    } catch (recordError) {
+    } catch {
       // Ignore record error
     }
 
     return NextResponse.json(
-      { error: true, message: error.message || 'Failed to send email' },
+      { error: true, message: error instanceof Error ? error.message : 'Failed to send email' },
       { status: 500 }
     )
   }

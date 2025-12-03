@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Upload, X } from 'lucide-react'
+import { Upload } from 'lucide-react'
 import FileUpload from './FileUpload'
 import {
   Dialog,

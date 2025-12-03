@@ -13,14 +13,12 @@ interface CollapsibleProps {
 
 const Collapsible = React.forwardRef<HTMLDivElement, CollapsibleProps>(
   ({ open, onOpenChange, children, className, ...props }, ref) => {
-    // Filter out onOpenChange from props to avoid passing it to DOM
-    const { onOpenChange: _, ...domProps } = props as any
-    
+    // onOpenChange is already extracted, props doesn't contain it
     return (
-      <div ref={ref} className={className} {...domProps}>
+      <div ref={ref} className={className} {...props}>
         {React.Children.map(children, (child) => {
           if (React.isValidElement(child)) {
-            return React.cloneElement(child, { open, onOpenChange } as any)
+            return React.cloneElement(child, { open, onOpenChange } as { open?: boolean; onOpenChange?: (open: boolean) => void })
           }
           return child
         })}
@@ -45,9 +43,7 @@ const CollapsibleTrigger = React.forwardRef<HTMLButtonElement, CollapsibleTrigge
     onOpenChange,
     ...props 
   }, ref) => {
-    // Filter out onOpenChange from props to avoid passing it to DOM
-    const { onOpenChange: _, ...domProps } = props as any
-    
+    // onOpenChange is already extracted, props doesn't contain it
     return (
       <button
         ref={ref}
@@ -58,7 +54,7 @@ const CollapsibleTrigger = React.forwardRef<HTMLButtonElement, CollapsibleTrigge
         )}
         onClick={() => onOpenChange?.(!open)}
         data-state={open ? "open" : "closed"}
-        {...domProps}
+        {...props}
       >
         {children}
         <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200" />
@@ -81,9 +77,7 @@ const CollapsibleContent = React.forwardRef<HTMLDivElement, CollapsibleContentPr
     open,
     ...props 
   }, ref) => {
-    // Filter out onOpenChange if it exists in props
-    const { onOpenChange: _, ...domProps } = props as any
-    
+    // onOpenChange is not in props for CollapsibleContent
     return (
       <div
         ref={ref}
@@ -92,7 +86,7 @@ const CollapsibleContent = React.forwardRef<HTMLDivElement, CollapsibleContentPr
           className
         )}
         data-state={open ? "open" : "closed"}
-        {...domProps}
+        {...props}
       >
         {open && children}
       </div>

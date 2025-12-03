@@ -30,10 +30,11 @@ export async function GET(
     }
 
     return NextResponse.json(invoice)
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error fetching invoice:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch invoice'
     return NextResponse.json(
-      { error: true, message: error.message || 'Failed to fetch invoice' },
+      { error: true, message: errorMessage },
       { status: 500 }
     )
   }
@@ -57,10 +58,11 @@ export async function PATCH(
     await updateInvoice(invoiceId, body)
 
     return NextResponse.json({ success: true })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error updating invoice:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Failed to update invoice'
     return NextResponse.json(
-      { error: true, message: error.message || 'Failed to update invoice' },
+      { error: true, message: errorMessage },
       { status: 500 }
     )
   }
@@ -83,10 +85,11 @@ export async function DELETE(
     await deleteInvoice(invoiceId)
 
     return NextResponse.json({ success: true })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error deleting invoice:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Failed to delete invoice'
     return NextResponse.json(
-      { error: true, message: error.message || 'Failed to delete invoice' },
+      { error: true, message: errorMessage },
       { status: 500 }
     )
   }

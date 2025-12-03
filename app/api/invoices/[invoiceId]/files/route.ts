@@ -28,13 +28,13 @@ export async function DELETE(
       'SELECT file_key FROM invoice_files WHERE id = ? AND invoice_id = ?',
       [fileId, invoiceId]
     )
-    const file = fileResult.results?.[0]
+    const file = fileResult.results?.[0] as { file_key: string } | undefined
 
-    if (file) {
+    if (file && file.file_key) {
       // Delete from storage
       try {
         await deleteFile(file.file_key)
-      } catch (error: any) {
+      } catch (error: unknown) {
         // Ignore storage errors, continue with DB deletion
         console.warn('Error deleting file from storage:', error)
       }
@@ -44,10 +44,11 @@ export async function DELETE(
     executeQuery('DELETE FROM invoice_files WHERE id = ? AND invoice_id = ?', [fileId, invoiceId])
 
     return NextResponse.json({ success: true })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error deleting invoice file:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Failed to delete invoice file'
     return NextResponse.json(
-      { error: true, message: error.message || 'Failed to delete invoice file' },
+      { error: true, message: errorMessage },
       { status: 500 }
     )
   }

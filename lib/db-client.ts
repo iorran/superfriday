@@ -3,7 +3,34 @@
  * Wrapper around SQLite database operations
  */
 
-import { executeQuery, getDatabase } from './db'
+import { executeQuery } from './db'
+import type { Client, Invoice, InvoiceFile, EmailTemplate } from '@/types'
+
+interface CreateClientData {
+  name: string
+  email: string
+  requiresTimesheet: boolean
+  ccEmails?: string[]
+}
+
+interface UpdateClientData {
+  name?: string
+  email?: string
+  requiresTimesheet?: boolean
+  ccEmails?: string[]
+}
+
+interface CreateEmailTemplateData {
+  subject: string
+  body: string
+  type: string
+}
+
+interface UpdateEmailTemplateData {
+  subject?: string
+  body?: string
+  type?: string
+}
 
 /**
  * Get all clients
@@ -16,20 +43,15 @@ export async function getClients() {
 /**
  * Get client by ID
  */
-export async function getClient(clientId: string) {
+export async function getClient(clientId: string): Promise<Client | null> {
   const result = executeQuery('SELECT * FROM clients WHERE id = ?', [clientId])
-  return result.results?.[0] || null
+  return (result.results?.[0] || null) as Client | null
 }
 
 /**
  * Create a new client
  */
-export async function createClient(data: {
-  name: string
-  email: string
-  requiresTimesheet?: boolean
-  ccEmails?: string[]
-}) {
+export async function createClient(data: CreateClientData) {
   const id = `client-${Date.now()}`
   const { name, email, requiresTimesheet, ccEmails } = data
   const ccEmailsJson = ccEmails && ccEmails.length > 0 ? JSON.stringify(ccEmails) : null
@@ -43,17 +65,12 @@ export async function createClient(data: {
 /**
  * Update a client
  */
-export async function updateClient(clientId: string, data: {
-  name: string
-  email: string
-  requiresTimesheet?: boolean
-  ccEmails?: string[]
-}) {
+export async function updateClient(clientId: string, data: UpdateClientData) {
   const { name, email, requiresTimesheet, ccEmails } = data
   const ccEmailsJson = ccEmails && ccEmails.length > 0 ? JSON.stringify(ccEmails) : null
   executeQuery(
     'UPDATE clients SET name = ?, email = ?, requires_timesheet = ?, cc_emails = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-    [name, email, requiresTimesheet ? 1 : 0, ccEmailsJson, clientId]
+    [name ?? null, email ?? null, requiresTimesheet !== undefined ? (requiresTimesheet ? 1 : 0) : null, ccEmailsJson, clientId]
   )
 }
 
@@ -69,7 +86,8 @@ export async function deleteClient(clientId: string) {
  */
 export async function getSetting(key: string): Promise<string | null> {
   const result = executeQuery('SELECT value FROM settings WHERE key = ?', [key])
-  return result.results?.[0]?.value || null
+  const row = result.results?.[0] as { value: string } | undefined
+  return row?.value || null
 }
 
 /**
@@ -99,7 +117,7 @@ export async function setAccountantEmail(email: string) {
 /**
  * Get invoice by ID with files
  */
-export async function getInvoice(invoiceId: string) {
+export async function getInvoice(invoiceId: string): Promise<Invoice | null> {
   const invoiceResult = executeQuery(
     `SELECT i.*, c.name as client_name, c.email as client_email, c.requires_timesheet
      FROM invoices i 
@@ -107,7 +125,7 @@ export async function getInvoice(invoiceId: string) {
      WHERE i.id = ?`,
     [invoiceId]
   )
-  const invoice = invoiceResult.results?.[0]
+  const invoice = invoiceResult.results?.[0] as unknown as Invoice | undefined
   
   if (!invoice) return null
   
@@ -116,7 +134,7 @@ export async function getInvoice(invoiceId: string) {
     'SELECT * FROM invoice_files WHERE invoice_id = ? ORDER BY file_type, uploaded_at',
     [invoiceId]
   )
-  invoice.files = filesResult.results || []
+  invoice.files = (filesResult.results || []) as unknown as InvoiceFile[]
   
   return invoice
 }
@@ -124,14 +142,14 @@ export async function getInvoice(invoiceId: string) {
 /**
  * Get all invoices with client info and files
  */
-export async function getAllInvoices() {
+export async function getAllInvoices(): Promise<Invoice[]> {
   const result = executeQuery(
     `SELECT i.*, c.name as client_name, c.email as client_email, c.requires_timesheet
      FROM invoices i 
      LEFT JOIN clients c ON i.client_id = c.id 
      ORDER BY i.year DESC, i.month DESC, i.uploaded_at DESC`
   )
-  const invoices = result.results || []
+  const invoices = (result.results || []) as Invoice[]
   
   // Get files for each invoice
   for (const invoice of invoices) {
@@ -139,7 +157,7 @@ export async function getAllInvoices() {
       'SELECT * FROM invoice_files WHERE invoice_id = ? ORDER BY file_type, uploaded_at',
       [invoice.id]
     )
-    invoice.files = filesResult.results || []
+    invoice.files = (filesResult.results || []) as InvoiceFile[]
   }
   
   return invoices
@@ -211,7 +229,7 @@ export async function updateInvoiceState(invoiceId: string, updates: {
   } = updates
 
   const updatesList: string[] = []
-  const params: any[] = []
+  const params: (string | number | null)[] = []
 
   if (sentToClient !== undefined) {
     updatesList.push('sent_to_client = ?')
@@ -273,7 +291,7 @@ export async function updateInvoice(invoiceId: string, updates: {
   } = updates
 
   const updatesList: string[] = []
-  const params: any[] = []
+  const params: (string | number | null)[] = []
 
   if (clientId !== undefined) {
     updatesList.push('client_id = ?')
@@ -349,19 +367,15 @@ export async function getEmailTemplates() {
 /**
  * Get email template by ID
  */
-export async function getEmailTemplate(templateId: string) {
+export async function getEmailTemplate(templateId: string): Promise<EmailTemplate | null> {
   const result = executeQuery('SELECT * FROM email_templates WHERE id = ?', [templateId])
-  return result.results?.[0] || null
+  return (result.results?.[0] || null) as EmailTemplate | null
 }
 
 /**
  * Create email template
  */
-export async function createEmailTemplate(templateData: {
-  subject: string
-  body: string
-  type: string
-}) {
+export async function createEmailTemplate(templateData: CreateEmailTemplateData) {
   const id = `template-${Date.now()}`
   const { subject, body, type } = templateData
   executeQuery(
@@ -374,15 +388,11 @@ export async function createEmailTemplate(templateData: {
 /**
  * Update email template
  */
-export async function updateEmailTemplate(templateId: string, templateData: {
-  subject: string
-  body: string
-  type: string
-}) {
+export async function updateEmailTemplate(templateId: string, templateData: UpdateEmailTemplateData) {
   const { subject, body, type } = templateData
   executeQuery(
     'UPDATE email_templates SET subject = ?, body = ?, type = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-    [subject, body, type, templateId]
+    [subject ?? null, body ?? null, type ?? null, templateId]
   )
 }
 
@@ -424,7 +434,7 @@ export async function recordEmail(emailData: {
     `INSERT INTO email_history 
      (id, invoice_id, template_id, recipient_email, recipient_name, recipient_type, subject, body, status, error_message, sent_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-    [id, invoiceId, templateId, recipientEmail, recipientName, recipientType, subject, body, status, errorMessage]
+    [id, invoiceId, templateId ?? null, recipientEmail ?? null, recipientName ?? null, recipientType ?? null, subject ?? null, body ?? null, status ?? null, errorMessage ?? null]
   )
   
   return id

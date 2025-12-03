@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
@@ -14,11 +14,7 @@ export default function SettingsPanel() {
   const [saving, setSaving] = useState(false)
   const { toast } = useToast()
 
-  useEffect(() => {
-    loadSettings()
-  }, [])
-
-  const loadSettings = async () => {
+  const loadSettings = useCallback(async () => {
     try {
       setLoading(true)
       const email = await getAccountantEmail()
@@ -33,7 +29,11 @@ export default function SettingsPanel() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [toast])
+
+  useEffect(() => {
+    loadSettings()
+  }, [loadSettings])
 
   const handleSave = async () => {
     try {
@@ -44,11 +44,12 @@ export default function SettingsPanel() {
         description: "Email do contador atualizado com sucesso",
         variant: "default",
       })
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error saving settings:', error)
+      const errorMessage = error instanceof Error ? error.message : "Falha ao salvar configurações"
       toast({
         title: "Erro",
-        description: error.message || "Falha ao salvar configurações",
+        description: errorMessage,
         variant: "destructive",
       })
     } finally {
@@ -87,7 +88,7 @@ export default function SettingsPanel() {
             required
           />
           <p className="text-sm text-muted-foreground">
-            Este email será usado para enviar invoices quando você marcar "Enviar para Contador"
+            Este email será usado para enviar invoices quando você marcar &ldquo;Enviar para Contador&rdquo;
           </p>
         </div>
 

@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
 import { getClients, createClient, updateClient, deleteClient } from '@/lib/client/db-client'
 import { UserPlus, Mail, User, Edit, Trash2, X, Plus } from 'lucide-react'
+import type { Client } from '@/types'
 import {
   Dialog,
   DialogContent,
@@ -27,24 +28,20 @@ import {
 } from '@/components/ui/alert-dialog'
 
 export default function ClientManagement() {
-  const [clients, setClients] = useState([])
+  const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [editingClient, setEditingClient] = useState(null)
+  const [editingClient, setEditingClient] = useState<Client | null>(null)
   const [newClientName, setNewClientName] = useState('')
   const [newClientEmail, setNewClientEmail] = useState('')
   const [requiresTimesheet, setRequiresTimesheet] = useState(false)
   const [ccEmails, setCcEmails] = useState<string[]>([])
   const [newCcEmail, setNewCcEmail] = useState('')
-  const [clientToDelete, setClientToDelete] = useState(null)
+  const [clientToDelete, setClientToDelete] = useState<Client | null>(null)
   const { toast } = useToast()
 
-  useEffect(() => {
-    loadClients()
-  }, [])
-
-  const loadClients = async () => {
+  const loadClients = useCallback(async () => {
     try {
       setLoading(true)
       const clientsList = await getClients()
@@ -59,7 +56,11 @@ export default function ClientManagement() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [toast])
+
+  useEffect(() => {
+    loadClients()
+  }, [loadClients])
 
   const handleCreateClient = async () => {
     if (!newClientName.trim() || !newClientEmail.trim()) {
@@ -88,17 +89,18 @@ export default function ClientManagement() {
       setRequiresTimesheet(false)
       setDialogOpen(false)
       loadClients()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error creating client:', error)
+      const errorMessage = error instanceof Error ? error.message : "Falha ao criar cliente"
       toast({
         title: "Erro",
-        description: error.message || "Falha ao criar cliente",
+        description: errorMessage,
         variant: "destructive",
       })
     }
   }
 
-  const handleEditClient = (client: any) => {
+  const handleEditClient = (client: Client) => {
     setEditingClient(client)
     setNewClientName(client.name)
     setNewClientEmail(client.email)
@@ -136,17 +138,17 @@ export default function ClientManagement() {
       setEditingClient(null)
       setDialogOpen(false)
       loadClients()
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error updating client:', error)
       toast({
         title: "Error",
-        description: error.message || "Failed to update client",
+        description: error instanceof Error ? error.message : "Failed to update client",
         variant: "destructive",
       })
     }
   }
 
-  const handleDeleteClick = (client) => {
+  const handleDeleteClick = (client: Client) => {
     setClientToDelete(client)
     setDeleteDialogOpen(true)
   }
@@ -164,11 +166,11 @@ export default function ClientManagement() {
       setClientToDelete(null)
       setDeleteDialogOpen(false)
       loadClients()
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error deleting client:', error)
       toast({
         title: "Error",
-        description: error.message || "Failed to delete client",
+        description: error instanceof Error ? error.message : "Failed to delete client",
         variant: "destructive",
       })
     }

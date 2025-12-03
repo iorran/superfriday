@@ -43,10 +43,11 @@ export async function POST(request: NextRequest) {
       fileSize: file.size,
       url: blob.url,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Upload error:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Upload failed'
     return NextResponse.json(
-      { error: true, message: error.message || 'Upload failed' },
+      { error: true, message: errorMessage },
       { status: 500 }
     )
   }

@@ -32,9 +32,10 @@ export async function DELETE(
       await del(fileKey, {
         token: process.env.BLOB_READ_WRITE_TOKEN,
       })
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Ignore if file doesn't exist in blob storage
-      if (error.status !== 404 && !error.message?.includes('not found')) {
+      const errorObj = error as { status?: number; message?: string }
+      if (errorObj.status !== 404 && !errorObj.message?.includes('not found')) {
         throw error
       }
     }
@@ -43,10 +44,11 @@ export async function DELETE(
     await deleteInvoice(fileKey)
 
     return NextResponse.json({ success: true })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error deleting file:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Failed to delete file'
     return NextResponse.json(
-      { error: true, message: error.message || 'Failed to delete file' },
+      { error: true, message: errorMessage },
       { status: 500 }
     )
   }

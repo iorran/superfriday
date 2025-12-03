@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/use-toast'
 import { getEmailTemplates, createEmailTemplate, updateEmailTemplate, deleteEmailTemplate } from '@/lib/client/db-client'
 import { EMAIL_TEMPLATE_VARIABLES } from '@/lib/email-template-variables'
 import { FileText, Plus, Edit, Trash2, Info, Copy } from 'lucide-react'
+import type { EmailTemplate, WindowWithTemplateField } from '@/types'
 import {
   Dialog,
   DialogContent,
@@ -29,24 +30,24 @@ import {
 } from '@/components/ui/alert-dialog'
 
 export default function EmailTemplateManagement() {
-  const [templates, setTemplates] = useState([])
+  const [templates, setTemplates] = useState<EmailTemplate[]>([])
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [editingTemplate, setEditingTemplate] = useState(null)
-  const [newTemplate, setNewTemplate] = useState({
+  const [editingTemplate, setEditingTemplate] = useState<EmailTemplate | null>(null)
+  const [newTemplate, setNewTemplate] = useState<{
+    subject: string
+    body: string
+    type: 'to_client' | 'to_account_manager'
+  }>({
     subject: '',
     body: '',
     type: 'to_client',
   })
-  const [templateToDelete, setTemplateToDelete] = useState(null)
+  const [templateToDelete, setTemplateToDelete] = useState<EmailTemplate | null>(null)
   const { toast } = useToast()
 
-  useEffect(() => {
-    loadTemplates()
-  }, [])
-
-  const loadTemplates = async () => {
+  const loadTemplates = useCallback(async () => {
     try {
       setLoading(true)
       const templatesList = await getEmailTemplates()
@@ -61,7 +62,11 @@ export default function EmailTemplateManagement() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [toast])
+
+  useEffect(() => {
+    loadTemplates()
+  }, [loadTemplates])
 
   const handleCreateTemplate = async () => {
     if (!newTemplate.subject.trim() || !newTemplate.body.trim()) {
@@ -74,7 +79,7 @@ export default function EmailTemplateManagement() {
     }
 
     // Check if a template of this type already exists
-    const existingTemplate = templates.find((t: any) => t.type === newTemplate.type)
+      const existingTemplate = templates.find((t: EmailTemplate) => t.type === newTemplate.type)
     if (existingTemplate) {
       toast({
         title: "Template Already Exists",
@@ -94,17 +99,18 @@ export default function EmailTemplateManagement() {
       setNewTemplate({ subject: '', body: '', type: 'to_client' })
       setDialogOpen(false)
       loadTemplates()
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error creating template:', error)
+      const errorMessage = error instanceof Error ? error.message : "Failed to create template"
       toast({
         title: "Error",
-        description: error.message || "Failed to create template",
+        description: errorMessage,
         variant: "destructive",
       })
     }
   }
 
-  const handleEditTemplate = (template) => {
+  const handleEditTemplate = (template: EmailTemplate) => {
     setEditingTemplate(template)
     setNewTemplate({
       subject: template.subject,
@@ -124,6 +130,8 @@ export default function EmailTemplateManagement() {
       return
     }
 
+    if (!editingTemplate) return
+    
     try {
       await updateEmailTemplate(editingTemplate.id, newTemplate)
       toast({
@@ -135,17 +143,18 @@ export default function EmailTemplateManagement() {
       setEditingTemplate(null)
       setDialogOpen(false)
       loadTemplates()
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error updating template:', error)
+      const errorMessage = error instanceof Error ? error.message : "Failed to update template"
       toast({
         title: "Error",
-        description: error.message || "Failed to update template",
+        description: errorMessage,
         variant: "destructive",
       })
     }
   }
 
-  const handleDeleteClick = (template) => {
+  const handleDeleteClick = (template: EmailTemplate) => {
     setTemplateToDelete(template)
     setDeleteDialogOpen(true)
   }
@@ -163,11 +172,11 @@ export default function EmailTemplateManagement() {
       setTemplateToDelete(null)
       setDeleteDialogOpen(false)
       loadTemplates()
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error deleting template:', error)
       toast({
         title: "Error",
-        description: error.message || "Failed to delete template",
+        description: error instanceof Error ? error.message : "Failed to delete template",
         variant: "destructive",
       })
     }
@@ -201,8 +210,8 @@ export default function EmailTemplateManagement() {
             <Button 
               onClick={() => {
                 // Check if both template types already exist
-                const hasClientTemplate = templates.some((t: any) => t.type === 'to_client')
-                const hasAccountManagerTemplate = templates.some((t: any) => t.type === 'to_account_manager')
+                const hasClientTemplate = templates.some((t: EmailTemplate) => t.type === 'to_client')
+                const hasAccountManagerTemplate = templates.some((t: EmailTemplate) => t.type === 'to_account_manager')
                 
                 if (hasClientTemplate && hasAccountManagerTemplate) {
                   toast({
@@ -297,7 +306,7 @@ export default function EmailTemplateManagement() {
                   key={variable.name}
                   type="button"
                   onClick={() => {
-                    const currentField = (window as any).__currentTemplateField || 'body'
+                    const currentField = (window as WindowWithTemplateField).__currentTemplateField || 'body'
                     const fieldId = currentField === 'subject' ? 'templateSubject' : 'templateBody'
                     const field = document.getElementById(fieldId) as HTMLInputElement | HTMLTextAreaElement
                     
@@ -339,24 +348,24 @@ export default function EmailTemplateManagement() {
               <select
                 id="templateType"
                 value={newTemplate.type}
-                onChange={(e) => setNewTemplate({ ...newTemplate, type: e.target.value })}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewTemplate({ ...newTemplate, type: e.target.value as 'to_client' | 'to_account_manager' })}
                 className="w-full p-2 border rounded-md"
                 disabled={!!editingTemplate}
               >
                 <option 
                   value="to_client" 
-                  disabled={!editingTemplate && templates.some((t: any) => t.type === 'to_client')}
+                  disabled={!editingTemplate && templates.some((t: EmailTemplate) => t.type === 'to_client')}
                 >
-                  To Client {!editingTemplate && templates.some((t: any) => t.type === 'to_client') ? '(Already exists)' : ''}
+                  To Client {!editingTemplate && templates.some((t: EmailTemplate) => t.type === 'to_client') ? '(Already exists)' : ''}
                 </option>
                 <option 
                   value="to_account_manager" 
-                  disabled={!editingTemplate && templates.some((t: any) => t.type === 'to_account_manager')}
+                  disabled={!editingTemplate && templates.some((t: EmailTemplate) => t.type === 'to_account_manager')}
                 >
-                  To Account Manager {!editingTemplate && templates.some((t: any) => t.type === 'to_account_manager') ? '(Already exists)' : ''}
+                  To Account Manager {!editingTemplate && templates.some((t: EmailTemplate) => t.type === 'to_account_manager') ? '(Already exists)' : ''}
                 </option>
               </select>
-              {!editingTemplate && templates.some((t: any) => t.type === newTemplate.type) && (
+              {!editingTemplate && templates.some((t: EmailTemplate) => t.type === newTemplate.type) && (
                 <p className="text-xs text-amber-600 dark:text-amber-400">
                   ⚠️ A template of this type already exists. Please edit the existing template instead.
                 </p>
@@ -371,9 +380,9 @@ export default function EmailTemplateManagement() {
                 onChange={(e) => setNewTemplate({ ...newTemplate, subject: e.target.value })}
                 placeholder="Invoice {{invoiceName}} - Payment Due"
                 className="w-full p-2 border rounded-md"
-                onFocus={(e) => {
+                onFocus={() => {
                   // Store reference to subject input for variable insertion
-                  ;(window as any).__currentTemplateField = 'subject'
+                    ;(window as WindowWithTemplateField).__currentTemplateField = 'subject'
                 }}
               />
             </div>
@@ -382,13 +391,13 @@ export default function EmailTemplateManagement() {
               <Textarea
                 id="templateBody"
                 value={newTemplate.body}
-                onChange={(e) => setNewTemplate({ ...newTemplate, body: e.target.value })}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNewTemplate({ ...newTemplate, body: e.target.value })}
                 placeholder="Dear {{clientName}},\n\nPlease find attached invoice {{invoiceName}}.\n\nAmount: {{invoiceAmount}}\nDue Date: {{dueDate}}\n\nThank you!"
                 rows={8}
                 className="w-full"
                 onFocus={() => {
                   // Store reference to body textarea for variable insertion
-                  ;(window as any).__currentTemplateField = 'body'
+                    ;(window as WindowWithTemplateField).__currentTemplateField = 'body'
                 }}
               />
             </div>

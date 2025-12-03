@@ -3,10 +3,46 @@
  * Makes API calls to Next.js API routes
  */
 
+import type { Client, Invoice, InvoiceFile, EmailTemplate } from '@/types'
+
+interface CreateClientData {
+  name: string
+  email: string
+  requiresTimesheet: boolean
+  ccEmails?: string[]
+}
+
+interface UpdateClientData {
+  name?: string
+  email?: string
+  requiresTimesheet?: boolean
+  ccEmails?: string[]
+}
+
+interface CreateEmailTemplateData {
+  subject: string
+  body: string
+  type: string
+}
+
+interface UpdateEmailTemplateData {
+  subject?: string
+  body?: string
+  type?: string
+}
+
+interface SendEmailData {
+  invoiceId: string
+  recipientType: 'client' | 'accountant'
+  templateId?: string | null
+  subject?: string
+  body?: string
+}
+
 /**
  * Execute a SQL query via API
  */
-async function executeQuery(sql: string, params: any[] = []) {
+async function executeQuery(sql: string, params: (string | number | boolean | null)[] = []) {
   const response = await fetch('/api/db', {
     method: 'POST',
     headers: {
@@ -29,28 +65,23 @@ async function executeQuery(sql: string, params: any[] = []) {
 /**
  * Get all clients
  */
-export async function getClients() {
+export async function getClients(): Promise<Client[]> {
   const result = await executeQuery('SELECT * FROM clients ORDER BY name')
-  return result.results || []
+  return (result.results || []) as unknown as Client[]
 }
 
 /**
  * Get client by ID
  */
-export async function getClient(clientId: string) {
+export async function getClient(clientId: string): Promise<Client | null> {
   const result = await executeQuery('SELECT * FROM clients WHERE id = ?', [clientId])
-  return result.results?.[0] || null
+  return (result.results?.[0] || null) as Client | null
 }
 
 /**
  * Create a new client
  */
-export async function createClient(data: {
-  name: string
-  email: string
-  requiresTimesheet?: boolean
-  ccEmails?: string[]
-}) {
+export async function createClient(data: CreateClientData) {
   const id = `client-${Date.now()}`
   const { name, email, requiresTimesheet, ccEmails } = data
   const ccEmailsJson = ccEmails && ccEmails.length > 0 ? JSON.stringify(ccEmails) : null
@@ -64,17 +95,12 @@ export async function createClient(data: {
 /**
  * Update a client
  */
-export async function updateClient(clientId: string, data: {
-  name: string
-  email: string
-  requiresTimesheet?: boolean
-  ccEmails?: string[]
-}) {
+export async function updateClient(clientId: string, data: UpdateClientData) {
   const { name, email, requiresTimesheet, ccEmails } = data
   const ccEmailsJson = ccEmails && ccEmails.length > 0 ? JSON.stringify(ccEmails) : null
   await executeQuery(
     'UPDATE clients SET name = ?, email = ?, requires_timesheet = ?, cc_emails = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-    [name, email, requiresTimesheet ? 1 : 0, ccEmailsJson, clientId]
+    [name ?? null, email ?? null, requiresTimesheet !== undefined ? (requiresTimesheet ? 1 : 0) : null, ccEmailsJson, clientId]
   )
 }
 
@@ -259,13 +285,7 @@ export async function deleteInvoice(invoiceId: string) {
 /**
  * Send email
  */
-export async function sendEmail(data: {
-  invoiceId: string
-  recipientType: 'client' | 'accountant'
-  templateId?: string | null
-  subject: string
-  body: string
-}) {
+export async function sendEmail(data: SendEmailData) {
   const response = await fetch('/api/email/send', {
     method: 'POST',
     headers: {
@@ -293,19 +313,15 @@ export async function getEmailTemplates() {
 /**
  * Get email template by ID
  */
-export async function getEmailTemplate(templateId: string) {
+export async function getEmailTemplate(templateId: string): Promise<EmailTemplate | null> {
   const result = await executeQuery('SELECT * FROM email_templates WHERE id = ?', [templateId])
-  return result.results?.[0] || null
+  return (result.results?.[0] || null) as EmailTemplate | null
 }
 
 /**
  * Create email template
  */
-export async function createEmailTemplate(templateData: {
-  subject: string
-  body: string
-  type: string
-}) {
+export async function createEmailTemplate(templateData: CreateEmailTemplateData) {
   const id = `template-${Date.now()}`
   const { subject, body, type } = templateData
   await executeQuery(
@@ -318,15 +334,11 @@ export async function createEmailTemplate(templateData: {
 /**
  * Update email template
  */
-export async function updateEmailTemplate(templateId: string, templateData: {
-  subject: string
-  body: string
-  type: string
-}) {
+export async function updateEmailTemplate(templateId: string, templateData: UpdateEmailTemplateData) {
   const { subject, body, type } = templateData
   await executeQuery(
     'UPDATE email_templates SET subject = ?, body = ?, type = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-    [subject, body, type, templateId]
+    [subject ?? null, body ?? null, type ?? null, templateId]
   )
 }
 

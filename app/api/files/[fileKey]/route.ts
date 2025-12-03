@@ -72,18 +72,20 @@ export async function GET(
         'Cache-Control': 'public, max-age=3600',
       },
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error serving file:', error)
+    const errorObj = error as { status?: number; message?: string }
     
-    if (error.status === 404 || error.message?.includes('not found')) {
+    if (errorObj.status === 404 || errorObj.message?.includes('not found')) {
       return NextResponse.json(
         { error: true, message: 'File not found' },
         { status: 404 }
       )
     }
 
+    const errorMessage = error instanceof Error ? error.message : 'Failed to serve file'
     return NextResponse.json(
-      { error: true, message: error.message || 'Failed to serve file' },
+      { error: true, message: errorMessage },
       { status: 500 }
     )
   }

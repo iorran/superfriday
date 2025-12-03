@@ -23,8 +23,9 @@ import {
   sendEmail,
   getEmailTemplates
 } from '@/lib/client/db-client'
-import { FileText, Calendar, Trash2, Mail, User, CheckCircle2, Send, Edit, Loader2 } from 'lucide-react'
+import { FileText, Calendar, Trash2, CheckCircle2, Send, Edit, Loader2 } from 'lucide-react'
 import FileUpload from './FileUpload'
+import type { Invoice, InvoiceFile, EmailTemplate } from '@/types'
 import {
   Dialog,
   DialogContent,
@@ -36,8 +37,16 @@ interface FileListProps {
   refreshTrigger?: number
 }
 
+interface FormattedInvoice extends Invoice {
+  monthKey: string
+  monthName: string
+  sentToClient: boolean
+  paymentReceived: boolean
+  sentToAccountant: boolean
+}
+
 export default function FileList({ refreshTrigger }: FileListProps) {
-  const [invoices, setInvoices] = useState<any[]>([])
+  const [invoices, setInvoices] = useState<FormattedInvoice[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set())
   const [deletingInvoice, setDeletingInvoice] = useState<string | null>(null)
@@ -62,7 +71,7 @@ export default function FileList({ refreshTrigger }: FileListProps) {
       const invoicesList = await getAllInvoices()
       
       // Format invoices
-      const formattedInvoices = invoicesList.map((inv: any) => {
+      const formattedInvoices = invoicesList.map((inv: Invoice) => {
         // Use month/year from invoice, or fallback to uploaded_at
         const monthKey = inv.year && inv.month 
           ? `${inv.year}-${String(inv.month).padStart(2, '0')}`
@@ -86,11 +95,11 @@ export default function FileList({ refreshTrigger }: FileListProps) {
       })
 
       setInvoices(formattedInvoices)
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error fetching invoices:', error)
       toast({
         title: "Erro",
-        description: "Falha ao carregar invoices",
+        description: error instanceof Error ? error.message : "Falha ao carregar invoices",
         variant: "destructive",
       })
     } finally {
@@ -104,7 +113,7 @@ export default function FileList({ refreshTrigger }: FileListProps) {
 
   // Group invoices by month
   const invoicesByMonth = useMemo(() => {
-    const grouped: Record<string, { monthName: string; invoices: any[] }> = {}
+    const grouped: Record<string, { monthName: string; invoices: FormattedInvoice[] }> = {}
     invoices.forEach((inv) => {
       if (!grouped[inv.monthKey]) {
         grouped[inv.monthKey] = {
@@ -143,6 +152,9 @@ export default function FileList({ refreshTrigger }: FileListProps) {
           inv.id === invoiceId
             ? { 
                 ...inv, 
+                sent_to_client: updates.sentToClient !== undefined ? (updates.sentToClient ? 1 : 0) : inv.sent_to_client,
+                payment_received: updates.paymentReceived !== undefined ? (updates.paymentReceived ? 1 : 0) : inv.payment_received,
+                sent_to_accountant: updates.sentToAccountant !== undefined ? (updates.sentToAccountant ? 1 : 0) : inv.sent_to_accountant,
                 sentToClient: updates.sentToClient !== undefined ? updates.sentToClient : inv.sentToClient,
                 paymentReceived: updates.paymentReceived !== undefined ? updates.paymentReceived : inv.paymentReceived,
                 sentToAccountant: updates.sentToAccountant !== undefined ? updates.sentToAccountant : inv.sentToAccountant,
@@ -156,11 +168,11 @@ export default function FileList({ refreshTrigger }: FileListProps) {
         description: "Estado da invoice atualizado com sucesso",
         variant: "default",
       })
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error updating invoice state:', error)
       toast({
         title: "Erro",
-        description: error.message || "Falha ao atualizar estado",
+        description: error instanceof Error ? error.message : "Falha ao atualizar estado",
         variant: "destructive",
       })
     }
@@ -179,10 +191,10 @@ export default function FileList({ refreshTrigger }: FileListProps) {
       // Templates are stored with type 'to_client' or 'to_account_manager'
       const templates = await getEmailTemplates()
       const templateType = recipientType === 'client' ? 'to_client' : 'to_account_manager'
-      const recipientTemplates = templates.filter((t: any) => t.type === templateType)
+      const recipientTemplates = templates.filter((t: EmailTemplate) => t.type === templateType)
       
       // Use the first template if available, otherwise use default
-      let template = recipientTemplates.length > 0 ? recipientTemplates[0] : null
+      const template = recipientTemplates.length > 0 ? recipientTemplates[0] : null
       let templateId: string | null = null
       let subject = ''
       let body = ''
@@ -239,11 +251,12 @@ export default function FileList({ refreshTrigger }: FileListProps) {
 
       // Refresh invoices
       fetchInvoices()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error sending email:', error)
+      const errorMessage = error instanceof Error ? error.message : "Falha ao enviar email"
       toast({
         title: "Erro ao Enviar Email",
-        description: error.message || "Falha ao enviar email",
+        description: errorMessage,
         variant: "destructive",
       })
     } finally {
@@ -265,11 +278,12 @@ export default function FileList({ refreshTrigger }: FileListProps) {
 
       // Remove from local state
       setInvoices((prev) => prev.filter((inv) => inv.id !== invoiceId))
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error deleting invoice:', error)
+      const errorMessage = error instanceof Error ? error.message : "Falha ao deletar invoice"
       toast({
         title: "Erro",
-        description: error.message || "Falha ao deletar invoice",
+        description: errorMessage,
         variant: "destructive",
       })
     } finally {
@@ -301,7 +315,7 @@ export default function FileList({ refreshTrigger }: FileListProps) {
     }).format(amount)
   }
 
-  const getTotalFileSize = (files: any[]) => {
+  const getTotalFileSize = (files: InvoiceFile[]) => {
     return files?.reduce((total, file) => total + (file.file_size || 0), 0) || 0
   }
 
@@ -344,8 +358,8 @@ export default function FileList({ refreshTrigger }: FileListProps) {
               <CollapsibleContent>
                 <div className="p-4 space-y-3">
                   {group.invoices.map((invoice) => {
-                    const invoiceFiles = invoice.files?.filter((f: any) => f.file_type === 'invoice') || []
-                    const timesheetFiles = invoice.files?.filter((f: any) => f.file_type === 'timesheet') || []
+                    const invoiceFiles = invoice.files?.filter((f: InvoiceFile) => f.file_type === 'invoice') || []
+                    const timesheetFiles = invoice.files?.filter((f: InvoiceFile) => f.file_type === 'timesheet') || []
                     const totalSize = getTotalFileSize(invoice.files || [])
 
                     return (
@@ -369,12 +383,12 @@ export default function FileList({ refreshTrigger }: FileListProps) {
                             {/* Files list */}
                             {invoice.files && invoice.files.length > 0 && (
                               <div className="mt-2 space-y-1">
-                                {invoiceFiles.map((file: any) => (
+                                {invoiceFiles.map((file: InvoiceFile) => (
                                   <p key={file.id} className="text-xs text-muted-foreground">
                                     📄 Invoice: {file.original_name}
                                   </p>
                                 ))}
-                                {timesheetFiles.map((file: any) => (
+                                {timesheetFiles.map((file: InvoiceFile) => (
                                   <p key={file.id} className="text-xs text-muted-foreground">
                                     📋 Timesheet: {file.original_name}
                                   </p>
@@ -499,13 +513,13 @@ export default function FileList({ refreshTrigger }: FileListProps) {
                                   <AlertDialogTitle>Tem certeza?</AlertDialogTitle>
                                   <AlertDialogDescription>
                                     Esta ação não pode ser desfeita. Isso irá deletar permanentemente a invoice
-                                    <strong className="block mt-2">"{invoice.client_name}"</strong>
+                                    <strong className="block mt-2">&ldquo;{invoice.client_name}&rdquo;</strong>
                                   </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
                                   <AlertDialogCancel>Cancelar</AlertDialogCancel>
                                   <AlertDialogAction
-                                    onClick={() => handleDelete(invoice.id, invoice.client_name)}
+                                    onClick={() => handleDelete(invoice.id, invoice.client_name || '')}
                                     className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                                     disabled={deletingInvoice === invoice.id}
                                   >

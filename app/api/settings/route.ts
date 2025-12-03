@@ -23,10 +23,11 @@ export async function GET(request: NextRequest) {
 
     // Return all settings
     return NextResponse.json({ error: true, message: 'key parameter is required' }, { status: 400 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error getting setting:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Failed to get setting'
     return NextResponse.json(
-      { error: true, message: error.message || 'Failed to get setting' },
+      { error: true, message: errorMessage },
       { status: 500 }
     )
   }
@@ -51,10 +52,11 @@ export async function POST(request: NextRequest) {
 
     await setSetting(key, value)
     return NextResponse.json({ success: true })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error setting setting:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Failed to set setting'
     return NextResponse.json(
-      { error: true, message: error.message || 'Failed to set setting' },
+      { error: true, message: errorMessage },
       { status: 500 }
     )
   }

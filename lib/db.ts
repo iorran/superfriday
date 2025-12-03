@@ -32,10 +32,16 @@ export function closeDatabase() {
   }
 }
 
+export interface QueryResult {
+  results: unknown[]
+  changes?: number
+  lastInsertRowid?: number | bigint
+}
+
 /**
  * Execute a SQL query
  */
-export function executeQuery(sql: string, params: any[] = []): any {
+export function executeQuery(sql: string, params: (string | number | boolean | null)[] = []): QueryResult {
   const database = getDatabase()
   const stmt = database.prepare(sql)
   
@@ -74,11 +80,12 @@ export function initDatabase() {
     if (statement) {
       try {
         database.exec(statement)
-      } catch (error: any) {
+      } catch (error: unknown) {
         // Ignore "already exists" errors
-        if (!error.message.includes('already exists') && !error.message.includes('duplicate column')) {
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        if (!errorMessage.includes('already exists') && !errorMessage.includes('duplicate column')) {
           console.error('Error executing statement:', statement)
-          console.error('Error:', error.message)
+          console.error('Error:', errorMessage)
           // Don't throw, just log - allows re-running init
         }
       }

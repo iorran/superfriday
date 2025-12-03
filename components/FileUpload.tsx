@@ -10,7 +10,8 @@ import { useToast } from '@/components/ui/use-toast'
 import { getClients, getInvoice, updateInvoice, deleteInvoiceFile } from '@/lib/client/db-client'
 import { uploadFile } from '@/lib/client/storage-client'
 import { createInvoice } from '@/lib/client/db-client'
-import { Upload, X, FileText, Calendar, Trash2 } from 'lucide-react'
+import { Upload, X, FileText, Trash2 } from 'lucide-react'
+import type { Client, InvoiceFile } from '@/types'
 
 interface FileUploadProps {
   onUploadSuccess?: () => void
@@ -36,9 +37,9 @@ interface ExistingFile {
 }
 
 export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel }: FileUploadProps) {
-  const [clients, setClients] = useState<any[]>([])
+  const [clients, setClients] = useState<Client[]>([])
   const [selectedClientId, setSelectedClientId] = useState('')
-  const [selectedClient, setSelectedClient] = useState<any>(null)
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null)
   const [invoiceAmount, setInvoiceAmount] = useState('')
   const [dueDate, setDueDate] = useState('')
   const [month, setMonth] = useState(new Date().getMonth() + 1)
@@ -51,9 +52,56 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
   const [loadingInvoice, setLoadingInvoice] = useState(false)
   const { toast } = useToast()
 
+  const loadClients = useCallback(async () => {
+    try {
+      const clientsList = await getClients()
+      setClients(clientsList)
+    } catch (error) {
+      console.error('Error loading clients:', error)
+    }
+  }, [])
+
+  const loadInvoiceForEdit = useCallback(async () => {
+    if (!editingInvoiceId) return
+
+    try {
+      setLoadingInvoice(true)
+      const invoice = await getInvoice(editingInvoiceId)
+      if (invoice) {
+        setSelectedClientId(invoice.client_id)
+        setInvoiceAmount(invoice.invoice_amount?.toString() || '')
+        setDueDate(invoice.due_date || '')
+        setMonth(invoice.month || new Date().getMonth() + 1)
+        setYear(invoice.year || new Date().getFullYear())
+        
+        // Load existing files
+        if (invoice.files && invoice.files.length > 0) {
+          const existing = invoice.files.map((f: InvoiceFile) => ({
+            id: f.id,
+            fileKey: f.file_key,
+            fileType: f.file_type,
+            originalName: f.original_name,
+            fileSize: f.file_size || 0,
+          }))
+          setExistingFiles(existing)
+          setFilesToDelete(new Set())
+        }
+      }
+    } catch (error: unknown) {
+      console.error('Error loading invoice for edit:', error)
+      toast({
+        title: "Erro",
+        description: error instanceof Error ? error.message : "Falha ao carregar invoice para edição",
+        variant: "destructive",
+      })
+    } finally {
+      setLoadingInvoice(false)
+    }
+  }, [editingInvoiceId, toast])
+
   useEffect(() => {
     loadClients()
-  }, [])
+  }, [loadClients])
 
   useEffect(() => {
     if (editingInvoiceId) {
@@ -69,12 +117,12 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
       setYear(new Date().getFullYear())
       setSelectedClientId('')
     }
-  }, [editingInvoiceId])
+  }, [editingInvoiceId, loadInvoiceForEdit])
 
   useEffect(() => {
     if (selectedClientId) {
       const client = clients.find(c => c.id === selectedClientId)
-      setSelectedClient(client)
+      setSelectedClient(client || null)
       
       // Reset new files if client changes and new client doesn't require timesheet
       if (client && !client.requires_timesheet) {
@@ -86,44 +134,6 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
     }
   }, [selectedClientId, clients])
 
-  const loadInvoiceForEdit = async () => {
-    if (!editingInvoiceId) return
-
-    try {
-      setLoadingInvoice(true)
-      const invoice = await getInvoice(editingInvoiceId)
-      if (invoice) {
-        setSelectedClientId(invoice.client_id)
-        setInvoiceAmount(invoice.invoice_amount?.toString() || '')
-        setDueDate(invoice.due_date || '')
-        setMonth(invoice.month || new Date().getMonth() + 1)
-        setYear(invoice.year || new Date().getFullYear())
-        
-        // Load existing files
-        if (invoice.files && invoice.files.length > 0) {
-          const existing = invoice.files.map((f: any) => ({
-            id: f.id,
-            fileKey: f.file_key,
-            fileType: f.file_type,
-            originalName: f.original_name,
-            fileSize: f.file_size || 0,
-            isExisting: true as const,
-          }))
-          setExistingFiles(existing)
-        }
-      }
-    } catch (error: any) {
-      console.error('Error loading invoice for edit:', error)
-      toast({
-        title: "Erro",
-        description: "Falha ao carregar invoice para edição",
-        variant: "destructive",
-      })
-    } finally {
-      setLoadingInvoice(false)
-    }
-  }
-
   const removeExistingFile = async (fileId: string) => {
     if (!editingInvoiceId) return
 
@@ -133,25 +143,11 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
       
       // Remove from display immediately
       setExistingFiles(prev => prev.filter(f => f.id !== fileId))
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error removing file:', error)
       toast({
         title: "Erro",
-        description: "Falha ao remover arquivo",
-        variant: "destructive",
-      })
-    }
-  }
-
-  const loadClients = async () => {
-    try {
-      const clientsList = await getClients()
-      setClients(clientsList)
-    } catch (error) {
-      console.error('Error loading clients:', error)
-      toast({
-        title: "Erro",
-        description: "Falha ao carregar clientes. Por favor, recarregue a página.",
+        description: error instanceof Error ? error.message : "Falha ao remover arquivo",
         variant: "destructive",
       })
     }
@@ -198,8 +194,6 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
   const handleUpload = async () => {
     // Validation: must have client, amount, and due date
     // For new invoices, must have files. For editing, can have existing files or new files
-    const hasAnyFiles = files.length > 0 || (isEditing && existingFiles.length > filesToDelete.size)
-    
     if (!selectedClientId || (!isEditing && files.length === 0) || !invoiceAmount || !dueDate) {
       toast({
         title: "Erro de Validação",
@@ -281,11 +275,11 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
         if (onCancel) {
           onCancel()
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('Update error:', error)
         toast({
           title: "Erro na Atualização",
-          description: error.message || "Falha ao atualizar invoice",
+          description: error instanceof Error ? error.message : "Falha ao atualizar invoice",
           variant: "destructive",
         })
       } finally {
@@ -379,13 +373,13 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
         if (onUploadSuccess) {
           onUploadSuccess()
         }
-      } catch (error: any) {
-        console.error('Upload error:', error)
-        toast({
-          title: "Erro no Upload",
-          description: error.message || "Falha ao fazer upload dos arquivos",
-          variant: "destructive",
-        })
+    } catch (error: unknown) {
+      console.error('Upload error:', error)
+      toast({
+        title: "Erro no Upload",
+        description: error instanceof Error ? error.message : "Falha ao fazer upload dos arquivos",
+        variant: "destructive",
+      })
       } finally {
         setIsUploading(false)
         setIsCreatingInvoice(false)
@@ -436,7 +430,6 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
             {selectedClient && (
               <p className="text-sm text-muted-foreground">
                 Email: {selectedClient.email}
-                {selectedClient.accountant_email && ` • Contador: ${selectedClient.accountant_email}`}
               </p>
             )}
           </div>

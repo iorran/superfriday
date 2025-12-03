@@ -11,5 +11,3 @@ export const EMAIL_TEMPLATE_VARIABLES = [
   { name: 'downloadLink', description: 'Link para download do arquivo', example: '{{downloadLink}}' },
 ] as const
 
-export type EmailTemplateVariable = typeof EMAIL_TEMPLATE_VARIABLES[number]['name']
-

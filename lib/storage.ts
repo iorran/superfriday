@@ -47,9 +47,10 @@ export async function getFile(fileKey: string): Promise<Buffer | null> {
     // Convert to Buffer
     const arrayBuffer = await response.arrayBuffer()
     return Buffer.from(arrayBuffer)
-  } catch (error: any) {
+  } catch (error: unknown) {
     // Return null if file not found
-    if (error.status === 404 || error.message?.includes('not found') || error.message?.includes('404')) {
+    const errorObj = error as { status?: number; message?: string }
+    if (errorObj.status === 404 || errorObj.message?.includes('not found') || errorObj.message?.includes('404')) {
       return null
     }
     throw error
@@ -68,9 +69,10 @@ export async function deleteFile(fileKey: string): Promise<void> {
     await del(fileKey, {
       token: process.env.BLOB_READ_WRITE_TOKEN,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     // Ignore if file doesn't exist
-    if (error.status === 404 || error.message?.includes('not found')) {
+    const errorObj = error as { status?: number; message?: string }
+    if (errorObj.status === 404 || errorObj.message?.includes('not found')) {
       return
     }
     throw error
@@ -91,7 +93,7 @@ export async function getFileUrl(fileKey: string): Promise<string> {
       token: process.env.BLOB_READ_WRITE_TOKEN,
     })
     return blob.url
-  } catch (error: any) {
+  } catch {
     // Fallback to API route if head fails
     return `/api/files/${fileKey}`
   }

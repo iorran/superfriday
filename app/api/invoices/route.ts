@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
 
     // Validate: if client requires timesheet, must have at least one timesheet file
     // This validation should be done client-side, but we check here too
-    const hasInvoice = files.some((f: any) => f.fileType === 'invoice')
+    const hasInvoice = files.some((f: { fileType: string }) => f.fileType === 'invoice')
     if (!hasInvoice) {
       return NextResponse.json(
         { error: true, message: 'At least one invoice file is required' },
@@ -66,10 +66,11 @@ export async function POST(request: NextRequest) {
       success: true,
       invoiceId,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Invoice creation error:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Failed to create invoice'
     return NextResponse.json(
-      { error: true, message: error.message || 'Failed to create invoice' },
+      { error: true, message: errorMessage },
       { status: 500 }
     )
   }

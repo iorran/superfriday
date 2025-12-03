@@ -24,10 +24,11 @@ export async function PATCH(
     await updateInvoiceState(invoiceId, body)
 
     return NextResponse.json({ success: true })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error updating invoice state:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Failed to update invoice state'
     return NextResponse.json(
-      { error: true, message: error.message || 'Failed to update invoice state' },
+      { error: true, message: errorMessage },
       { status: 500 }
     )
   }

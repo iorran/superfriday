@@ -5,7 +5,6 @@ import { CheckCircle2, Clock, GitCommit } from 'lucide-react'
 
 export default function BuildInfo() {
   const [isLatest, setIsLatest] = useState(true)
-  const [checking, setChecking] = useState(false)
 
   // Build metadata - simplified for Next.js
   const buildInfo = {
@@ -31,15 +30,12 @@ export default function BuildInfo() {
     // For now, we'll assume it's latest (can be enhanced later)
     const checkLatest = async () => {
       if (process.env.NODE_ENV === 'production' && buildInfo.commitSha !== 'dev') {
-        setChecking(true)
         try {
           // You could add an API endpoint to check latest build
           // For now, we'll just mark as latest
           setIsLatest(true)
         } catch (error) {
           console.error('Error checking latest build:', error)
-        } finally {
-          setChecking(false)
         }
       }
     }

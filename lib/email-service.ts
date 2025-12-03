@@ -45,7 +45,19 @@ export async function sendEmailWithAttachments(data: {
 }) {
   const { to, cc, subject, html, attachments = [] } = data
 
-  const mailOptions: any = {
+  const mailOptions: {
+    from?: string
+    to: string
+    subject: string
+    html: string
+    attachments: Array<{
+      filename: string
+      path?: string
+      content?: Buffer
+      contentType?: string
+    }>
+    cc?: string | string[]
+  } = {
     from: process.env.SMTP_FROM || process.env.SMTP_USER,
     to,
     subject,
@@ -82,7 +94,7 @@ export async function sendInvoiceToClient(data: {
   fileKeys: string[] // Array of file keys to attach
   ccEmails?: string[] // Array of CC email addresses
 }) {
-  const { invoiceId, clientEmail, clientName, subject, body, fileKeys, ccEmails } = data
+  const { clientEmail, subject, body, fileKeys, ccEmails } = data
 
   // Get files from blob storage
   const attachments = await Promise.all(
@@ -125,7 +137,7 @@ export async function sendInvoiceToAccountant(data: {
   body: string
   fileKeys: string[] // Only invoice files, not timesheet
 }) {
-  const { invoiceId, accountantEmail, clientName, subject, body, fileKeys } = data
+  const { accountantEmail, subject, body, fileKeys } = data
 
   // Get files from blob storage
   const attachments = await Promise.all(
@@ -163,8 +175,8 @@ export async function verifySMTPConnection() {
     const transporter = getTransporter()
     await transporter.verify()
     return { success: true }
-  } catch (error: any) {
-    return { success: false, error: error.message }
+  } catch (error: unknown) {
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
   }
 }
 
