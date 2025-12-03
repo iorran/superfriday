@@ -306,7 +306,7 @@ export async function sendEmail(data: SendEmailData) {
  * Get email templates
  */
 export async function getEmailTemplates() {
-  const result = await executeQuery('SELECT * FROM email_templates ORDER BY name')
+  const result = await executeQuery('SELECT * FROM email_templates ORDER BY type, created_at')
   return result.results || []
 }
 
@@ -354,7 +354,7 @@ export async function deleteEmailTemplate(templateId: string) {
  */
 export async function getEmailHistory(invoiceId: string) {
   const result = await executeQuery(
-    `SELECT eh.*, et.name as template_name
+    `SELECT eh.*, et.subject as template_name
      FROM email_history eh
      LEFT JOIN email_templates et ON eh.template_id = et.id
      WHERE eh.invoice_id = ?

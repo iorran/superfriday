@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useCallback, useEffect } from 'react'
+import { useForm } from '@tanstack/react-form'
+import { useStore } from '@tanstack/react-store'
 import { useDropzone } from 'react-dropzone'
 import { Card, CardContent } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
@@ -12,6 +14,7 @@ import { uploadFile } from '@/lib/client/storage-client'
 import { createInvoice } from '@/lib/client/db-client'
 import { Upload, X, FileText, Trash2 } from 'lucide-react'
 import type { Client, InvoiceFile } from '@/types'
+import { invoiceSchema, type InvoiceFormData } from '@/lib/validations'
 
 interface FileUploadProps {
   onUploadSuccess?: () => void
@@ -38,12 +41,7 @@ interface ExistingFile {
 
 export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel }: FileUploadProps) {
   const [clients, setClients] = useState<Client[]>([])
-  const [selectedClientId, setSelectedClientId] = useState('')
   const [selectedClient, setSelectedClient] = useState<Client | null>(null)
-  const [invoiceAmount, setInvoiceAmount] = useState('')
-  const [dueDate, setDueDate] = useState('')
-  const [month, setMonth] = useState(new Date().getMonth() + 1)
-  const [year, setYear] = useState(new Date().getFullYear())
   const [files, setFiles] = useState<UploadedFile[]>([])
   const [existingFiles, setExistingFiles] = useState<ExistingFile[]>([])
   const [filesToDelete, setFilesToDelete] = useState<Set<string>>(new Set())
@@ -51,6 +49,22 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
   const [isCreatingInvoice, setIsCreatingInvoice] = useState(false)
   const [loadingInvoice, setLoadingInvoice] = useState(false)
   const { toast } = useToast()
+
+  const form = useForm({
+    defaultValues: {
+      clientId: '',
+      invoiceAmount: 0,
+      dueDate: '',
+      month: new Date().getMonth() + 1,
+      year: new Date().getFullYear(),
+    },
+    validators: {
+      onSubmit: invoiceSchema,
+    },
+    onSubmit: async ({ value }: { value: InvoiceFormData }) => {
+      await handleUpload(value)
+    },
+  })
 
   const loadClients = useCallback(async () => {
     try {
@@ -68,11 +82,11 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
       setLoadingInvoice(true)
       const invoice = await getInvoice(editingInvoiceId)
       if (invoice) {
-        setSelectedClientId(invoice.client_id)
-        setInvoiceAmount(invoice.invoice_amount?.toString() || '')
-        setDueDate(invoice.due_date || '')
-        setMonth(invoice.month || new Date().getMonth() + 1)
-        setYear(invoice.year || new Date().getFullYear())
+        form.setFieldValue('clientId', invoice.client_id)
+        form.setFieldValue('invoiceAmount', invoice.invoice_amount || 0)
+        form.setFieldValue('dueDate', invoice.due_date || '')
+        form.setFieldValue('month', invoice.month || new Date().getMonth() + 1)
+        form.setFieldValue('year', invoice.year || new Date().getFullYear())
         
         // Load existing files
         if (invoice.files && invoice.files.length > 0) {
@@ -97,7 +111,7 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
     } finally {
       setLoadingInvoice(false)
     }
-  }, [editingInvoiceId, toast])
+  }, [editingInvoiceId, toast, form])
 
   useEffect(() => {
     loadClients()
@@ -111,17 +125,16 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
       setFiles([])
       setExistingFiles([])
       setFilesToDelete(new Set())
-      setInvoiceAmount('')
-      setDueDate('')
-      setMonth(new Date().getMonth() + 1)
-      setYear(new Date().getFullYear())
-      setSelectedClientId('')
+      form.reset()
     }
-  }, [editingInvoiceId, loadInvoiceForEdit])
+  }, [editingInvoiceId, loadInvoiceForEdit, form])
 
+  // Subscribe to clientId changes from form
+  const clientId = useStore(form.store, (state) => state.values.clientId || '')
+  
   useEffect(() => {
-    if (selectedClientId) {
-      const client = clients.find(c => c.id === selectedClientId)
+    if (clientId) {
+      const client = clients.find(c => c.id === clientId)
       setSelectedClient(client || null)
       
       // Reset new files if client changes and new client doesn't require timesheet
@@ -131,8 +144,10 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
       
       // Note: Existing files are not automatically removed when client changes
       // User can manually remove them if needed
+    } else {
+      setSelectedClient(null)
     }
-  }, [selectedClientId, clients])
+  }, [clientId, clients])
 
   const removeExistingFile = async (fileId: string) => {
     if (!editingInvoiceId) return
@@ -154,7 +169,7 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
   }
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
-    if (!selectedClientId) {
+    if (!clientId) {
       toast({
         title: "Cliente Necessário",
         description: "Por favor, selecione um cliente antes de fazer upload dos arquivos.",
@@ -173,11 +188,11 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
     }))
 
     setFiles(prev => [...prev, ...newFiles])
-  }, [selectedClientId, toast])
+  }, [clientId, toast])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    disabled: isUploading || isCreatingInvoice || !selectedClientId,
+    disabled: isUploading || isCreatingInvoice || !clientId,
     multiple: true,
   })
 
@@ -191,13 +206,12 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
     ))
   }
 
-  const handleUpload = async () => {
-    // Validation: must have client, amount, and due date
-    // For new invoices, must have files. For editing, can have existing files or new files
-    if (!selectedClientId || (!isEditing && files.length === 0) || !invoiceAmount || !dueDate) {
+  const handleUpload = async (value: InvoiceFormData) => {
+    // Validation: For new invoices, must have files. For editing, can have existing files or new files
+    if (!isEditing && files.length === 0) {
       toast({
-        title: "Erro de Validação",
-        description: "Por favor, preencha todos os campos obrigatórios",
+        title: "Arquivos Necessários",
+        description: "Por favor, adicione pelo menos um arquivo.",
         variant: "destructive",
       })
       return
@@ -255,11 +269,11 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
 
         // Update invoice
         await updateInvoice(editingInvoiceId, {
-          clientId: selectedClientId,
-          invoiceAmount: parseFloat(invoiceAmount),
-          dueDate,
-          month,
-          year,
+          clientId: value.clientId,
+          invoiceAmount: value.invoiceAmount,
+          dueDate: value.dueDate,
+          month: value.month,
+          year: value.year,
           newFiles: uploadedNewFiles,
         })
 
@@ -288,15 +302,6 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
       }
     } else {
       // Create new invoice
-      if (files.length === 0) {
-        toast({
-          title: "Arquivos Necessários",
-          description: "Por favor, adicione pelo menos um arquivo.",
-          variant: "destructive",
-        })
-        return
-      }
-
       // Validate: must have at least one invoice file
       const hasInvoice = files.some(f => f.fileType === 'invoice')
       if (!hasInvoice) {
@@ -351,11 +356,11 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
 
         // Create invoice
         await createInvoice({
-          clientId: selectedClientId,
-          invoiceAmount: parseFloat(invoiceAmount),
-          dueDate,
-          month,
-          year,
+          clientId: value.clientId,
+          invoiceAmount: value.invoiceAmount,
+          dueDate: value.dueDate,
+          month: value.month,
+          year: value.year,
           files: uploadedFiles,
         })
 
@@ -367,8 +372,7 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
 
         // Reset form
         setFiles([])
-        setInvoiceAmount('')
-        setDueDate('')
+        form.reset()
 
         if (onUploadSuccess) {
           onUploadSuccess()
@@ -389,7 +393,9 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
 
   const isEditing = !!editingInvoiceId
   const hasFiles = files.length > 0 || (isEditing && existingFiles.length > filesToDelete.size)
-  const canUpload = selectedClientId && (isEditing || files.length > 0) && invoiceAmount && dueDate
+  const invoiceAmount = form.state.values.invoiceAmount
+  const dueDate = form.state.values.dueDate
+  const canUpload = clientId && (isEditing || files.length > 0) && invoiceAmount && dueDate
   const requiresTimesheet = selectedClient?.requires_timesheet
 
   return (
@@ -402,99 +408,218 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
               Carregando invoice...
             </div>
           ) : (
-            <>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                form.handleSubmit()
+              }}
+            >
               {/* Client Selection */}
-              <div className="space-y-2">
-                <Label htmlFor="client">Cliente *</Label>
-                <select
-                  id="client"
-                  value={selectedClientId}
-                  onChange={(e) => setSelectedClientId(e.target.value)}
-                  className="w-full p-2 border rounded-md bg-background"
-                  disabled={isUploading || isCreatingInvoice || clients.length === 0}
-                  required
-                >
-              {clients.length === 0 ? (
-                <option value="">Nenhum cliente disponível - Crie um cliente primeiro</option>
-              ) : (
-                <>
-                  <option value="">Selecione um cliente...</option>
-                  {clients.map((client) => (
-                    <option key={client.id} value={client.id}>
-                      {client.name}{(client.requires_timesheet === 1 || client.requires_timesheet === true) ? ' (requer timesheet)' : ''}
-                    </option>
-                  ))}
-                </>
-              )}
-            </select>
-            {selectedClient && (
-              <p className="text-sm text-muted-foreground">
-                Email: {selectedClient.email}
-              </p>
-            )}
-          </div>
-
-          {/* Invoice Details */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="amount">Valor da Invoice *</Label>
-              <input
-                id="amount"
-                type="number"
-                step="0.01"
-                value={invoiceAmount}
-                onChange={(e) => setInvoiceAmount(e.target.value)}
-                placeholder="0.00"
-                className="w-full p-2 border rounded-md bg-background"
-                disabled={isUploading || isCreatingInvoice}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="dueDate">Data de Vencimento *</Label>
-              <input
-                id="dueDate"
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                className="w-full p-2 border rounded-md bg-background"
-                disabled={isUploading || isCreatingInvoice}
-                required
-              />
-            </div>
-          </div>
-
-          {/* Month/Year */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="month">Mês</Label>
-              <select
-                id="month"
-                value={month}
-                onChange={(e) => setMonth(parseInt(e.target.value))}
-                className="w-full p-2 border rounded-md bg-background"
-                disabled={isUploading || isCreatingInvoice}
+              <form.Field
+                name="clientId"
+                validators={{
+                  onChange: ({ value }): string | undefined => {
+                    // Only validate if there's a value (allow empty for initial state)
+                    if (!value || value === '') {
+                      return undefined
+                    }
+                    const result = invoiceSchema.shape.clientId.safeParse(value)
+                    if (!result.success) {
+                      return result.error.errors[0]?.message || 'Invalid value'
+                    }
+                    return undefined
+                  },
+                }}
               >
-                {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="year">Ano</Label>
-              <input
-                id="year"
-                type="number"
-                value={year}
-                onChange={(e) => setYear(parseInt(e.target.value))}
-                className="w-full p-2 border rounded-md bg-background"
-                disabled={isUploading || isCreatingInvoice}
-                min="2020"
-                max="2100"
-              />
-            </div>
-          </div>
-            </>
+                {(field) => (
+                  <div className="space-y-2">
+                    <Label htmlFor={field.name}>Cliente *</Label>
+                    <select
+                      id={field.name}
+                      name={field.name}
+                      value={field.state.value}
+                      onBlur={field.handleBlur}
+                      onChange={(e) => {
+                        field.handleChange(e.target.value)
+                      }}
+                      className="w-full p-2 border rounded-md bg-background"
+                      disabled={isUploading || isCreatingInvoice || clients.length === 0}
+                    >
+                      {clients.length === 0 ? (
+                        <option value="">Nenhum cliente disponível - Crie um cliente primeiro</option>
+                      ) : (
+                        <>
+                          <option value="">Selecione um cliente...</option>
+                          {clients.map((client) => (
+                            <option key={client.id} value={client.id}>
+                              {client.name}{(client.requires_timesheet === 1 || client.requires_timesheet === true) ? ' (requer timesheet)' : ''}
+                            </option>
+                          ))}
+                        </>
+                      )}
+                    </select>
+                    {field.state.meta.errors && field.state.meta.errors.length > 0 && (
+                      <p className="text-sm text-destructive">
+                        {String(field.state.meta.errors[0])}
+                      </p>
+                    )}
+                    {selectedClient && (
+                      <p className="text-sm text-muted-foreground">
+                        Email: {selectedClient.email}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </form.Field>
+
+              {/* Invoice Details */}
+              <div className="grid grid-cols-2 gap-4">
+                <form.Field
+                  name="invoiceAmount"
+                  validators={{
+                    onChange: ({ value }): string | undefined => {
+                      const result = invoiceSchema.shape.invoiceAmount.safeParse(value)
+                      if (!result.success) {
+                        return result.error.errors[0]?.message || 'Invalid value'
+                      }
+                      return undefined
+                    },
+                  }}
+                >
+                  {(field) => (
+                    <div className="space-y-2">
+                      <Label htmlFor={field.name}>Valor da Invoice *</Label>
+                      <input
+                        id={field.name}
+                        name={field.name}
+                        type="number"
+                        step="0.01"
+                        value={field.state.value || ''}
+                        onBlur={field.handleBlur}
+                        onChange={(e) => field.handleChange(e.target.value ? parseFloat(e.target.value) : 0)}
+                        placeholder="0.00"
+                        className="w-full p-2 border rounded-md bg-background"
+                        disabled={isUploading || isCreatingInvoice}
+                      />
+                      {field.state.meta.errors && field.state.meta.errors.length > 0 && (
+                        <p className="text-sm text-destructive">
+                          {String(field.state.meta.errors[0])}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </form.Field>
+                <form.Field
+                  name="dueDate"
+                  validators={{
+                    onChange: ({ value }): string | undefined => {
+                      const result = invoiceSchema.shape.dueDate.safeParse(value)
+                      if (!result.success) {
+                        return result.error.errors[0]?.message || 'Invalid value'
+                      }
+                      return undefined
+                    },
+                  }}
+                >
+                  {(field) => (
+                    <div className="space-y-2">
+                      <Label htmlFor={field.name}>Data de Vencimento *</Label>
+                      <input
+                        id={field.name}
+                        name={field.name}
+                        type="date"
+                        value={field.state.value}
+                        onBlur={field.handleBlur}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                        className="w-full p-2 border rounded-md bg-background"
+                        disabled={isUploading || isCreatingInvoice}
+                      />
+                      {field.state.meta.errors && field.state.meta.errors.length > 0 && (
+                        <p className="text-sm text-destructive">
+                          {String(field.state.meta.errors[0])}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </form.Field>
+              </div>
+
+              {/* Month/Year */}
+              <div className="grid grid-cols-2 gap-4">
+                <form.Field
+                  name="month"
+                  validators={{
+                    onChange: ({ value }): string | undefined => {
+                      const result = invoiceSchema.shape.month.safeParse(value)
+                      if (!result.success) {
+                        return result.error.errors[0]?.message || 'Invalid value'
+                      }
+                      return undefined
+                    },
+                  }}
+                >
+                  {(field) => (
+                    <div className="space-y-2">
+                      <Label htmlFor={field.name}>Mês</Label>
+                      <select
+                        id={field.name}
+                        name={field.name}
+                        value={field.state.value}
+                        onBlur={field.handleBlur}
+                        onChange={(e) => field.handleChange(parseInt(e.target.value))}
+                        className="w-full p-2 border rounded-md bg-background"
+                        disabled={isUploading || isCreatingInvoice}
+                      >
+                        {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                          <option key={m} value={m}>{m}</option>
+                        ))}
+                      </select>
+                      {field.state.meta.errors && field.state.meta.errors.length > 0 && (
+                        <p className="text-sm text-destructive">
+                          {String(field.state.meta.errors[0])}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </form.Field>
+                <form.Field
+                  name="year"
+                  validators={{
+                    onChange: ({ value }): string | undefined => {
+                      const result = invoiceSchema.shape.year.safeParse(value)
+                      if (!result.success) {
+                        return result.error.errors[0]?.message || 'Invalid value'
+                      }
+                      return undefined
+                    },
+                  }}
+                >
+                  {(field) => (
+                    <div className="space-y-2">
+                      <Label htmlFor={field.name}>Ano</Label>
+                      <input
+                        id={field.name}
+                        name={field.name}
+                        type="number"
+                        value={field.state.value}
+                        onBlur={field.handleBlur}
+                        onChange={(e) => field.handleChange(parseInt(e.target.value))}
+                        className="w-full p-2 border rounded-md bg-background"
+                        disabled={isUploading || isCreatingInvoice}
+                        min="2020"
+                        max="2100"
+                      />
+                      {field.state.meta.errors && field.state.meta.errors.length > 0 && (
+                        <p className="text-sm text-destructive">
+                          {String(field.state.meta.errors[0])}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </form.Field>
+              </div>
+            </form>
           )}
         </CardContent>
       </Card>
@@ -539,7 +664,7 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
       <Card
         {...getRootProps()}
         className={`w-full transition-all ${
-          isUploading || isCreatingInvoice || !selectedClientId ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
+          isUploading || isCreatingInvoice || !clientId ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
         } ${
           isDragActive 
             ? 'border-blue-500 border-2 bg-blue-50 dark:bg-blue-950' 
@@ -549,7 +674,7 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
         <CardContent className="p-8">
           <input {...getInputProps()} />
           <div className="flex flex-col items-center gap-3">
-            {!selectedClientId ? (
+            {!clientId ? (
               <>
                 <p className="text-xl font-bold text-muted-foreground">
                   Selecione um cliente primeiro
@@ -639,9 +764,13 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
             </Button>
           )}
           <Button
-            onClick={handleUpload}
+            onClick={(e) => {
+              e.preventDefault()
+              form.handleSubmit()
+            }}
             disabled={!canUpload || isUploading || isCreatingInvoice}
             size="lg"
+            type="button"
           >
             {isUploading ? 'Fazendo Upload...' : isCreatingInvoice ? (isEditing ? 'Atualizando Invoice...' : 'Criando Invoice...') : (isEditing ? 'Atualizar Invoice' : 'Criar Invoice')}
           </Button>

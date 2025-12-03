@@ -18,7 +18,14 @@ const Collapsible = React.forwardRef<HTMLDivElement, CollapsibleProps>(
       <div ref={ref} className={className} {...props}>
         {React.Children.map(children, (child) => {
           if (React.isValidElement(child)) {
-            return React.cloneElement(child, { open, onOpenChange } as { open?: boolean; onOpenChange?: (open: boolean) => void })
+            // Only pass onOpenChange to CollapsibleTrigger, not to CollapsibleContent
+            // Check if it's a CollapsibleTrigger by checking displayName or component name
+            const isTrigger = (child.type as any)?.displayName === 'CollapsibleTrigger' || 
+                             (child.type as any)?.name === 'CollapsibleTrigger'
+            const childProps = isTrigger 
+              ? { open, onOpenChange }
+              : { open }
+            return React.cloneElement(child, childProps as any)
           }
           return child
         })}
@@ -77,7 +84,8 @@ const CollapsibleContent = React.forwardRef<HTMLDivElement, CollapsibleContentPr
     open,
     ...props 
   }, ref) => {
-    // onOpenChange is not in props for CollapsibleContent
+    // Remove onOpenChange from props if it exists (shouldn't be passed, but just in case)
+    const { onOpenChange, ...restProps } = props as any
     return (
       <div
         ref={ref}
@@ -86,7 +94,7 @@ const CollapsibleContent = React.forwardRef<HTMLDivElement, CollapsibleContentPr
           className
         )}
         data-state={open ? "open" : "closed"}
-        {...props}
+        {...restProps}
       >
         {open && children}
       </div>

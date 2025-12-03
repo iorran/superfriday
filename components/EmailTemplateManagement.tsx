@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useForm } from '@tanstack/react-form'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -10,6 +11,7 @@ import { getEmailTemplates, createEmailTemplate, updateEmailTemplate, deleteEmai
 import { EMAIL_TEMPLATE_VARIABLES } from '@/lib/email-template-variables'
 import { FileText, Plus, Edit, Trash2, Info, Copy } from 'lucide-react'
 import type { EmailTemplate, WindowWithTemplateField } from '@/types'
+import { emailTemplateSchema, type EmailTemplateFormData } from '@/lib/validations'
 import {
   Dialog,
   DialogContent,
@@ -35,17 +37,26 @@ export default function EmailTemplateManagement() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [editingTemplate, setEditingTemplate] = useState<EmailTemplate | null>(null)
-  const [newTemplate, setNewTemplate] = useState<{
-    subject: string
-    body: string
-    type: 'to_client' | 'to_account_manager'
-  }>({
-    subject: '',
-    body: '',
-    type: 'to_client',
-  })
   const [templateToDelete, setTemplateToDelete] = useState<EmailTemplate | null>(null)
   const { toast } = useToast()
+
+  const form = useForm<EmailTemplateFormData>({
+    defaultValues: {
+      subject: '',
+      body: '',
+      type: 'to_client',
+    },
+    validators: {
+      onSubmit: emailTemplateSchema,
+    },
+    onSubmit: async ({ value }) => {
+      if (editingTemplate) {
+        await handleUpdateTemplate(value)
+      } else {
+        await handleCreateTemplate(value)
+      }
+    },
+  })
 
   const loadTemplates = useCallback(async () => {
     try {
@@ -68,35 +79,26 @@ export default function EmailTemplateManagement() {
     loadTemplates()
   }, [loadTemplates])
 
-  const handleCreateTemplate = async () => {
-    if (!newTemplate.subject.trim() || !newTemplate.body.trim()) {
-      toast({
-        title: "Validation Error",
-        description: "Please fill in subject and body",
-        variant: "destructive",
-      })
-      return
-    }
-
+  const handleCreateTemplate = async (value: EmailTemplateFormData) => {
     // Check if a template of this type already exists
-      const existingTemplate = templates.find((t: EmailTemplate) => t.type === newTemplate.type)
+    const existingTemplate = templates.find((t: EmailTemplate) => t.type === value.type)
     if (existingTemplate) {
       toast({
         title: "Template Already Exists",
-        description: `A template for ${newTemplate.type === 'to_client' ? 'client' : 'account manager'} already exists. Please edit the existing template instead.`,
+        description: `A template for ${value.type === 'to_client' ? 'client' : 'account manager'} already exists. Please edit the existing template instead.`,
         variant: "destructive",
       })
       return
     }
 
     try {
-      await createEmailTemplate(newTemplate)
+      await createEmailTemplate(value)
       toast({
         title: "Template Created",
-        description: `Template for ${newTemplate.type === 'to_client' ? 'client' : 'account manager'} has been created`,
+        description: `Template for ${value.type === 'to_client' ? 'client' : 'account manager'} has been created`,
         variant: "success",
       })
-      setNewTemplate({ subject: '', body: '', type: 'to_client' })
+      form.reset()
       setDialogOpen(false)
       loadTemplates()
     } catch (error: unknown) {
@@ -112,34 +114,23 @@ export default function EmailTemplateManagement() {
 
   const handleEditTemplate = (template: EmailTemplate) => {
     setEditingTemplate(template)
-    setNewTemplate({
-      subject: template.subject,
-      body: template.body,
-      type: template.type,
-    })
+    form.setFieldValue('subject', template.subject)
+    form.setFieldValue('body', template.body)
+    form.setFieldValue('type', template.type)
     setDialogOpen(true)
   }
 
-  const handleUpdateTemplate = async () => {
-    if (!newTemplate.subject.trim() || !newTemplate.body.trim()) {
-      toast({
-        title: "Validation Error",
-        description: "Please fill in subject and body",
-        variant: "destructive",
-      })
-      return
-    }
-
+  const handleUpdateTemplate = async (value: EmailTemplateFormData) => {
     if (!editingTemplate) return
     
     try {
-      await updateEmailTemplate(editingTemplate.id, newTemplate)
+      await updateEmailTemplate(editingTemplate.id, value)
       toast({
         title: "Template Updated",
-        description: `Template for ${newTemplate.type === 'to_client' ? 'client' : 'account manager'} has been updated`,
+        description: `Template for ${value.type === 'to_client' ? 'client' : 'account manager'} has been updated`,
         variant: "success",
       })
-      setNewTemplate({ subject: '', body: '', type: 'to_client' })
+      form.reset()
       setEditingTemplate(null)
       setDialogOpen(false)
       loadTemplates()
@@ -185,7 +176,7 @@ export default function EmailTemplateManagement() {
   const handleDialogClose = () => {
     setDialogOpen(false)
     setEditingTemplate(null)
-    setNewTemplate({ subject: '', body: '', type: 'to_client' })
+    form.reset()
   }
 
   if (loading) {
@@ -224,11 +215,12 @@ export default function EmailTemplateManagement() {
                 
                 // Set default type to the one that doesn't exist
                 if (!hasClientTemplate) {
-                  setNewTemplate({ subject: '', body: '', type: 'to_client' })
+                  form.setFieldValue('type', 'to_client')
                 } else if (!hasAccountManagerTemplate) {
-                  setNewTemplate({ subject: '', body: '', type: 'to_account_manager' })
+                  form.setFieldValue('type', 'to_account_manager')
                 }
-                
+                form.setFieldValue('subject', '')
+                form.setFieldValue('body', '')
                 setDialogOpen(true)
               }}
             >
@@ -307,7 +299,7 @@ export default function EmailTemplateManagement() {
                   type="button"
                   onClick={() => {
                     const currentField = (window as WindowWithTemplateField).__currentTemplateField || 'body'
-                    const fieldId = currentField === 'subject' ? 'templateSubject' : 'templateBody'
+                    const fieldId = currentField === 'subject' ? 'subject' : 'body'
                     const field = document.getElementById(fieldId) as HTMLInputElement | HTMLTextAreaElement
                     
                     if (field) {
@@ -323,9 +315,9 @@ export default function EmailTemplateManagement() {
                       field.setSelectionRange(start + variable.example.length, start + variable.example.length)
                       
                       if (currentField === 'subject') {
-                        setNewTemplate({ ...newTemplate, subject: newValue })
+                        form.setFieldValue('subject', newValue)
                       } else {
-                        setNewTemplate({ ...newTemplate, body: newValue })
+                        form.setFieldValue('body', newValue)
                       }
                     }
                   }}
@@ -342,74 +334,130 @@ export default function EmailTemplateManagement() {
             </p>
           </div>
 
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="templateType">Type</Label>
-              <select
-                id="templateType"
-                value={newTemplate.type}
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewTemplate({ ...newTemplate, type: e.target.value as 'to_client' | 'to_account_manager' })}
-                className="w-full p-2 border rounded-md"
-                disabled={!!editingTemplate}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              form.handleSubmit()
+            }}
+          >
+            <div className="space-y-4 py-4">
+              <form.Field name="type">
+                {(field) => (
+                  <div className="space-y-2">
+                    <Label htmlFor={field.name}>Type</Label>
+                    <select
+                      id={field.name}
+                      name={field.name}
+                      value={field.state.value}
+                      onBlur={field.handleBlur}
+                      onChange={(e) => field.handleChange(e.target.value as 'to_client' | 'to_account_manager')}
+                      className="w-full p-2 border rounded-md"
+                      disabled={!!editingTemplate}
+                    >
+                      <option 
+                        value="to_client" 
+                        disabled={!editingTemplate && templates.some((t: EmailTemplate) => t.type === 'to_client')}
+                      >
+                        To Client {!editingTemplate && templates.some((t: EmailTemplate) => t.type === 'to_client') ? '(Already exists)' : ''}
+                      </option>
+                      <option 
+                        value="to_account_manager" 
+                        disabled={!editingTemplate && templates.some((t: EmailTemplate) => t.type === 'to_account_manager')}
+                      >
+                        To Account Manager {!editingTemplate && templates.some((t: EmailTemplate) => t.type === 'to_account_manager') ? '(Already exists)' : ''}
+                      </option>
+                    </select>
+                    {!editingTemplate && templates.some((t: EmailTemplate) => t.type === field.state.value) && (
+                      <p className="text-xs text-amber-600 dark:text-amber-400">
+                        ⚠️ A template of this type already exists. Please edit the existing template instead.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </form.Field>
+              <form.Field
+                name="subject"
+                validators={{
+                  onChange: ({ value }) => {
+                    const result = emailTemplateSchema.shape.subject.safeParse(value)
+                    if (!result.success) {
+                      return result.error.errors[0]?.message || 'Invalid value'
+                    }
+                  },
+                }}
               >
-                <option 
-                  value="to_client" 
-                  disabled={!editingTemplate && templates.some((t: EmailTemplate) => t.type === 'to_client')}
-                >
-                  To Client {!editingTemplate && templates.some((t: EmailTemplate) => t.type === 'to_client') ? '(Already exists)' : ''}
-                </option>
-                <option 
-                  value="to_account_manager" 
-                  disabled={!editingTemplate && templates.some((t: EmailTemplate) => t.type === 'to_account_manager')}
-                >
-                  To Account Manager {!editingTemplate && templates.some((t: EmailTemplate) => t.type === 'to_account_manager') ? '(Already exists)' : ''}
-                </option>
-              </select>
-              {!editingTemplate && templates.some((t: EmailTemplate) => t.type === newTemplate.type) && (
-                <p className="text-xs text-amber-600 dark:text-amber-400">
-                  ⚠️ A template of this type already exists. Please edit the existing template instead.
-                </p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="templateSubject">Subject</Label>
-              <input
-                id="templateSubject"
-                type="text"
-                value={newTemplate.subject}
-                onChange={(e) => setNewTemplate({ ...newTemplate, subject: e.target.value })}
-                placeholder="Invoice {{invoiceName}} - Payment Due"
-                className="w-full p-2 border rounded-md"
-                onFocus={() => {
-                  // Store reference to subject input for variable insertion
-                    ;(window as WindowWithTemplateField).__currentTemplateField = 'subject'
+                {(field) => (
+                  <div className="space-y-2">
+                    <Label htmlFor={field.name}>Subject</Label>
+                    <input
+                      id={field.name}
+                      name={field.name}
+                      type="text"
+                      value={field.state.value}
+                      onBlur={field.handleBlur}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      placeholder="Invoice {{invoiceName}} - Payment Due"
+                      className="w-full p-2 border rounded-md"
+                      onFocus={() => {
+                        // Store reference to subject input for variable insertion
+                        ;(window as WindowWithTemplateField).__currentTemplateField = 'subject'
+                      }}
+                    />
+                    {field.state.meta.errors && field.state.meta.errors.length > 0 && (
+                      <p className="text-sm text-destructive">
+                        {field.state.meta.errors[0]}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </form.Field>
+              <form.Field
+                name="body"
+                validators={{
+                  onChange: ({ value }) => {
+                    const result = emailTemplateSchema.shape.body.safeParse(value)
+                    if (!result.success) {
+                      return result.error.errors[0]?.message || 'Invalid value'
+                    }
+                  },
                 }}
-              />
+              >
+                {(field) => (
+                  <div className="space-y-2">
+                    <Label htmlFor={field.name}>Body</Label>
+                    <Textarea
+                      id={field.name}
+                      name={field.name}
+                      value={field.state.value}
+                      onBlur={field.handleBlur}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      placeholder="Dear {{clientName}},\n\nPlease find attached invoice {{invoiceName}}.\n\nAmount: {{invoiceAmount}}\nDue Date: {{dueDate}}\n\nThank you!"
+                      rows={8}
+                      className="w-full"
+                      onFocus={() => {
+                        // Store reference to body textarea for variable insertion
+                        ;(window as WindowWithTemplateField).__currentTemplateField = 'body'
+                      }}
+                    />
+                    {field.state.meta.errors && field.state.meta.errors.length > 0 && (
+                      <p className="text-sm text-destructive">
+                        {field.state.meta.errors[0]}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </form.Field>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="templateBody">Body</Label>
-              <Textarea
-                id="templateBody"
-                value={newTemplate.body}
-                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNewTemplate({ ...newTemplate, body: e.target.value })}
-                placeholder="Dear {{clientName}},\n\nPlease find attached invoice {{invoiceName}}.\n\nAmount: {{invoiceAmount}}\nDue Date: {{dueDate}}\n\nThank you!"
-                rows={8}
-                className="w-full"
-                onFocus={() => {
-                  // Store reference to body textarea for variable insertion
-                    ;(window as WindowWithTemplateField).__currentTemplateField = 'body'
-                }}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={handleDialogClose}>
-              Cancel
-            </Button>
-            <Button onClick={editingTemplate ? handleUpdateTemplate : handleCreateTemplate}>
-              {editingTemplate ? 'Update Template' : 'Create Template'}
-            </Button>
-          </DialogFooter>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={handleDialogClose}>
+                Cancel
+              </Button>
+              <Button type="submit">
+                {editingTemplate ? 'Update Template' : 'Create Template'}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
