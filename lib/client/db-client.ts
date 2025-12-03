@@ -3,7 +3,7 @@
  * Makes API calls to Next.js API routes
  */
 
-import type { Client, Invoice, InvoiceFile, EmailTemplate } from '@/types'
+import type { Client, EmailTemplate } from '@/types'
 
 interface CreateClientData {
   name: string
