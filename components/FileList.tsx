@@ -383,16 +383,26 @@ export default function FileList() {
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation()
+                                  if (!invoice.sentToAccountant && !invoice.sentToClient && sendingEmail !== `${invoice.id}-accountant`) {
+                                    toast({
+                                      title: "Ação não permitida",
+                                      description: "Você deve enviar a invoice para o cliente antes de enviar para o contador",
+                                      variant: "destructive",
+                                    })
+                                    return
+                                  }
                                   if (!invoice.sentToAccountant && sendingEmail !== `${invoice.id}-accountant`) {
                                     handleSendEmail(invoice.id, 'accountant')
                                   }
                                 }}
-                                disabled={sendingEmail === `${invoice.id}-accountant` || invoice.sentToAccountant}
+                                disabled={sendingEmail === `${invoice.id}-accountant` || invoice.sentToAccountant || !invoice.sentToClient}
                                 className={`flex items-center gap-1 text-xs px-3 py-1.5 rounded transition-all ${
                                   sendingEmail === `${invoice.id}-accountant`
                                     ? 'bg-purple-200 text-purple-800 dark:bg-purple-800 dark:text-purple-200 cursor-wait opacity-75'
                                     : invoice.sentToAccountant
                                     ? 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 cursor-default opacity-75'
+                                    : !invoice.sentToClient
+                                    ? 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-600 cursor-not-allowed opacity-50'
                                     : 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-800 cursor-pointer'
                                 } ${sendingEmail === `${invoice.id}-accountant` ? 'animate-pulse' : ''}`}
                               >
@@ -405,6 +415,11 @@ export default function FileList() {
                                   <>
                                     <CheckCircle2 className="h-3 w-3" />
                                     Enviado para Contador
+                                  </>
+                                ) : !invoice.sentToClient ? (
+                                  <>
+                                    <Send className="h-3 w-3" />
+                                    Enviar para Cliente Primeiro
                                   </>
                                 ) : (
                                   <>

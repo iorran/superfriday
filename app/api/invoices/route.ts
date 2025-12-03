@@ -1,10 +1,24 @@
 /**
  * Invoices API Route
- * Handles invoice creation
+ * Handles invoice listing and creation
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createInvoice } from '@/lib/db-client'
+import { createInvoice, getAllInvoices } from '@/lib/db-client'
+
+export async function GET() {
+  try {
+    const invoices = await getAllInvoices()
+    return NextResponse.json(invoices)
+  } catch (error: unknown) {
+    console.error('Error fetching invoices:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch invoices'
+    return NextResponse.json(
+      { error: true, message: errorMessage },
+      { status: 500 }
+    )
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {

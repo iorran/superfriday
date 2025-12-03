@@ -295,7 +295,7 @@ export default function EmailTemplateManagement() {
                     if (field) {
                       const start = field.selectionStart || 0
                       const end = field.selectionEnd || 0
-                      const text = field.value
+                      const text = String(field.value || '')
                       const before = text.substring(0, start)
                       const after = text.substring(end)
                       const newValue = before + variable.example + after

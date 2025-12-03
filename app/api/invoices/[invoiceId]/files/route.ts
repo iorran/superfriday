@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { executeQuery } from '@/lib/db'
+import { getDatabase } from '@/lib/db'
 import { deleteFile } from '@/lib/storage'
 
 export async function DELETE(
@@ -24,16 +24,16 @@ export async function DELETE(
     }
 
     // Get file info before deleting
-    const fileResult = executeQuery(
-      'SELECT file_key FROM invoice_files WHERE id = ? AND invoice_id = ?',
-      [fileId, invoiceId]
-    )
-    const file = fileResult.results?.[0] as { file_key: string } | undefined
+    const db = await getDatabase()
+    const file = await db.collection('invoice_files').findOne({
+      id: fileId,
+      invoice_id: invoiceId,
+    })
 
     if (file && file.file_key) {
       // Delete from storage
       try {
-        await deleteFile(file.file_key)
+        await deleteFile(file.file_key as string)
       } catch (error: unknown) {
         // Ignore storage errors, continue with DB deletion
         console.warn('Error deleting file from storage:', error)
@@ -41,7 +41,10 @@ export async function DELETE(
     }
 
     // Delete from database
-    executeQuery('DELETE FROM invoice_files WHERE id = ? AND invoice_id = ?', [fileId, invoiceId])
+    await db.collection('invoice_files').deleteOne({
+      id: fileId,
+      invoice_id: invoiceId,
+    })
 
     return NextResponse.json({ success: true })
   } catch (error: unknown) {

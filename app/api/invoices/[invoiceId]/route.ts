@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getInvoice, deleteInvoice, updateInvoice } from '@/lib/db-client'
 import { deleteFile } from '@/lib/storage'
-import { executeQuery } from '@/lib/db'
+import { getDatabase } from '@/lib/db'
 
 export async function GET(
   request: NextRequest,
@@ -85,11 +85,11 @@ export async function DELETE(
     }
 
     // Get all file keys before deleting from database
-    const filesResult = executeQuery(
-      'SELECT file_key FROM invoice_files WHERE invoice_id = ?',
-      [invoiceId]
-    )
-    const files = (filesResult.results || []) as Array<{ file_key: string }>
+    const db = await getDatabase()
+    const files = await db.collection('invoice_files')
+      .find({ invoice_id: invoiceId })
+      .project({ file_key: 1 })
+      .toArray()
 
     // Delete files from blob storage
     const deletePromises = files.map(async (file) => {

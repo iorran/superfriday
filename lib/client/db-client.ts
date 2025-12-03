@@ -3,7 +3,7 @@
  * Makes API calls to Next.js API routes
  */
 
-import type { Client, EmailTemplate } from '@/types'
+import type { Client, EmailTemplate, Invoice } from '@/types'
 
 interface CreateClientData {
   name: string
@@ -40,124 +40,110 @@ interface SendEmailData {
 }
 
 /**
- * Execute a SQL query via API
- */
-async function executeQuery(sql: string, params: (string | number | boolean | null)[] = []) {
-  const response = await fetch('/api/db', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      sql,
-      params,
-    }),
-  })
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Database query failed' }))
-    throw new Error(error.message || `Database query failed with status ${response.status}`)
-  }
-
-  return await response.json()
-}
-
-/**
  * Get all clients
  */
 export async function getClients(): Promise<Client[]> {
-  const result = await executeQuery('SELECT * FROM clients ORDER BY name')
-  return (result.results || []) as unknown as Client[]
+  const response = await fetch('/api/clients')
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Failed to fetch clients' }))
+    throw new Error(error.message || `Failed to fetch clients: ${response.status}`)
+  }
+  return await response.json()
 }
 
 /**
  * Get client by ID
  */
 export async function getClient(clientId: string): Promise<Client | null> {
-  const result = await executeQuery('SELECT * FROM clients WHERE id = ?', [clientId])
-  return (result.results?.[0] || null) as Client | null
+  const response = await fetch(`/api/clients?id=${clientId}`)
+  if (!response.ok) {
+    if (response.status === 404) {
+      return null
+    }
+    const error = await response.json().catch(() => ({ message: 'Failed to fetch client' }))
+    throw new Error(error.message || `Failed to fetch client: ${response.status}`)
+  }
+  return await response.json()
 }
 
 /**
  * Create a new client
  */
 export async function createClient(data: CreateClientData) {
-  const id = `client-${Date.now()}`
-  const { name, email, requiresTimesheet, ccEmails } = data
-  const ccEmailsJson = ccEmails && ccEmails.length > 0 ? JSON.stringify(ccEmails) : null
-  await executeQuery(
-    'INSERT INTO clients (id, name, email, requires_timesheet, cc_emails, created_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)',
-    [id, name, email, requiresTimesheet ? 1 : 0, ccEmailsJson]
-  )
-  return id
+  const response = await fetch('/api/clients', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Failed to create client' }))
+    throw new Error(error.message || `Failed to create client: ${response.status}`)
+  }
+
+  const result = await response.json()
+  return result.id
 }
 
 /**
  * Update a client
  */
 export async function updateClient(clientId: string, data: UpdateClientData) {
-  const { name, email, requiresTimesheet, ccEmails } = data
-  const ccEmailsJson = ccEmails && ccEmails.length > 0 ? JSON.stringify(ccEmails) : null
-  await executeQuery(
-    'UPDATE clients SET name = ?, email = ?, requires_timesheet = ?, cc_emails = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-    [name ?? null, email ?? null, requiresTimesheet !== undefined ? (requiresTimesheet ? 1 : 0) : null, ccEmailsJson, clientId]
-  )
+  const response = await fetch('/api/clients', {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ id: clientId, ...data }),
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Failed to update client' }))
+    throw new Error(error.message || `Failed to update client: ${response.status}`)
+  }
 }
 
 /**
  * Delete a client
  */
 export async function deleteClient(clientId: string) {
-  await executeQuery('DELETE FROM clients WHERE id = ?', [clientId])
+  const response = await fetch(`/api/clients?id=${clientId}`, {
+    method: 'DELETE',
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Failed to delete client' }))
+    throw new Error(error.message || `Failed to delete client: ${response.status}`)
+  }
 }
 
 /**
  * Get invoice by ID with files
  */
-export async function getInvoice(invoiceId: string) {
-  const invoiceResult = await executeQuery(
-    `SELECT i.*, c.name as client_name, c.email as client_email, c.requires_timesheet
-     FROM invoices i 
-     LEFT JOIN clients c ON i.client_id = c.id 
-     WHERE i.id = ?`,
-    [invoiceId]
-  )
-  const invoice = invoiceResult.results?.[0]
-  
-  if (!invoice) return null
-  
-  // Get files for this invoice
-  const filesResult = await executeQuery(
-    'SELECT * FROM invoice_files WHERE invoice_id = ? ORDER BY file_type, uploaded_at',
-    [invoiceId]
-  )
-  invoice.files = filesResult.results || []
-  
-  return invoice
+export async function getInvoice(invoiceId: string): Promise<Invoice | null> {
+  const response = await fetch(`/api/invoices/${invoiceId}`)
+  if (!response.ok) {
+    if (response.status === 404) {
+      return null
+    }
+    const error = await response.json().catch(() => ({ message: 'Failed to fetch invoice' }))
+    throw new Error(error.message || `Failed to fetch invoice: ${response.status}`)
+  }
+  return await response.json()
 }
 
 /**
  * Get all invoices with client info and files
  */
-export async function getAllInvoices() {
-  const result = await executeQuery(
-    `SELECT i.*, c.name as client_name, c.email as client_email, c.requires_timesheet
-     FROM invoices i 
-     LEFT JOIN clients c ON i.client_id = c.id 
-     ORDER BY i.year DESC, i.month DESC, i.uploaded_at DESC`
-  )
-  const invoices = result.results || []
-  
-  // Get files for each invoice
-  for (const invoice of invoices) {
-    const filesResult = await executeQuery(
-      'SELECT * FROM invoice_files WHERE invoice_id = ? ORDER BY file_type, uploaded_at',
-      [invoice.id]
-    )
-    invoice.files = filesResult.results || []
+export async function getAllInvoices(): Promise<Invoice[]> {
+  const response = await fetch('/api/invoices')
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Failed to fetch invoices' }))
+    throw new Error(error.message || `Failed to fetch invoices: ${response.status}`)
   }
-  
-  return invoices
+  return await response.json()
 }
 
 /**
@@ -305,63 +291,93 @@ export async function sendEmail(data: SendEmailData) {
 /**
  * Get email templates
  */
-export async function getEmailTemplates() {
-  const result = await executeQuery('SELECT * FROM email_templates ORDER BY type, created_at')
-  return result.results || []
+export async function getEmailTemplates(): Promise<EmailTemplate[]> {
+  const response = await fetch('/api/email-templates')
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Failed to fetch email templates' }))
+    throw new Error(error.message || `Failed to fetch email templates: ${response.status}`)
+  }
+  return await response.json()
 }
 
 /**
  * Get email template by ID
  */
 export async function getEmailTemplate(templateId: string): Promise<EmailTemplate | null> {
-  const result = await executeQuery('SELECT * FROM email_templates WHERE id = ?', [templateId])
-  return (result.results?.[0] || null) as EmailTemplate | null
+  const response = await fetch(`/api/email-templates?id=${templateId}`)
+  if (!response.ok) {
+    if (response.status === 404) {
+      return null
+    }
+    const error = await response.json().catch(() => ({ message: 'Failed to fetch email template' }))
+    throw new Error(error.message || `Failed to fetch email template: ${response.status}`)
+  }
+  return await response.json()
 }
 
 /**
  * Create email template
  */
 export async function createEmailTemplate(templateData: CreateEmailTemplateData) {
-  const id = `template-${Date.now()}`
-  const { subject, body, type } = templateData
-  await executeQuery(
-    'INSERT INTO email_templates (id, subject, body, type, created_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)',
-    [id, subject, body, type]
-  )
-  return id
+  const response = await fetch('/api/email-templates', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(templateData),
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Failed to create email template' }))
+    throw new Error(error.message || `Failed to create email template: ${response.status}`)
+  }
+
+  const result = await response.json()
+  return result.id
 }
 
 /**
  * Update email template
  */
 export async function updateEmailTemplate(templateId: string, templateData: UpdateEmailTemplateData) {
-  const { subject, body, type } = templateData
-  await executeQuery(
-    'UPDATE email_templates SET subject = ?, body = ?, type = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-    [subject ?? null, body ?? null, type ?? null, templateId]
-  )
+  const response = await fetch('/api/email-templates', {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ id: templateId, ...templateData }),
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Failed to update email template' }))
+    throw new Error(error.message || `Failed to update email template: ${response.status}`)
+  }
 }
 
 /**
  * Delete email template
  */
 export async function deleteEmailTemplate(templateId: string) {
-  await executeQuery('DELETE FROM email_templates WHERE id = ?', [templateId])
+  const response = await fetch(`/api/email-templates?id=${templateId}`, {
+    method: 'DELETE',
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Failed to delete email template' }))
+    throw new Error(error.message || `Failed to delete email template: ${response.status}`)
+  }
 }
 
 /**
  * Get email history for an invoice
  */
 export async function getEmailHistory(invoiceId: string) {
-  const result = await executeQuery(
-    `SELECT eh.*, et.subject as template_name
-     FROM email_history eh
-     LEFT JOIN email_templates et ON eh.template_id = et.id
-     WHERE eh.invoice_id = ?
-     ORDER BY eh.sent_at DESC`,
-    [invoiceId]
-  )
-  return result.results || []
+  const response = await fetch(`/api/invoices/${invoiceId}/email-history`)
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Failed to fetch email history' }))
+    throw new Error(error.message || `Failed to fetch email history: ${response.status}`)
+  }
+  return await response.json()
 }
 
 /**

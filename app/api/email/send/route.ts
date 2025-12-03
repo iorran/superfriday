@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sendInvoiceToClient, sendInvoiceToAccountant } from '@/lib/email-service'
 import { updateInvoiceState, recordEmail, getInvoice, getAccountantEmail, getEmailTemplate } from '@/lib/db-client'
-import { executeQuery } from '@/lib/db'
+import { getDatabase } from '@/lib/db'
 import type { Invoice, InvoiceFile } from '@/types'
 
 export async function POST(request: NextRequest) {
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
     if (templateId) {
       const template = await getEmailTemplate(templateId)
       if (template) {
-        console.log('Using template:', { templateId, templateSubject: template.subject, templateBody: template.body?.substring(0, 50) })
+        console.log('Using template:', { templateId, templateSubject: template.subject, templateBody: String(template.body || '').substring(0, 50) })
         
         // Replace template variables
         const replaceVariables = (text: string) => {
@@ -63,15 +63,15 @@ export async function POST(request: NextRequest) {
         }
         
         // Use template subject and body, replacing variables (override frontend values)
-        finalSubject = replaceVariables(template.subject) || subject
-        finalBody = replaceVariables(template.body) || emailBody
+        finalSubject = replaceVariables(template.subject || '') || subject || ''
+        finalBody = replaceVariables(template.body || '') || emailBody || ''
         
-        console.log('After template processing:', { finalSubject, finalBody: finalBody?.substring(0, 50) })
+        console.log('After template processing:', { finalSubject, finalBody: String(finalBody || '').substring(0, 50) })
       } else {
         console.warn('Template not found:', templateId)
       }
     } else {
-      console.log('No templateId, using subject/body from request:', { subject, body: emailBody?.substring(0, 50) })
+      console.log('No templateId, using subject/body from request:', { subject, body: String(emailBody || '').substring(0, 50) })
     }
 
     let emailResult
@@ -95,16 +95,16 @@ export async function POST(request: NextRequest) {
       // Get CC emails from client
       let ccEmails: string[] = []
       if (invoice.client_id) {
-        const clientResult = executeQuery('SELECT cc_emails FROM clients WHERE id = ?', [invoice.client_id])
-        const client = clientResult.results?.[0] as { cc_emails?: string } | undefined
+        const db = await getDatabase()
+        const client = await db.collection('clients').findOne({ id: invoice.client_id })
         if (client && client.cc_emails) {
-          try {
-            const parsed = JSON.parse(client.cc_emails)
-            ccEmails = Array.isArray(parsed) ? parsed.filter((email: string) => email && email.trim()) : []
-          } catch (e) {
-            console.error('Error parsing CC emails:', e)
-            // Ignore parse errors
-          }
+          // MongoDB stores arrays directly, no need to parse JSON
+          ccEmails = Array.isArray(client.cc_emails)
+            ? client.cc_emails.filter((email: unknown) => {
+                const emailStr = typeof email === 'string' ? email : String(email || '')
+                return emailStr.trim().length > 0
+              })
+            : []
         }
       }
 
@@ -128,6 +128,14 @@ export async function POST(request: NextRequest) {
       // Update invoice state
       await updateInvoiceState(invoiceId, { sentToClient: true })
     } else if (recipientType === 'accountant') {
+      // Check if invoice was sent to client first
+      if (!invoice.sent_to_client) {
+        return NextResponse.json(
+          { error: true, message: 'Você deve enviar a invoice para o cliente antes de enviar para o contador.' },
+          { status: 400 }
+        )
+      }
+
       const accountantEmailResult = await getAccountantEmail()
       recipientEmail = accountantEmailResult || ''
 

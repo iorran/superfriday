@@ -53,7 +53,8 @@ export async function GET(
     const buffer = Buffer.from(arrayBuffer)
 
     // Try to detect content type from file extension
-    const ext = fileKey.split('.').pop()?.toLowerCase()
+    const fileKeyStr = String(fileKey || '')
+    const ext = fileKeyStr.split('.').pop()?.toLowerCase() || ''
     const contentTypes: Record<string, string> = {
       pdf: 'application/pdf',
       jpg: 'image/jpeg',

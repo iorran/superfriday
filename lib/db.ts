@@ -1,97 +1,156 @@
 /**
- * SQLite Database Client
- * Uses better-sqlite3 for database operations
+ * MongoDB Database Client
+ * Uses mongodb driver for database operations
+ * Compatible with MongoDB Atlas from Vercel
+ * 
+ * Uses a singleton pattern that works well with Next.js hot reload
  */
 
-import Database from 'better-sqlite3'
-import path from 'path'
-import fs from 'fs'
+import { MongoClient, Db } from 'mongodb'
 
-const DB_PATH = process.env.DATABASE_PATH || path.join(process.cwd(), 'data', 'database.db')
+// Get database URL from environment variable
+const databaseUrl = process.env.MONGODB_URI || process.env.DATABASE_URL
 
-// Ensure data directory exists
-const dataDir = path.dirname(DB_PATH)
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true })
+if (!databaseUrl) {
+  console.warn('Warning: MONGODB_URI or DATABASE_URL environment variable is not set')
 }
 
-let db: Database.Database | null = null
+// Use global to store the client in development (prevents multiple connections during hot reload)
+declare global {
+  var _mongoClient: MongoClient | undefined
+  var _mongoDb: Db | undefined
+}
 
-export function getDatabase(): Database.Database {
-  if (!db) {
-    db = new Database(DB_PATH)
-    db.pragma('journal_mode = WAL')
+let client: MongoClient | null = null
+let db: Db | null = null
+
+/**
+ * Get MongoDB database instance
+ * Uses singleton pattern for connection reuse
+ */
+export async function getDatabase(): Promise<Db> {
+  if (!databaseUrl) {
+    throw new Error('MONGODB_URI or DATABASE_URL environment variable is required')
   }
+
+  // In development, use global to prevent multiple connections during hot reload
+  if (process.env.NODE_ENV === 'development') {
+    if (!global._mongoClient) {
+      global._mongoClient = new MongoClient(databaseUrl)
+      await global._mongoClient.connect()
+      console.log('MongoDB connected (development)')
+    }
+    client = global._mongoClient
+
+    if (!global._mongoDb) {
+      const dbName = databaseUrl.split('/').pop()?.split('?')[0] || 'superfriday'
+      global._mongoDb = global._mongoClient.db(dbName)
+    }
+    db = global._mongoDb
+  } else {
+    // In production, create new connection if needed
+    if (!client) {
+      client = new MongoClient(databaseUrl)
+      await client.connect()
+      console.log('MongoDB connected (production)')
+    }
+
+    if (!db) {
+      const dbName = databaseUrl.split('/').pop()?.split('?')[0] || 'superfriday'
+      db = client.db(dbName)
+    }
+  }
+
   return db
 }
 
-export function closeDatabase() {
-  if (db) {
-    db.close()
+/**
+ * Close database connection
+ */
+export async function closeDatabase() {
+  if (process.env.NODE_ENV === 'development') {
+    // In development, don't close global connection (it's reused)
+    return
+  }
+
+  if (client) {
+    await client.close()
+    client = null
     db = null
   }
 }
 
+/**
+ * Execute a query (for compatibility with existing code)
+ * Note: MongoDB doesn't use SQL, so this is a simplified wrapper
+ * For better performance, use MongoDB methods directly in db-client.ts
+ */
 export interface QueryResult {
   results: unknown[]
   changes?: number
   lastInsertRowid?: number | bigint
 }
 
-/**
- * Execute a SQL query
- */
-export function executeQuery(sql: string, params: (string | number | boolean | null)[] = []): QueryResult {
-  const database = getDatabase()
-  const stmt = database.prepare(sql)
-  
-  if (sql.trim().toUpperCase().startsWith('SELECT')) {
-    return { results: stmt.all(...params) }
-  } else {
-    const result = stmt.run(...params)
-    return { 
-      results: [],
-      changes: result.changes,
-      lastInsertRowid: result.lastInsertRowid
-    }
-  }
+export async function executeQuery(
+  _query: string,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _params: (string | number | boolean | null)[] = []
+): Promise<QueryResult> {
+  // This is a compatibility layer - MongoDB doesn't use SQL
+  // For actual MongoDB operations, use the collections directly in db-client.ts
+  throw new Error(
+    'executeQuery with SQL is not supported for MongoDB. Use MongoDB collection methods directly.'
+  )
 }
 
 /**
- * Initialize database with schema
+ * Initialize database with schema (creates indexes)
+ * MongoDB doesn't have a schema file, but we can create indexes
  */
-export function initDatabase() {
-  const database = getDatabase()
-  const schemaPath = path.join(process.cwd(), 'schema.sql')
-  
-  if (!fs.existsSync(schemaPath)) {
-    throw new Error('Schema file not found: schema.sql')
+export async function initDatabase() {
+  if (!databaseUrl) {
+    throw new Error('MONGODB_URI or DATABASE_URL environment variable is required')
   }
-  
-  const schema = fs.readFileSync(schemaPath, 'utf-8')
-  
-  // Split by semicolons and execute each statement
-  const statements = schema
-    .split(';')
-    .map(s => s.trim())
-    .filter(s => s && !s.startsWith('--'))
-  
-  for (const statement of statements) {
-    if (statement) {
-      try {
-        database.exec(statement)
-      } catch (error: unknown) {
-        // Ignore "already exists" errors
-        const errorMessage = error instanceof Error ? error.message : String(error)
-        if (!errorMessage.includes('already exists') && !errorMessage.includes('duplicate column')) {
-          console.error('Error executing statement:', statement)
-          console.error('Error:', errorMessage)
-          // Don't throw, just log - allows re-running init
-        }
-      }
-    }
-  }
-  
-  console.log('Database initialized successfully')
-}
 
+  const database = await getDatabase()
+
+  try {
+    // Create indexes for better performance
+    const clientsCollection = database.collection('clients')
+    await clientsCollection.createIndex({ name: 1 })
+    await clientsCollection.createIndex({ email: 1 })
+
+    const invoicesCollection = database.collection('invoices')
+    await invoicesCollection.createIndex({ client_id: 1 })
+    await invoicesCollection.createIndex({ year: -1, month: -1 })
+    await invoicesCollection.createIndex({ sent_to_client: 1 })
+    await invoicesCollection.createIndex({ sent_to_accountant: 1 })
+    await invoicesCollection.createIndex({ payment_received: 1 })
+
+    const invoiceFilesCollection = database.collection('invoice_files')
+    await invoiceFilesCollection.createIndex({ invoice_id: 1 })
+    await invoiceFilesCollection.createIndex({ file_key: 1 })
+
+    const emailHistoryCollection = database.collection('email_history')
+    await emailHistoryCollection.createIndex({ invoice_id: 1 })
+    await emailHistoryCollection.createIndex({ sent_at: -1 })
+
+    const emailTemplatesCollection = database.collection('email_templates')
+    await emailTemplatesCollection.createIndex({ type: 1 })
+
+    const settingsCollection = database.collection('settings')
+    await settingsCollection.createIndex({ key: 1 }, { unique: true })
+
+    // Insert default settings if they don't exist
+    await settingsCollection.updateOne(
+      { key: 'accountant_email' },
+      { $setOnInsert: { key: 'accountant_email', value: '', updated_at: new Date() } },
+      { upsert: true }
+    )
+
+    console.log('Database initialized successfully')
+  } catch (error: unknown) {
+    console.error('Error initializing database:', error)
+    throw error
+  }
+}

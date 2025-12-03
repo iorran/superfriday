@@ -1,6 +1,6 @@
 # Invoice Management App
 
-A modern invoice management application built with Next.js 15, React, and SQLite.
+A modern invoice management application built with Next.js 15, React, and MongoDB Atlas.
 
 ## Features
 
@@ -8,7 +8,7 @@ A modern invoice management application built with Next.js 15, React, and SQLite
 - 📤 Drag and drop file upload
 - 📊 Real-time upload progress bar
 - 🔔 Toast notifications for upload completion
-- 💾 SQLite database for invoice management
+- 💾 MongoDB Atlas database for invoice management
 - 📧 Email template management
 - 👥 Client management
 
@@ -18,7 +18,7 @@ A modern invoice management application built with Next.js 15, React, and SQLite
 - **React 19** - UI library
 - **TypeScript** - Type safety
 - **Tailwind CSS** - Styling
-- **SQLite (better-sqlite3)** - Database
+- **MongoDB Atlas** - NoSQL database (via Vercel)
 - **Vercel Blob** - File storage
 
 ## Getting Started
@@ -55,11 +55,34 @@ yarn dev
 
 ## Database
 
-The app uses SQLite for local development. The database file is stored in `data/database.db`.
+The app uses **MongoDB Atlas** for data storage. MongoDB Atlas is a fully managed cloud database service that works seamlessly with Vercel deployments.
 
-To initialize or reset the database:
+### Setting Up MongoDB Atlas
+
+1. **Add MongoDB to your Vercel project:**
+   - Go to your Vercel project dashboard
+   - Navigate to Storage → Create Database → MongoDB
+   - Follow the setup instructions
+   - Vercel will automatically configure the connection string
+
+2. **Configure environment variable:**
+   - For local development, copy the connection string from your Vercel dashboard
+   - Add it to your `.env.local` file:
+   ```env
+   MONGODB_URI=mongodb+srv://user:password@cluster.mongodb.net/dbname
+   ```
+   
+   **Note:** The app also supports `DATABASE_URL` for compatibility, but `MONGODB_URI` is preferred.
+
+3. **For Vercel deployment:**
+   - The `MONGODB_URI` is automatically configured when you add MongoDB to your Vercel project
+   - No manual configuration needed!
+
+To initialize the database (creates indexes):
 ```bash
 npm run db:init
+# or
+yarn db:init
 ```
 
 ## File Storage
@@ -92,17 +115,27 @@ This app uses **Vercel Blob** for file storage. Files are stored in Vercel's glo
 Create a `.env.local` file in the root directory:
 
 ```env
-# Database (optional - defaults to data/database.db)
-DATABASE_PATH=./data/database.db
+# MongoDB Atlas (required)
+MONGODB_URI=mongodb+srv://user:password@cluster.mongodb.net/dbname
+# Alternative: DATABASE_URL (also supported)
+# DATABASE_URL=mongodb+srv://user:password@cluster.mongodb.net/dbname
 
 # Vercel Blob Storage (required)
 BLOB_READ_WRITE_TOKEN=vercel_blob_xxxxx
 ```
 
-To get your `BLOB_READ_WRITE_TOKEN`:
-1. Go to your Vercel project dashboard
-2. Navigate to Storage → Blob
-3. Copy the token from the environment variables section
+**Getting your environment variables:**
+
+1. **MongoDB connection string:**
+   - Go to your Vercel project dashboard
+   - Navigate to Storage → MongoDB
+   - Copy the `MONGODB_URI` from the environment variables section
+   - For local development, add it to your `.env.local` file
+
+2. **Blob token:**
+   - Go to your Vercel project dashboard
+   - Navigate to Storage → Blob
+   - Copy the `BLOB_READ_WRITE_TOKEN` from the environment variables section
 
 ## Project Structure
 
@@ -140,9 +173,10 @@ This app can be deployed to:
 - Any Node.js hosting platform
 
 Make sure to:
-1. Set up environment variables (especially `BLOB_READ_WRITE_TOKEN`)
-2. Initialize the database on first deployment (`npm run db:init`)
-3. Add Vercel Blob storage to your Vercel project
+1. Add MongoDB Atlas to your Vercel project (environment variables are automatically configured)
+2. Add Vercel Blob storage to your Vercel project
+3. Initialize the database indexes on first deployment (`npm run db:init` or `yarn db:init`)
+4. Set up environment variables for local development (see Environment Variables section above)
 
 ## License
 

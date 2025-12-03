@@ -1,9 +1,9 @@
 /**
  * Database Client
- * Wrapper around SQLite database operations
+ * MongoDB operations for invoice management
  */
 
-import { executeQuery } from './db'
+import { getDatabase } from './db'
 import type { Client, Invoice, InvoiceFile, EmailTemplate } from '@/types'
 
 interface CreateClientData {
@@ -36,29 +36,47 @@ interface UpdateEmailTemplateData {
  * Get all clients
  */
 export async function getClients() {
-  const result = executeQuery('SELECT * FROM clients ORDER BY name')
-  return result.results || []
+  const db = await getDatabase()
+  const clients = await db.collection('clients').find({}).sort({ name: 1 }).toArray()
+  return clients.map((client) => ({
+    ...client,
+    name: client.name || '',
+    email: client.email || '',
+  })) as unknown as Client[]
 }
 
 /**
  * Get client by ID
  */
 export async function getClient(clientId: string): Promise<Client | null> {
-  const result = executeQuery('SELECT * FROM clients WHERE id = ?', [clientId])
-  return (result.results?.[0] || null) as Client | null
+  const db = await getDatabase()
+  const client = await db.collection('clients').findOne({ id: clientId })
+  if (!client) return null
+  return {
+    ...client,
+    name: client.name || '',
+    email: client.email || '',
+  } as unknown as Client
 }
 
 /**
  * Create a new client
  */
 export async function createClient(data: CreateClientData) {
+  const db = await getDatabase()
   const id = `client-${Date.now()}`
   const { name, email, requiresTimesheet, ccEmails } = data
-  const ccEmailsJson = ccEmails && ccEmails.length > 0 ? JSON.stringify(ccEmails) : null
-  executeQuery(
-    'INSERT INTO clients (id, name, email, requires_timesheet, cc_emails, created_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)',
-    [id, name, email, requiresTimesheet ? 1 : 0, ccEmailsJson]
-  )
+  
+  await db.collection('clients').insertOne({
+    id,
+    name,
+    email,
+    requires_timesheet: requiresTimesheet,
+    cc_emails: ccEmails || null,
+    created_at: new Date(),
+    updated_at: null,
+  })
+  
   return id
 }
 
@@ -66,37 +84,45 @@ export async function createClient(data: CreateClientData) {
  * Update a client
  */
 export async function updateClient(clientId: string, data: UpdateClientData) {
-  const { name, email, requiresTimesheet, ccEmails } = data
-  const ccEmailsJson = ccEmails && ccEmails.length > 0 ? JSON.stringify(ccEmails) : null
-  executeQuery(
-    'UPDATE clients SET name = ?, email = ?, requires_timesheet = ?, cc_emails = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-    [name ?? null, email ?? null, requiresTimesheet !== undefined ? (requiresTimesheet ? 1 : 0) : null, ccEmailsJson, clientId]
-  )
+  const db = await getDatabase()
+  const update: Record<string, unknown> = {
+    updated_at: new Date(),
+  }
+  
+  if (data.name !== undefined) update.name = data.name
+  if (data.email !== undefined) update.email = data.email
+  if (data.requiresTimesheet !== undefined) update.requires_timesheet = data.requiresTimesheet
+  if (data.ccEmails !== undefined) update.cc_emails = data.ccEmails.length > 0 ? data.ccEmails : null
+  
+  await db.collection('clients').updateOne({ id: clientId }, { $set: update })
 }
 
 /**
  * Delete a client
  */
 export async function deleteClient(clientId: string) {
-  executeQuery('DELETE FROM clients WHERE id = ?', [clientId])
+  const db = await getDatabase()
+  await db.collection('clients').deleteOne({ id: clientId })
 }
 
 /**
  * Get setting value
  */
 export async function getSetting(key: string): Promise<string | null> {
-  const result = executeQuery('SELECT value FROM settings WHERE key = ?', [key])
-  const row = result.results?.[0] as { value: string } | undefined
-  return row?.value || null
+  const db = await getDatabase()
+  const setting = await db.collection('settings').findOne({ key })
+  return (setting?.value as string) || null
 }
 
 /**
  * Set setting value
  */
 export async function setSetting(key: string, value: string) {
-  executeQuery(
-    'INSERT INTO settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP',
-    [key, value]
+  const db = await getDatabase()
+  await db.collection('settings').updateOne(
+    { key },
+    { $set: { key, value, updated_at: new Date() } },
+    { upsert: true }
   )
 }
 
@@ -118,49 +144,71 @@ export async function setAccountantEmail(email: string) {
  * Get invoice by ID with files
  */
 export async function getInvoice(invoiceId: string): Promise<Invoice | null> {
-  const invoiceResult = executeQuery(
-    `SELECT i.*, c.name as client_name, c.email as client_email, c.requires_timesheet
-     FROM invoices i 
-     LEFT JOIN clients c ON i.client_id = c.id 
-     WHERE i.id = ?`,
-    [invoiceId]
-  )
-  const invoice = invoiceResult.results?.[0] as unknown as Invoice | undefined
+  const db = await getDatabase()
   
+  // Get invoice
+  const invoice = await db.collection('invoices').findOne({ id: invoiceId })
   if (!invoice) return null
   
-  // Get files for this invoice
-  const filesResult = executeQuery(
-    'SELECT * FROM invoice_files WHERE invoice_id = ? ORDER BY file_type, uploaded_at',
-    [invoiceId]
-  )
-  invoice.files = (filesResult.results || []) as unknown as InvoiceFile[]
+  // Get client info
+  const client = await db.collection('clients').findOne({ id: invoice.client_id })
   
-  return invoice
+  // Get files for this invoice
+  const files = await db.collection('invoice_files')
+    .find({ invoice_id: invoiceId })
+    .sort({ file_type: 1, uploaded_at: 1 })
+    .toArray()
+  
+  const result = {
+    ...invoice,
+    client_name: client?.name || '',
+    client_email: client?.email || '',
+    requires_timesheet: client?.requires_timesheet || false,
+    files: files as unknown as InvoiceFile[],
+  }
+  return result as unknown as Invoice
 }
 
 /**
  * Get all invoices with client info and files
  */
 export async function getAllInvoices(): Promise<Invoice[]> {
-  const result = executeQuery(
-    `SELECT i.*, c.name as client_name, c.email as client_email, c.requires_timesheet
-     FROM invoices i 
-     LEFT JOIN clients c ON i.client_id = c.id 
-     ORDER BY i.year DESC, i.month DESC, i.uploaded_at DESC`
-  )
-  const invoices = (result.results || []) as Invoice[]
+  const db = await getDatabase()
   
-  // Get files for each invoice
-  for (const invoice of invoices) {
-    const filesResult = executeQuery(
-      'SELECT * FROM invoice_files WHERE invoice_id = ? ORDER BY file_type, uploaded_at',
-      [invoice.id]
-    )
-    invoice.files = (filesResult.results || []) as InvoiceFile[]
+  // Get all invoices sorted by year, month, uploaded_at
+  const invoices = await db.collection('invoices')
+    .find({})
+    .sort({ year: -1, month: -1, uploaded_at: -1 })
+    .toArray()
+  
+  // Get all clients for lookup
+  const clients = await db.collection('clients').find({}).toArray()
+  const clientMap = new Map(clients.map((c) => [c.id, c]))
+  
+  // Get all files grouped by invoice_id
+  const allFiles = await db.collection('invoice_files').find({}).toArray()
+  const filesByInvoice = new Map<string, InvoiceFile[]>()
+  
+  for (const file of allFiles) {
+    const invoiceId = file.invoice_id as string
+    if (!filesByInvoice.has(invoiceId)) {
+      filesByInvoice.set(invoiceId, [])
+    }
+    filesByInvoice.get(invoiceId)!.push(file as unknown as InvoiceFile)
   }
   
-  return invoices
+  // Combine invoices with client info and files
+  return invoices.map((invoice) => {
+    const client = clientMap.get(invoice.client_id as string)
+    const result = {
+      ...invoice,
+      client_name: client?.name || '',
+      client_email: client?.email || '',
+      requires_timesheet: client?.requires_timesheet || false,
+      files: filesByInvoice.get(invoice.id as string) || [],
+    }
+    return result as unknown as Invoice
+  })
 }
 
 /**
@@ -180,6 +228,7 @@ export async function createInvoice(invoiceData: {
     fileSize: number
   }>
 }) {
+  const db = await getDatabase()
   const {
     clientId,
     invoiceAmount,
@@ -193,22 +242,36 @@ export async function createInvoice(invoiceData: {
   const invoiceId = `invoice-${Date.now()}`
   
   // Create invoice
-  executeQuery(
-    `INSERT INTO invoices 
-     (id, client_id, invoice_amount, due_date, month, year, notes, uploaded_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-    [invoiceId, clientId, invoiceAmount, dueDate, month, year, notes || null]
-  )
+  await db.collection('invoices').insertOne({
+    id: invoiceId,
+    client_id: clientId,
+    invoice_amount: invoiceAmount,
+    due_date: dueDate,
+    month,
+    year,
+    notes: notes || null,
+    uploaded_at: new Date(),
+    sent_to_client: false,
+    sent_to_client_at: null,
+    payment_received: false,
+    payment_received_at: null,
+    sent_to_accountant: false,
+    sent_to_accountant_at: null,
+  })
   
   // Create invoice files
-  for (const file of files) {
-    const fileId = `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-    executeQuery(
-      `INSERT INTO invoice_files 
-       (id, invoice_id, file_key, file_type, original_name, file_size, uploaded_at)
-       VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-      [fileId, invoiceId, file.fileKey, file.fileType, file.originalName, file.fileSize]
-    )
+  if (files.length > 0) {
+    const fileDocuments = files.map((file) => ({
+      id: `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      invoice_id: invoiceId,
+      file_key: file.fileKey,
+      file_type: file.fileType,
+      original_name: file.originalName,
+      file_size: file.fileSize,
+      uploaded_at: new Date(),
+    }))
+    
+    await db.collection('invoice_files').insertMany(fileDocuments)
   }
   
   return invoiceId
@@ -222,45 +285,33 @@ export async function updateInvoiceState(invoiceId: string, updates: {
   paymentReceived?: boolean
   sentToAccountant?: boolean
 }) {
-  const {
-    sentToClient,
-    paymentReceived,
-    sentToAccountant,
-  } = updates
-
-  const updatesList: string[] = []
-  const params: (string | number | null)[] = []
-
-  if (sentToClient !== undefined) {
-    updatesList.push('sent_to_client = ?')
-    params.push(sentToClient ? 1 : 0)
-    if (sentToClient) {
-      updatesList.push('sent_to_client_at = CURRENT_TIMESTAMP')
-    }
-  }
-
-  if (paymentReceived !== undefined) {
-    updatesList.push('payment_received = ?')
-    params.push(paymentReceived ? 1 : 0)
-    if (paymentReceived) {
-      updatesList.push('payment_received_at = CURRENT_TIMESTAMP')
-    }
-  }
-
-  if (sentToAccountant !== undefined) {
-    updatesList.push('sent_to_accountant = ?')
-    params.push(sentToAccountant ? 1 : 0)
-    if (sentToAccountant) {
-      updatesList.push('sent_to_accountant_at = CURRENT_TIMESTAMP')
-    }
-  }
-
-  if (updatesList.length === 0) return
-
-  params.push(invoiceId)
-  const sql = `UPDATE invoices SET ${updatesList.join(', ')} WHERE id = ?`
+  const db = await getDatabase()
+  const update: Record<string, unknown> = {}
   
-  executeQuery(sql, params)
+  if (updates.sentToClient !== undefined) {
+    update.sent_to_client = updates.sentToClient
+    if (updates.sentToClient) {
+      update.sent_to_client_at = new Date()
+    }
+  }
+  
+  if (updates.paymentReceived !== undefined) {
+    update.payment_received = updates.paymentReceived
+    if (updates.paymentReceived) {
+      update.payment_received_at = new Date()
+    }
+  }
+  
+  if (updates.sentToAccountant !== undefined) {
+    update.sent_to_accountant = updates.sentToAccountant
+    if (updates.sentToAccountant) {
+      update.sent_to_accountant_at = new Date()
+    }
+  }
+  
+  if (Object.keys(update).length > 0) {
+    await db.collection('invoices').updateOne({ id: invoiceId }, { $set: update })
+  }
 }
 
 /**
@@ -280,6 +331,7 @@ export async function updateInvoice(invoiceId: string, updates: {
     fileSize: number
   }>
 }) {
+  const db = await getDatabase()
   const {
     clientId,
     invoiceAmount,
@@ -290,60 +342,39 @@ export async function updateInvoice(invoiceId: string, updates: {
     newFiles,
   } = updates
 
-  const updatesList: string[] = []
-  const params: (string | number | null)[] = []
+  // Update invoice fields
+  const update: Record<string, unknown> = {}
+  if (clientId !== undefined) update.client_id = clientId
+  if (invoiceAmount !== undefined) update.invoice_amount = invoiceAmount
+  if (dueDate !== undefined) update.due_date = dueDate
+  if (month !== undefined) update.month = month
+  if (year !== undefined) update.year = year
 
-  if (clientId !== undefined) {
-    updatesList.push('client_id = ?')
-    params.push(clientId)
+  if (Object.keys(update).length > 0) {
+    await db.collection('invoices').updateOne({ id: invoiceId }, { $set: update })
   }
 
-  if (invoiceAmount !== undefined) {
-    updatesList.push('invoice_amount = ?')
-    params.push(invoiceAmount)
-  }
-
-  if (dueDate !== undefined) {
-    updatesList.push('due_date = ?')
-    params.push(dueDate)
-  }
-
-  if (month !== undefined) {
-    updatesList.push('month = ?')
-    params.push(month)
-  }
-
-  if (year !== undefined) {
-    updatesList.push('year = ?')
-    params.push(year)
-  }
-
-  // Update invoice fields if any
-  if (updatesList.length > 0) {
-    params.push(invoiceId)
-    const sql = `UPDATE invoices SET ${updatesList.join(', ')} WHERE id = ?`
-    executeQuery(sql, params)
-  }
-
-  // Delete files (deletion from storage is handled by API route)
+  // Delete files
   if (filesToDelete && filesToDelete.length > 0) {
-    for (const fileId of filesToDelete) {
-      // Delete from database (storage deletion handled by API route)
-      executeQuery('DELETE FROM invoice_files WHERE id = ?', [fileId])
-    }
+    await db.collection('invoice_files').deleteMany({
+      id: { $in: filesToDelete },
+      invoice_id: invoiceId,
+    })
   }
 
   // Add new files
   if (newFiles && newFiles.length > 0) {
-    for (const file of newFiles) {
-      const fileId = `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-      executeQuery(
-        `INSERT INTO invoice_files 
-         (id, invoice_id, file_key, file_type, original_name, file_size, uploaded_at)
-         VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-        [fileId, invoiceId, file.fileKey, file.fileType, file.originalName, file.fileSize]
-      )
-    }
+    const fileDocuments = newFiles.map((file) => ({
+      id: `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      invoice_id: invoiceId,
+      file_key: file.fileKey,
+      file_type: file.fileType,
+      original_name: file.originalName,
+      file_size: file.fileSize,
+      uploaded_at: new Date(),
+    }))
+    
+    await db.collection('invoice_files').insertMany(fileDocuments)
   }
 }
 
@@ -351,37 +382,50 @@ export async function updateInvoice(invoiceId: string, updates: {
  * Delete invoice and its files
  */
 export async function deleteInvoice(invoiceId: string) {
-  executeQuery('DELETE FROM invoice_files WHERE invoice_id = ?', [invoiceId])
-  executeQuery('DELETE FROM email_history WHERE invoice_id = ?', [invoiceId])
-  executeQuery('DELETE FROM invoices WHERE id = ?', [invoiceId])
+  const db = await getDatabase()
+  await db.collection('invoice_files').deleteMany({ invoice_id: invoiceId })
+  await db.collection('email_history').deleteMany({ invoice_id: invoiceId })
+  await db.collection('invoices').deleteOne({ id: invoiceId })
 }
 
 /**
  * Get email templates
  */
 export async function getEmailTemplates() {
-  const result = executeQuery('SELECT * FROM email_templates ORDER BY type, created_at')
-  return result.results || []
+  const db = await getDatabase()
+  const templates = await db.collection('email_templates')
+    .find({})
+    .sort({ type: 1, created_at: 1 })
+    .toArray()
+  return templates as unknown as EmailTemplate[]
 }
 
 /**
  * Get email template by ID
  */
 export async function getEmailTemplate(templateId: string): Promise<EmailTemplate | null> {
-  const result = executeQuery('SELECT * FROM email_templates WHERE id = ?', [templateId])
-  return (result.results?.[0] || null) as EmailTemplate | null
+  const db = await getDatabase()
+  const template = await db.collection('email_templates').findOne({ id: templateId })
+  return (template as EmailTemplate | null) || null
 }
 
 /**
  * Create email template
  */
 export async function createEmailTemplate(templateData: CreateEmailTemplateData) {
+  const db = await getDatabase()
   const id = `template-${Date.now()}`
   const { subject, body, type } = templateData
-  executeQuery(
-    'INSERT INTO email_templates (id, subject, body, type, created_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)',
-    [id, subject, body, type]
-  )
+  
+  await db.collection('email_templates').insertOne({
+    id,
+    subject,
+    body,
+    type,
+    created_at: new Date(),
+    updated_at: null,
+  })
+  
   return id
 }
 
@@ -389,18 +433,24 @@ export async function createEmailTemplate(templateData: CreateEmailTemplateData)
  * Update email template
  */
 export async function updateEmailTemplate(templateId: string, templateData: UpdateEmailTemplateData) {
-  const { subject, body, type } = templateData
-  executeQuery(
-    'UPDATE email_templates SET subject = ?, body = ?, type = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-    [subject ?? null, body ?? null, type ?? null, templateId]
-  )
+  const db = await getDatabase()
+  const update: Record<string, unknown> = {
+    updated_at: new Date(),
+  }
+  
+  if (templateData.subject !== undefined) update.subject = templateData.subject
+  if (templateData.body !== undefined) update.body = templateData.body
+  if (templateData.type !== undefined) update.type = templateData.type
+  
+  await db.collection('email_templates').updateOne({ id: templateId }, { $set: update })
 }
 
 /**
  * Delete email template
  */
 export async function deleteEmailTemplate(templateId: string) {
-  executeQuery('DELETE FROM email_templates WHERE id = ?', [templateId])
+  const db = await getDatabase()
+  await db.collection('email_templates').deleteOne({ id: templateId })
 }
 
 /**
@@ -417,6 +467,7 @@ export async function recordEmail(emailData: {
   status?: string
   errorMessage?: string | null
 }) {
+  const db = await getDatabase()
   const id = `email-${Date.now()}`
   const {
     invoiceId,
@@ -430,12 +481,19 @@ export async function recordEmail(emailData: {
     errorMessage,
   } = emailData
 
-  executeQuery(
-    `INSERT INTO email_history 
-     (id, invoice_id, template_id, recipient_email, recipient_name, recipient_type, subject, body, status, error_message, sent_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-    [id, invoiceId, templateId ?? null, recipientEmail ?? null, recipientName ?? null, recipientType ?? null, subject ?? null, body ?? null, status ?? null, errorMessage ?? null]
-  )
+  await db.collection('email_history').insertOne({
+    id,
+    invoice_id: invoiceId,
+    template_id: templateId || null,
+    recipient_email: recipientEmail,
+    recipient_name: recipientName || null,
+    recipient_type: recipientType,
+    subject,
+    body,
+    status,
+    error_message: errorMessage || null,
+    sent_at: new Date(),
+  })
   
   return id
 }
@@ -444,13 +502,30 @@ export async function recordEmail(emailData: {
  * Get email history for an invoice
  */
 export async function getEmailHistory(invoiceId: string) {
-  const result = executeQuery(
-    `SELECT eh.*, et.subject as template_name
-     FROM email_history eh
-     LEFT JOIN email_templates et ON eh.template_id = et.id
-     WHERE eh.invoice_id = ?
-     ORDER BY eh.sent_at DESC`,
-    [invoiceId]
-  )
-  return result.results || []
+  const db = await getDatabase()
+  
+  // Get email history
+  const emails = await db.collection('email_history')
+    .find({ invoice_id: invoiceId })
+    .sort({ sent_at: -1 })
+    .toArray()
+  
+  // Get template names for lookup
+  const templateIds = emails
+    .map((e) => e.template_id)
+    .filter((id): id is string => id !== null)
+  
+  const templates = templateIds.length > 0
+    ? await db.collection('email_templates')
+        .find({ id: { $in: templateIds } })
+        .toArray()
+    : []
+  
+  const templateMap = new Map(templates.map((t) => [t.id, t]))
+  
+  // Combine emails with template names
+  return emails.map((email) => ({
+    ...email,
+    template_name: email.template_id ? templateMap.get(email.template_id)?.subject : null,
+  }))
 }

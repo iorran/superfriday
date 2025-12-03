@@ -99,15 +99,19 @@ export async function sendInvoiceToClient(data: {
   // Get files from blob storage
   const attachments = await Promise.all(
     fileKeys.map(async (fileKey) => {
+      if (!fileKey) {
+        throw new Error('File key is required')
+      }
       const fileBuffer = await getFile(fileKey)
       if (!fileBuffer) {
         throw new Error(`File not found: ${fileKey}`)
       }
       
       // Extract filename from fileKey (format: timestamp-filename.ext)
-      const filename = fileKey.includes('-') 
-        ? fileKey.substring(fileKey.indexOf('-') + 1)
-        : fileKey
+      const fileKeyStr = String(fileKey || '')
+      const filename = fileKeyStr.includes('-') 
+        ? fileKeyStr.substring(fileKeyStr.indexOf('-') + 1)
+        : fileKeyStr
 
       return {
         filename,
@@ -142,14 +146,18 @@ export async function sendInvoiceToAccountant(data: {
   // Get files from blob storage
   const attachments = await Promise.all(
     fileKeys.map(async (fileKey) => {
+      if (!fileKey) {
+        throw new Error('File key is required')
+      }
       const fileBuffer = await getFile(fileKey)
       if (!fileBuffer) {
         throw new Error(`File not found: ${fileKey}`)
       }
       
-      const filename = fileKey.includes('-') 
-        ? fileKey.substring(fileKey.indexOf('-') + 1)
-        : fileKey
+      const fileKeyStr = String(fileKey || '')
+      const filename = fileKeyStr.includes('-') 
+        ? fileKeyStr.substring(fileKeyStr.indexOf('-') + 1)
+        : fileKeyStr
 
       return {
         filename,

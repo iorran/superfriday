@@ -95,6 +95,7 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
           fileType: f.file_type,
           originalName: f.original_name,
           fileSize: f.file_size || 0,
+          isExisting: true as const,
         }))
         setExistingFiles(existing)
         setFilesToDelete(new Set())
@@ -159,7 +160,7 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
 
     const newFiles: UploadedFile[] = acceptedFiles.map(file => ({
       file,
-      fileType: file.name.toLowerCase().includes('timesheet') || file.name.toLowerCase().includes('timesheet') 
+      fileType: (file.name || '').toLowerCase().includes('timesheet')
         ? 'timesheet' as const
         : 'invoice' as const,
       progress: 0,

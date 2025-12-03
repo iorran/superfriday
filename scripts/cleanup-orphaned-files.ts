@@ -3,8 +3,11 @@
  * Identifies and deletes files in Vercel Blob storage that are not referenced in the database
  */
 
+// Load environment variables from .env.local
+import 'dotenv/config'
+
 import { list, del } from '@vercel/blob'
-import { executeQuery, getDatabase, closeDatabase } from '../lib/db'
+import { getDatabase } from '../lib/db'
 
 async function cleanupOrphanedFiles() {
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
@@ -16,9 +19,10 @@ async function cleanupOrphanedFiles() {
     console.log('Starting cleanup of orphaned files...\n')
 
     // Get all file keys from database
-    const filesResult = executeQuery('SELECT file_key FROM invoice_files')
+    const db = await getDatabase()
+    const files = await db.collection('invoice_files').find({}).project({ file_key: 1 }).toArray()
     const dbFileKeys = new Set(
-      ((filesResult.results || []) as Array<{ file_key: string }>).map((row) => row.file_key)
+      files.map((file) => file.file_key as string)
     )
 
     console.log(`Found ${dbFileKeys.size} files in database`)
@@ -95,8 +99,6 @@ async function cleanupOrphanedFiles() {
   } catch (error: unknown) {
     console.error('\n❌ Error during cleanup:', error)
     process.exit(1)
-  } finally {
-    closeDatabase()
   }
 }
 
