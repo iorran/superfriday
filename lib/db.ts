@@ -65,45 +65,6 @@ export async function getDatabase(): Promise<Db> {
 }
 
 /**
- * Close database connection
- */
-export async function closeDatabase() {
-  if (process.env.NODE_ENV === 'development') {
-    // In development, don't close global connection (it's reused)
-    return
-  }
-
-  if (client) {
-    await client.close()
-    client = null
-    db = null
-  }
-}
-
-/**
- * Execute a query (for compatibility with existing code)
- * Note: MongoDB doesn't use SQL, so this is a simplified wrapper
- * For better performance, use MongoDB methods directly in db-client.ts
- */
-export interface QueryResult {
-  results: unknown[]
-  changes?: number
-  lastInsertRowid?: number | bigint
-}
-
-export async function executeQuery(
-  _query: string,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _params: (string | number | boolean | null)[] = []
-): Promise<QueryResult> {
-  // This is a compatibility layer - MongoDB doesn't use SQL
-  // For actual MongoDB operations, use the collections directly in db-client.ts
-  throw new Error(
-    'executeQuery with SQL is not supported for MongoDB. Use MongoDB collection methods directly.'
-  )
-}
-
-/**
  * Initialize database with schema (creates indexes)
  * MongoDB doesn't have a schema file, but we can create indexes
  */
