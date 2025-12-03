@@ -63,10 +63,17 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
       month: new Date().getMonth() + 1,
       year: new Date().getFullYear(),
     },
-    validators: {
-      onSubmit: invoiceSchema,
-    },
     onSubmit: async ({ value }: { value: InvoiceFormData }) => {
+      // Validate with Zod schema
+      const result = invoiceSchema.safeParse(value)
+      if (!result.success) {
+        toast({
+          title: "Erro de Validação",
+          description: result.error.errors[0]?.message || "Por favor, verifique os campos",
+          variant: "destructive",
+        })
+        return
+      }
       await handleUpload(value)
     },
   })
@@ -166,6 +173,26 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
     onDrop,
     disabled: isUploading || isCreatingInvoice || !clientId,
     multiple: true,
+    maxSize: 10 * 1024 * 1024, // 10MB in bytes
+    onDropRejected: (fileRejections) => {
+      fileRejections.forEach(({ file, errors }) => {
+        errors.forEach((error) => {
+          if (error.code === 'file-too-large') {
+            toast({
+              title: "Arquivo muito grande",
+              description: `${file.name} excede o tamanho máximo de 10MB`,
+              variant: "destructive",
+            })
+          } else {
+            toast({
+              title: "Erro no arquivo",
+              description: `${file.name}: ${error.message}`,
+              variant: "destructive",
+            })
+          }
+        })
+      })
+    },
   })
 
   const removeFile = (index: number) => {
@@ -397,7 +424,7 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
                     }
                     const result = invoiceSchema.shape.clientId.safeParse(value)
                     if (!result.success) {
-                      return result.error.errors[0]?.message || 'Invalid value'
+                      return result.error.errors[0]?.message || 'Valor inválido'
                     }
                     return undefined
                   },
@@ -452,7 +479,7 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
                     onChange: ({ value }): string | undefined => {
                       const result = invoiceSchema.shape.invoiceAmount.safeParse(value)
                       if (!result.success) {
-                        return result.error.errors[0]?.message || 'Invalid value'
+                        return result.error.errors[0]?.message || 'Valor inválido'
                       }
                       return undefined
                     },
@@ -487,7 +514,7 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
                     onChange: ({ value }): string | undefined => {
                       const result = invoiceSchema.shape.dueDate.safeParse(value)
                       if (!result.success) {
-                        return result.error.errors[0]?.message || 'Invalid value'
+                        return result.error.errors[0]?.message || 'Valor inválido'
                       }
                       return undefined
                     },
@@ -524,7 +551,7 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
                     onChange: ({ value }): string | undefined => {
                       const result = invoiceSchema.shape.month.safeParse(value)
                       if (!result.success) {
-                        return result.error.errors[0]?.message || 'Invalid value'
+                        return result.error.errors[0]?.message || 'Valor inválido'
                       }
                       return undefined
                     },
@@ -560,7 +587,7 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
                     onChange: ({ value }): string | undefined => {
                       const result = invoiceSchema.shape.year.safeParse(value)
                       if (!result.success) {
-                        return result.error.errors[0]?.message || 'Invalid value'
+                        return result.error.errors[0]?.message || 'Valor inválido'
                       }
                       return undefined
                     },

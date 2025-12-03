@@ -7,7 +7,6 @@ import {
   deleteEmailTemplate,
 } from '@/lib/client/db-client'
 import { queryKeys } from '@/lib/query-keys'
-import type { EmailTemplate } from '@/types'
 
 interface CreateEmailTemplateData {
   subject: string

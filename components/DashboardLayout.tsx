@@ -57,7 +57,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         <div className="flex flex-col h-full">
           {/* Logo/Header */}
           <div className="flex items-center justify-between p-6 border-b">
-            <h1 className="text-xl font-bold">Invoice Manager</h1>
+            <h1 className="text-xl font-bold">Gerenciador de Invoices</h1>
             <button
               onClick={() => setSidebarOpen(false)}
               className="lg:hidden p-2 hover:bg-accent rounded-md"

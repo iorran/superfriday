@@ -1,7 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getClients, getClient, createClient, updateClient, deleteClient } from '@/lib/client/db-client'
 import { queryKeys } from '@/lib/query-keys'
-import type { Client } from '@/types'
 
 interface CreateClientData {
   name: string

@@ -43,16 +43,23 @@ export default function EmailTemplateManagement() {
   const [templateToDelete, setTemplateToDelete] = useState<EmailTemplate | null>(null)
   const { toast } = useToast()
 
-  const form = useForm<EmailTemplateFormData>({
+  const form = useForm({
     defaultValues: {
       subject: '',
       body: '',
       type: 'to_client',
     },
-    validators: {
-      onSubmit: emailTemplateSchema,
-    },
-    onSubmit: async ({ value }) => {
+    onSubmit: async ({ value }: { value: EmailTemplateFormData }) => {
+      // Validate with Zod schema
+      const result = emailTemplateSchema.safeParse(value)
+      if (!result.success) {
+        toast({
+          title: "Erro de Validação",
+          description: result.error.errors[0]?.message || "Por favor, verifique os campos",
+          variant: "destructive",
+        })
+        return
+      }
       if (editingTemplate) {
         await handleUpdateTemplate(value)
       } else {
@@ -67,8 +74,8 @@ export default function EmailTemplateManagement() {
     const existingTemplate = templates.find((t: EmailTemplate) => t.type === value.type)
     if (existingTemplate) {
       toast({
-        title: "Template Already Exists",
-        description: `A template for ${value.type === 'to_client' ? 'client' : 'account manager'} already exists. Please edit the existing template instead.`,
+        title: "Template Já Existe",
+        description: `Um template para ${value.type === 'to_client' ? 'cliente' : 'gerente de conta'} já existe. Por favor, edite o template existente.`,
         variant: "destructive",
       })
       return
@@ -77,17 +84,17 @@ export default function EmailTemplateManagement() {
     try {
       await createTemplateMutation.mutateAsync(value)
       toast({
-        title: "Template Created",
-        description: `Template for ${value.type === 'to_client' ? 'client' : 'account manager'} has been created`,
+        title: "Template Criado",
+        description: `Template para ${value.type === 'to_client' ? 'cliente' : 'gerente de conta'} foi criado`,
         variant: "success",
       })
       form.reset()
       setDialogOpen(false)
     } catch (error: unknown) {
       console.error('Error creating template:', error)
-      const errorMessage = error instanceof Error ? error.message : "Failed to create template"
+      const errorMessage = error instanceof Error ? error.message : "Falha ao criar template"
       toast({
-        title: "Error",
+        title: "Erro",
         description: errorMessage,
         variant: "destructive",
       })
@@ -111,8 +118,8 @@ export default function EmailTemplateManagement() {
         data: value,
       })
       toast({
-        title: "Template Updated",
-        description: `Template for ${value.type === 'to_client' ? 'client' : 'account manager'} has been updated`,
+        title: "Template Atualizado",
+        description: `Template para ${value.type === 'to_client' ? 'cliente' : 'gerente de conta'} foi atualizado`,
         variant: "success",
       })
       form.reset()
@@ -120,9 +127,9 @@ export default function EmailTemplateManagement() {
       setDialogOpen(false)
     } catch (error: unknown) {
       console.error('Error updating template:', error)
-      const errorMessage = error instanceof Error ? error.message : "Failed to update template"
+      const errorMessage = error instanceof Error ? error.message : "Falha ao atualizar template"
       toast({
-        title: "Error",
+        title: "Erro",
         description: errorMessage,
         variant: "destructive",
       })
@@ -140,8 +147,8 @@ export default function EmailTemplateManagement() {
     try {
       await deleteTemplateMutation.mutateAsync(templateToDelete.id)
       toast({
-        title: "Template Deleted",
-        description: `${templateToDelete.type === 'to_client' ? 'Client' : 'Account Manager'} email template has been deleted`,
+        title: "Template Deletado",
+        description: `Template de email para ${templateToDelete.type === 'to_client' ? 'cliente' : 'gerente de conta'} foi deletado`,
         variant: "success",
       })
       setTemplateToDelete(null)
@@ -149,8 +156,8 @@ export default function EmailTemplateManagement() {
     } catch (error: unknown) {
       console.error('Error deleting template:', error)
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to delete template",
+        title: "Erro",
+        description: error instanceof Error ? error.message : "Falha ao deletar template",
         variant: "destructive",
       })
     }
@@ -166,7 +173,7 @@ export default function EmailTemplateManagement() {
     return (
       <Card>
         <CardContent className="p-6">
-          <p className="text-center text-muted-foreground">Loading templates...</p>
+          <p className="text-center text-muted-foreground">Carregando templates...</p>
         </CardContent>
       </Card>
     )
@@ -179,7 +186,7 @@ export default function EmailTemplateManagement() {
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5" />
-              Email Templates
+              Templates de Email
             </CardTitle>
             <Button 
               onClick={() => {
@@ -189,8 +196,8 @@ export default function EmailTemplateManagement() {
                 
                 if (hasClientTemplate && hasAccountManagerTemplate) {
                   toast({
-                    title: "All Templates Created",
-                    description: "Both client and account manager templates already exist. Please edit existing templates.",
+                    title: "Todos os Templates Criados",
+                    description: "Os templates para cliente e gerente de conta já existem. Por favor, edite os templates existentes.",
                     variant: "destructive",
                   })
                   return
@@ -208,18 +215,18 @@ export default function EmailTemplateManagement() {
               }}
             >
               <Plus className="h-4 w-4 mr-2" />
-              Add Template
+              Adicionar Template
             </Button>
           </div>
         </CardHeader>
         <CardContent>
           {templates.length === 0 ? (
             <p className="text-center text-muted-foreground py-4">
-              No templates yet. Create your first email template.
+              Nenhum template ainda. Crie seu primeiro template de email.
             </p>
           ) : (
             <div className="space-y-2">
-              {templates.map((template) => (
+              {templates.map((template: EmailTemplate) => (
                 <div
                   key={template.id}
                   className="p-3 rounded-md border bg-card"
@@ -227,11 +234,11 @@ export default function EmailTemplateManagement() {
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <p className="font-medium">
-                        {template.type === 'to_client' ? 'Client Email Template' : 'Account Manager Email Template'}
+                        {template.type === 'to_client' ? 'Template de Email para Cliente' : 'Template de Email para Gerente de Conta'}
                       </p>
-                      <p className="text-sm font-medium mt-2">Subject:</p>
+                      <p className="text-sm font-medium mt-2">Assunto:</p>
                       <p className="text-sm text-muted-foreground">{template.subject}</p>
-                      <p className="text-sm font-medium mt-2">Body Preview:</p>
+                      <p className="text-sm font-medium mt-2">Prévia do Corpo:</p>
                       <p className="text-sm text-muted-foreground line-clamp-2">{template.body}</p>
                     </div>
                     <div className="flex items-center gap-2 ml-4">
@@ -263,9 +270,9 @@ export default function EmailTemplateManagement() {
       <Dialog open={dialogOpen} onOpenChange={handleDialogClose}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingTemplate ? 'Edit Email Template' : 'Create Email Template'}</DialogTitle>
+            <DialogTitle>{editingTemplate ? 'Editar Template de Email' : 'Criar Template de Email'}</DialogTitle>
             <DialogDescription>
-              {editingTemplate ? 'Update the email template' : 'Create a reusable email template using the available variables below'}
+              {editingTemplate ? 'Atualize o template de email' : 'Crie um template de email reutilizável usando as variáveis disponíveis abaixo'}
             </DialogDescription>
           </DialogHeader>
           
@@ -328,7 +335,7 @@ export default function EmailTemplateManagement() {
               <form.Field name="type">
                 {(field) => (
                   <div className="space-y-2">
-                    <Label htmlFor={field.name}>Type</Label>
+                    <Label htmlFor={field.name}>Tipo</Label>
                     <select
                       id={field.name}
                       name={field.name}
@@ -342,18 +349,18 @@ export default function EmailTemplateManagement() {
                         value="to_client" 
                         disabled={!editingTemplate && templates.some((t: EmailTemplate) => t.type === 'to_client')}
                       >
-                        To Client {!editingTemplate && templates.some((t: EmailTemplate) => t.type === 'to_client') ? '(Already exists)' : ''}
+                        Para Cliente {!editingTemplate && templates.some((t: EmailTemplate) => t.type === 'to_client') ? '(Já existe)' : ''}
                       </option>
                       <option 
                         value="to_account_manager" 
                         disabled={!editingTemplate && templates.some((t: EmailTemplate) => t.type === 'to_account_manager')}
                       >
-                        To Account Manager {!editingTemplate && templates.some((t: EmailTemplate) => t.type === 'to_account_manager') ? '(Already exists)' : ''}
+                        Para Gerente de Conta {!editingTemplate && templates.some((t: EmailTemplate) => t.type === 'to_account_manager') ? '(Já existe)' : ''}
                       </option>
                     </select>
                     {!editingTemplate && templates.some((t: EmailTemplate) => t.type === field.state.value) && (
                       <p className="text-xs text-amber-600 dark:text-amber-400">
-                        ⚠️ A template of this type already exists. Please edit the existing template instead.
+                        ⚠️ Um template deste tipo já existe. Por favor, edite o template existente.
                       </p>
                     )}
                   </div>
@@ -365,14 +372,14 @@ export default function EmailTemplateManagement() {
                   onChange: ({ value }) => {
                     const result = emailTemplateSchema.shape.subject.safeParse(value)
                     if (!result.success) {
-                      return result.error.errors[0]?.message || 'Invalid value'
+                      return result.error.errors[0]?.message || 'Valor inválido'
                     }
                   },
                 }}
               >
                 {(field) => (
                   <div className="space-y-2">
-                    <Label htmlFor={field.name}>Subject</Label>
+                    <Label htmlFor={field.name}>Assunto</Label>
                     <input
                       id={field.name}
                       name={field.name}
@@ -401,14 +408,14 @@ export default function EmailTemplateManagement() {
                   onChange: ({ value }) => {
                     const result = emailTemplateSchema.shape.body.safeParse(value)
                     if (!result.success) {
-                      return result.error.errors[0]?.message || 'Invalid value'
+                      return result.error.errors[0]?.message || 'Valor inválido'
                     }
                   },
                 }}
               >
                 {(field) => (
                   <div className="space-y-2">
-                    <Label htmlFor={field.name}>Body</Label>
+                    <Label htmlFor={field.name}>Corpo</Label>
                     <Textarea
                       id={field.name}
                       name={field.name}
@@ -434,10 +441,10 @@ export default function EmailTemplateManagement() {
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={handleDialogClose}>
-                Cancel
+                Cancelar
               </Button>
               <Button type="submit">
-                {editingTemplate ? 'Update Template' : 'Create Template'}
+                {editingTemplate ? 'Atualizar Template' : 'Criar Template'}
               </Button>
             </DialogFooter>
           </form>
@@ -447,18 +454,18 @@ export default function EmailTemplateManagement() {
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogTitle>Tem certeza?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete the {templateToDelete?.type === 'to_client' ? 'client' : 'account manager'} email template. This action cannot be undone.
+              Isso irá deletar permanentemente o template de email para {templateToDelete?.type === 'to_client' ? 'cliente' : 'gerente de conta'}. Esta ação não pode ser desfeita.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteTemplate}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Delete
+              Deletar
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

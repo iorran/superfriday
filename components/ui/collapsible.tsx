@@ -20,11 +20,14 @@ const Collapsible = React.forwardRef<HTMLDivElement, CollapsibleProps>(
           if (React.isValidElement(child)) {
             // Only pass onOpenChange to CollapsibleTrigger, not to CollapsibleContent
             // Check if it's a CollapsibleTrigger by checking displayName or component name
-            const isTrigger = (child.type as any)?.displayName === 'CollapsibleTrigger' || 
-                             (child.type as any)?.name === 'CollapsibleTrigger'
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const childType = child.type as React.ComponentType<any> & { displayName?: string; name?: string }
+            const isTrigger = childType?.displayName === 'CollapsibleTrigger' || 
+                             childType?.name === 'CollapsibleTrigger'
             const childProps = isTrigger 
               ? { open, onOpenChange }
               : { open }
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             return React.cloneElement(child, childProps as any)
           }
           return child
@@ -85,7 +88,8 @@ const CollapsibleContent = React.forwardRef<HTMLDivElement, CollapsibleContentPr
     ...props 
   }, ref) => {
     // Remove onOpenChange from props if it exists (shouldn't be passed, but just in case)
-    const { onOpenChange, ...restProps } = props as any
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { onOpenChange: _onOpenChange, ...restProps } = props as { onOpenChange?: (open: boolean) => void; [key: string]: unknown }
     return (
       <div
         ref={ref}

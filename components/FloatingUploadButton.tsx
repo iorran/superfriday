@@ -18,7 +18,7 @@ export default function FloatingUploadButton() {
       <button
         onClick={() => setIsOpen(true)}
         className="fixed bottom-8 right-8 z-50 h-16 w-16 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl transition-all hover:scale-110 flex items-center justify-center group"
-        aria-label="Upload invoice"
+        aria-label="Fazer upload de invoice"
       >
         <Upload className="h-6 w-6 transition-transform group-hover:scale-110" />
       </button>

@@ -26,6 +26,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Validate file size (default: 10MB = 10485760 bytes)
+    const maxFileSize = parseInt(process.env.MAX_FILE_SIZE || '10485760', 10)
+    if (file.size > maxFileSize) {
+      const maxSizeMB = (maxFileSize / 1024 / 1024).toFixed(1)
+      return NextResponse.json(
+        { 
+          error: true, 
+          message: `File size exceeds maximum allowed size of ${maxSizeMB}MB` 
+        },
+        { status: 400 }
+      )
+    }
+
     const fileKey = `${Date.now()}-${file.name}`
     const fileBuffer = Buffer.from(await file.arrayBuffer())
 

@@ -43,17 +43,24 @@ export default function ClientManagement() {
   const [clientToDelete, setClientToDelete] = useState<Client | null>(null)
   const { toast } = useToast()
 
-  const form = useForm<ClientFormData>({
+  const form = useForm({
     defaultValues: {
       name: '',
       email: '',
       requiresTimesheet: false,
       ccEmails: [],
     },
-    validators: {
-      onSubmit: clientSchema,
-    },
-    onSubmit: async ({ value }) => {
+    onSubmit: async ({ value }: { value: ClientFormData }) => {
+      // Validate with Zod schema
+      const result = clientSchema.safeParse(value)
+      if (!result.success) {
+        toast({
+          title: "Erro de Validação",
+          description: result.error.errors[0]?.message || "Por favor, verifique os campos",
+          variant: "destructive",
+        })
+        return
+      }
       if (editingClient) {
         await handleUpdateClient(value)
       } else {
@@ -105,7 +112,8 @@ export default function ClientManagement() {
     form.setFieldValue('name', client.name)
     form.setFieldValue('email', client.email)
     form.setFieldValue('requiresTimesheet', client.requires_timesheet === 1 || client.requires_timesheet === true)
-    form.setFieldValue('ccEmails', ccEmails)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    form.setFieldValue('ccEmails' as any, ccEmails)
     setNewCcEmail('')
     setDialogOpen(true)
   }
@@ -135,8 +143,8 @@ export default function ClientManagement() {
     } catch (error: unknown) {
       console.error('Error updating client:', error)
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to update client",
+        title: "Erro",
+        description: error instanceof Error ? error.message : "Falha ao atualizar cliente",
         variant: "destructive",
       })
     }
@@ -153,8 +161,8 @@ export default function ClientManagement() {
     try {
       await deleteClientMutation.mutateAsync(clientToDelete.id)
       toast({
-        title: "Client Deleted",
-        description: `${clientToDelete.name} has been deleted`,
+        title: "Cliente Deletado",
+        description: `${clientToDelete.name} foi deletado`,
         variant: "success",
       })
       setClientToDelete(null)
@@ -162,8 +170,8 @@ export default function ClientManagement() {
     } catch (error: unknown) {
       console.error('Error deleting client:', error)
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to delete client",
+        title: "Erro",
+        description: error instanceof Error ? error.message : "Falha ao deletar cliente",
         variant: "destructive",
       })
     }
@@ -178,13 +186,15 @@ export default function ClientManagement() {
 
   const addCcEmail = () => {
     const email = newCcEmail.trim()
-    const currentCcEmails = form.getFieldValue('ccEmails') || []
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const currentCcEmails = (form.getFieldValue('ccEmails' as any) || []) as string[]
     
     if (email && !currentCcEmails.includes(email)) {
       // Validate email format using zod
       const emailResult = z.string().email().safeParse(email)
       if (emailResult.success) {
-        form.setFieldValue('ccEmails', [...currentCcEmails, email])
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        form.setFieldValue('ccEmails' as any, [...currentCcEmails, email])
         setNewCcEmail('')
       } else {
         toast({
@@ -197,15 +207,17 @@ export default function ClientManagement() {
   }
 
   const removeCcEmail = (emailToRemove: string) => {
-    const currentCcEmails = form.getFieldValue('ccEmails') || []
-    form.setFieldValue('ccEmails', currentCcEmails.filter(email => email !== emailToRemove))
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const currentCcEmails = (form.getFieldValue('ccEmails' as any) || []) as string[]
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    form.setFieldValue('ccEmails' as any, currentCcEmails.filter(email => email !== emailToRemove))
   }
 
   if (loading) {
     return (
       <Card>
         <CardContent className="p-6">
-          <p className="text-center text-muted-foreground">Loading clients...</p>
+          <p className="text-center text-muted-foreground">Carregando clientes...</p>
         </CardContent>
       </Card>
     )
@@ -218,18 +230,18 @@ export default function ClientManagement() {
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <User className="h-5 w-5" />
-              Clients
+              Clientes
             </CardTitle>
             <Button onClick={() => setDialogOpen(true)}>
               <UserPlus className="h-4 w-4 mr-2" />
-              Add Client
+              Adicionar Cliente
             </Button>
           </div>
         </CardHeader>
         <CardContent>
           {clients.length === 0 ? (
             <p className="text-center text-muted-foreground py-4">
-              No clients yet. Add your first client to get started.
+              Nenhum cliente ainda. Adicione seu primeiro cliente para começar.
             </p>
           ) : (
             <div className="space-y-2">
@@ -320,7 +332,7 @@ export default function ClientManagement() {
                   onChange: ({ value }) => {
                     const result = clientSchema.shape.name.safeParse(value)
                     if (!result.success) {
-                      return result.error.errors[0]?.message || 'Invalid value'
+                      return result.error.errors[0]?.message || 'Valor inválido'
                     }
                   },
                 }}
@@ -334,7 +346,7 @@ export default function ClientManagement() {
                       value={field.state.value}
                       onBlur={field.handleBlur}
                       onChange={(e) => field.handleChange(e.target.value)}
-                      placeholder="Client Name"
+                      placeholder="Nome do Cliente"
                       className="w-full p-2 border rounded-md"
                     />
                     {field.state.meta.errors && field.state.meta.errors.length > 0 && (
@@ -352,7 +364,7 @@ export default function ClientManagement() {
                   onChange: ({ value }) => {
                     const result = clientSchema.shape.email.safeParse(value)
                     if (!result.success) {
-                      return result.error.errors[0]?.message || 'Invalid value'
+                      return result.error.errors[0]?.message || 'Valor inválido'
                     }
                   },
                 }}
@@ -398,7 +410,8 @@ export default function ClientManagement() {
               </form.Field>
               
               {/* CC Emails Section */}
-              <form.Field name="ccEmails">
+              {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+              <form.Field name={"ccEmails" as any}>
                 {(field) => (
                   <div className="space-y-2">
                     <Label htmlFor="ccEmails">Emails CC (Cópia)</Label>
@@ -429,7 +442,7 @@ export default function ClientManagement() {
                     </div>
                     {field.state.value && field.state.value.length > 0 && (
                       <div className="flex flex-wrap gap-2 mt-2">
-                        {field.state.value.map((email, index) => (
+                        {(field.state.value as string[]).map((email: string, index: number) => (
                           <div
                             key={index}
                             className="flex items-center gap-1 px-2 py-1 bg-muted rounded-md text-sm"
@@ -452,7 +465,7 @@ export default function ClientManagement() {
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={handleDialogClose}>
-                Cancel
+                Cancelar
               </Button>
               <Button type="submit">
                 {editingClient ? 'Atualizar Cliente' : 'Criar Cliente'}
@@ -465,18 +478,18 @@ export default function ClientManagement() {
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogTitle>Tem certeza?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete {clientToDelete?.name}. This action cannot be undone.
+              Isso irá deletar permanentemente {clientToDelete?.name}. Esta ação não pode ser desfeita.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteClient}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Delete
+              Deletar
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

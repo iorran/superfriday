@@ -88,7 +88,7 @@ export default function FileList() {
   // Group invoices by month
   const invoicesByMonth = useMemo(() => {
     const grouped: Record<string, { monthName: string; invoices: FormattedInvoice[] }> = {}
-    invoices.forEach((inv) => {
+    invoices.forEach((inv: FormattedInvoice) => {
       if (!grouped[inv.monthKey]) {
         grouped[inv.monthKey] = {
           monthName: inv.monthName,
@@ -137,7 +137,7 @@ export default function FileList() {
     try {
       setSendingEmail(`${invoiceId}-${recipientType}`)
       
-      const invoice = invoices.find(inv => inv.id === invoiceId)
+      const invoice = invoices.find((inv: FormattedInvoice) => inv.id === invoiceId)
       if (!invoice) {
         throw new Error('Invoice not found')
       }

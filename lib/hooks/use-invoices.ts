@@ -9,7 +9,6 @@ import {
   deleteInvoiceFile,
 } from '@/lib/client/db-client'
 import { queryKeys } from '@/lib/query-keys'
-import type { Invoice } from '@/types'
 
 interface CreateInvoiceData {
   clientId: string

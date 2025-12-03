@@ -2,13 +2,15 @@
   "name": "superfriday",
   "version": "0.0.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "db:init": "node scripts/init-db.js",
-    "db:migrate": "node scripts/init-db.js"
+    "db:init": "node scripts/init-db.cjs",
+    "db:migrate": "node scripts/init-db.cjs",
+    "cleanup:storage": "tsx scripts/cleanup-orphaned-files.ts"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "^1.1.15",
@@ -45,6 +47,7 @@
     "eslint-config-next": "^15.1.0",
     "postcss": "^8.5.6",
     "tailwindcss": "3.4.1",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }
 }
