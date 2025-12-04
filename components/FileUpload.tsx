@@ -1,19 +1,24 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useForm } from '@tanstack/react-form'
 import { useStore } from '@tanstack/react-store'
 import { useDropzone } from 'react-dropzone'
+import { motion } from 'framer-motion'
 import { Card, CardContent } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/use-toast'
+import { Stepper, StepContent } from '@/components/ui/stepper'
+import { InvoiceSummary } from '@/components/InvoiceSummary'
 import { uploadFile } from '@/lib/client/storage-client'
 import { useClients } from '@/lib/hooks/use-clients'
 import { useInvoice, useCreateInvoice, useUpdateInvoice, useDeleteInvoiceFile } from '@/lib/hooks/use-invoices'
-import { Upload, X, FileText, Trash2 } from 'lucide-react'
-import type { Client, InvoiceFile } from '@/types'
+import { usePDFExtraction } from '@/lib/hooks/use-pdf-extraction'
+import { saveDraft, deleteDraft, type DraftFormData, type DraftFile } from '@/lib/utils/drafts'
+import { Upload, X, FileText, Trash2, Loader2, CheckCircle2, ArrowLeft, ArrowRight, Save } from 'lucide-react'
+import type { Client, InvoiceFile, ExtractedPDFData } from '@/types'
 import { invoiceSchema, type InvoiceFormData } from '@/lib/validations'
 
 interface FileUploadProps {
@@ -39,21 +44,36 @@ interface ExistingFile {
   isExisting: true
 }
 
+const STEPS = [
+  { id: 1, label: 'Upload PDF', description: 'Anexe o arquivo PDF' },
+  { id: 2, label: 'Revisar Dados', description: 'Confirme e edite' },
+  { id: 3, label: 'Confirmar', description: 'Criar invoice' },
+]
+
 export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel }: FileUploadProps) {
   const { data: clients = [] } = useClients()
   const { data: invoiceData, isLoading: loadingInvoice } = useInvoice(editingInvoiceId)
   const createInvoiceMutation = useCreateInvoice()
   const updateInvoiceMutation = useUpdateInvoice()
   const deleteInvoiceFileMutation = useDeleteInvoiceFile()
+  const { extractFromFile, isExtracting } = usePDFExtraction()
   
+  const [currentStep, setCurrentStep] = useState(1)
   const [selectedClient, setSelectedClient] = useState<Client | null>(null)
+  const [isNewClient, setIsNewClient] = useState(false)
+  const [newClientName, setNewClientName] = useState<string>('')
   const [files, setFiles] = useState<UploadedFile[]>([])
   const [existingFiles, setExistingFiles] = useState<ExistingFile[]>([])
   const [filesToDelete, setFilesToDelete] = useState<Set<string>>(new Set())
   const [isUploading, setIsUploading] = useState(false)
+  const [extractedData, setExtractedData] = useState<ExtractedPDFData | null>(null)
+  const [currentDraftId, setCurrentDraftId] = useState<string | null>(null)
+  const [notes, setNotes] = useState<string>('')
+  const autoSaveIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const { toast } = useToast()
   
   const isCreatingInvoice = createInvoiceMutation.isPending
+  const isEditing = !!editingInvoiceId
 
   const form = useForm({
     defaultValues: {
@@ -64,17 +84,43 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
       year: new Date().getFullYear(),
     },
     onSubmit: async ({ value }: { value: InvoiceFormData }) => {
-      // Validate with Zod schema
-      const result = invoiceSchema.safeParse(value)
-      if (!result.success) {
-        toast({
-          title: "Erro de Validação",
-          description: result.error.errors[0]?.message || "Por favor, verifique os campos",
-          variant: "destructive",
-        })
-        return
+      if (currentStep < 3) {
+        // Validate current step before proceeding
+        if (currentStep === 1) {
+          if (files.length === 0) {
+            toast({
+              title: "Arquivo Necessário",
+              description: "Por favor, anexe um arquivo PDF.",
+              variant: "destructive",
+            })
+            return
+          }
+          handleNextStep()
+        } else if (currentStep === 2) {
+          const result = invoiceSchema.safeParse(value)
+          if (!result.success) {
+            toast({
+              title: "Erro de Validação",
+              description: result.error.errors[0]?.message || "Por favor, verifique os campos",
+              variant: "destructive",
+            })
+            return
+          }
+          handleNextStep()
+        }
+      } else {
+        // Step 3: Final submission
+        const result = invoiceSchema.safeParse(value)
+        if (!result.success) {
+          toast({
+            title: "Erro de Validação",
+            description: result.error.errors[0]?.message || "Por favor, verifique os campos",
+            variant: "destructive",
+          })
+          return
+        }
+        await handleUpload(value)
       }
-      await handleUpload(value)
     },
   })
 
@@ -87,7 +133,6 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
       form.setFieldValue('month', invoiceData.month || new Date().getMonth() + 1)
       form.setFieldValue('year', invoiceData.year || new Date().getFullYear())
       
-      // Load existing files
       if (invoiceData.files && invoiceData.files.length > 0) {
         const existing = invoiceData.files.map((f: InvoiceFile) => ({
           id: f.id,
@@ -101,10 +146,11 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
         setFilesToDelete(new Set())
       }
     } else if (!editingInvoiceId) {
-      // Reset form when not editing
       setFiles([])
       setExistingFiles([])
       setFilesToDelete(new Set())
+      setExtractedData(null)
+      setCurrentStep(1)
       form.reset()
     }
   }, [invoiceData, editingInvoiceId, form])
@@ -113,68 +159,239 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
   const clientId = useStore(form.store, (state) => state.values.clientId || '')
   
   useEffect(() => {
-    if (clientId) {
+    if (clientId && !clientId.startsWith('__new__')) {
       const client = clients.find(c => c.id === clientId)
       setSelectedClient(client || null)
       
-      // Reset new files if client changes and new client doesn't require timesheet
       if (client && !client.requires_timesheet) {
         setFiles(prev => prev.filter(f => f.fileType !== 'timesheet'))
       }
-      
-      // Note: Existing files are not automatically removed when client changes
-      // User can manually remove them if needed
     } else {
       setSelectedClient(null)
+      if (clientId && clientId.startsWith('__new__')) {
+        setIsNewClient(true)
+        setNewClientName(clientId.replace('__new__', ''))
+      } else {
+        setIsNewClient(false)
+        setNewClientName('')
+      }
     }
   }, [clientId, clients])
 
-  const removeExistingFile = async (fileId: string) => {
-    if (!editingInvoiceId) return
+  // Auto-save draft every 30 seconds
+  useEffect(() => {
+    if (isEditing || currentStep === 1) return
 
-    try {
-      // Add to deletion list (will be deleted when saving)
-      setFilesToDelete(prev => new Set(prev).add(fileId))
-      
-      // Remove from display immediately
-      setExistingFiles(prev => prev.filter(f => f.id !== fileId))
-    } catch (error: unknown) {
-      console.error('Error removing file:', error)
-      toast({
-        title: "Erro",
-        description: error instanceof Error ? error.message : "Falha ao remover arquivo",
-        variant: "destructive",
-      })
+    const saveDraftData = () => {
+      const formValues = form.state.values
+      if (!formValues.clientId || files.length === 0) return
+
+      const draftFiles: DraftFile[] = files
+        .filter(f => f.fileKey)
+        .map(f => ({
+          fileKey: f.fileKey!,
+          fileType: f.fileType,
+          originalName: f.file.name,
+          fileSize: f.file.size,
+        }))
+
+      if (draftFiles.length === 0) return
+
+      const draftFormData: DraftFormData = {
+        clientId: formValues.clientId,
+        invoiceAmount: formValues.invoiceAmount,
+        dueDate: formValues.dueDate,
+        month: formValues.month,
+        year: formValues.year,
+        notes: notes || null,
+      }
+
+      const draftId = saveDraft(draftFormData, draftFiles, currentStep, extractedData || undefined, currentDraftId || undefined)
+      setCurrentDraftId(draftId)
     }
-  }
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
-    if (!clientId) {
+    autoSaveIntervalRef.current = setInterval(saveDraftData, 30000)
+
+    return () => {
+      if (autoSaveIntervalRef.current) {
+        clearInterval(autoSaveIntervalRef.current)
+      }
+    }
+  }, [form.state.values, files, currentStep, extractedData, notes, currentDraftId, isEditing])
+
+  const handleSaveDraft = () => {
+    const formValues = form.state.values
+    if (!formValues.clientId || files.length === 0) {
       toast({
-        title: "Cliente Necessário",
-        description: "Por favor, selecione um cliente antes de fazer upload dos arquivos.",
+        title: "Dados Insuficientes",
+        description: "Preencha os dados antes de salvar como draft.",
         variant: "destructive",
       })
       return
     }
 
-    const newFiles: UploadedFile[] = acceptedFiles.map(file => ({
-      file,
-      fileType: (file.name || '').toLowerCase().includes('timesheet')
-        ? 'timesheet' as const
-        : 'invoice' as const,
-      progress: 0,
-      uploaded: false,
-    }))
+    const draftFiles: DraftFile[] = files
+      .filter(f => f.fileKey)
+      .map(f => ({
+        fileKey: f.fileKey!,
+        fileType: f.fileType,
+        originalName: f.file.name,
+        fileSize: f.file.size,
+      }))
 
-    setFiles(prev => [...prev, ...newFiles])
-  }, [clientId, toast])
+    const draftFormData: DraftFormData = {
+      clientId: formValues.clientId,
+      invoiceAmount: formValues.invoiceAmount,
+      dueDate: formValues.dueDate,
+      month: formValues.month,
+      year: formValues.year,
+      notes: notes || null,
+    }
+
+    const draftId = saveDraft(draftFormData, draftFiles, currentStep, extractedData || undefined, currentDraftId || undefined)
+    setCurrentDraftId(draftId)
+
+    toast({
+      title: "Draft Salvo",
+      description: "Seu progresso foi salvo. Você pode continuar depois.",
+      variant: "default",
+    })
+  }
+
+  const handleNextStep = () => {
+    if (currentStep < 3) {
+      setCurrentStep(currentStep + 1)
+    }
+  }
+
+  const handlePreviousStep = () => {
+    if (currentStep > 1) {
+      setCurrentStep(currentStep - 1)
+    }
+  }
+
+  const onDrop = useCallback(async (acceptedFiles: File[]) => {
+    // Only accept PDF files for step 1
+    if (currentStep === 1) {
+      const pdfFile = acceptedFiles.find(f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'))
+      
+      if (!pdfFile) {
+        toast({
+          title: "Arquivo Inválido",
+          description: "Por favor, selecione um arquivo PDF.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      // Extract data from PDF (this may fail silently if pdf-parse is not available)
+      const extracted = await extractFromFile(pdfFile)
+      
+      // Upload PDF file regardless of extraction success
+      setIsUploading(true)
+      try {
+        const result = await uploadFile(pdfFile)
+        setFiles([{
+          file: pdfFile,
+          fileKey: result.fileKey,
+          fileType: 'invoice',
+          progress: 100,
+          uploaded: true,
+        }])
+        
+        // If extraction succeeded, pre-fill form and show success message
+        if (extracted) {
+          setExtractedData(extracted)
+          
+          // Pre-fill form with extracted data
+          if (extracted.amount) {
+            form.setFieldValue('invoiceAmount', extracted.amount)
+          }
+          if (extracted.dueDate) {
+            form.setFieldValue('dueDate', extracted.dueDate)
+          }
+          if (extracted.month) {
+            form.setFieldValue('month', extracted.month)
+          }
+          if (extracted.year) {
+            form.setFieldValue('year', extracted.year)
+          }
+          
+          // Auto-select or create client if name was extracted
+          if (extracted.clientName) {
+            const existingClient = clients.find(c => 
+              c.name.toLowerCase().trim() === extracted.clientName!.toLowerCase().trim()
+            )
+            
+            if (existingClient) {
+              // Client exists, select it
+              form.setFieldValue('clientId', existingClient.id)
+              setIsNewClient(false)
+              setNewClientName('')
+            } else {
+              // Client doesn't exist, prepare to create it
+              setIsNewClient(true)
+              setNewClientName(extracted.clientName)
+              form.setFieldValue('clientId', `__new__${extracted.clientName}`)
+            }
+          }
+          
+          toast({
+            title: "PDF Processado",
+            description: extracted.confidence === 'high' 
+              ? "Dados extraídos com sucesso!" 
+              : extracted.confidence === 'medium'
+              ? "PDF processado. Alguns dados foram extraídos - verifique e ajuste se necessário."
+              : "PDF enviado. Preencha os dados manualmente.",
+            variant: "default",
+          })
+        } else {
+          // Extraction failed or not available, but file uploaded successfully
+          toast({
+            title: "PDF Enviado",
+            description: "Arquivo enviado com sucesso. Preencha os dados do formulário.",
+            variant: "default",
+          })
+        }
+      } catch (err) {
+        toast({
+          title: "Erro no Upload",
+          description: err instanceof Error ? err.message : "Falha ao fazer upload do PDF",
+          variant: "destructive",
+        })
+      } finally {
+        setIsUploading(false)
+      }
+    } else {
+      // For step 2, allow adding timesheet files
+      if (!clientId) {
+        toast({
+          title: "Cliente Necessário",
+          description: "Por favor, selecione um cliente antes de fazer upload dos arquivos.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const newFiles: UploadedFile[] = acceptedFiles.map(file => ({
+        file,
+        fileType: (file.name || '').toLowerCase().includes('timesheet')
+          ? 'timesheet' as const
+          : 'invoice' as const,
+        progress: 0,
+        uploaded: false,
+      }))
+
+      setFiles(prev => [...prev, ...newFiles])
+    }
+  }, [currentStep, clientId, toast, extractFromFile, form])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    disabled: isUploading || isCreatingInvoice || !clientId,
-    multiple: true,
-    maxSize: 10 * 1024 * 1024, // 10MB in bytes
+    disabled: isUploading || isCreatingInvoice || (currentStep === 1 && files.length > 0),
+    multiple: currentStep !== 1,
+    accept: currentStep === 1 ? { 'application/pdf': ['.pdf'] } : undefined,
+    maxSize: 10 * 1024 * 1024,
     onDropRejected: (fileRejections) => {
       fileRejections.forEach(({ file, errors }) => {
         errors.forEach((error) => {
@@ -206,8 +423,23 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
     ))
   }
 
+  const removeExistingFile = async (fileId: string) => {
+    if (!editingInvoiceId) return
+
+    try {
+      setFilesToDelete(prev => new Set(prev).add(fileId))
+      setExistingFiles(prev => prev.filter(f => f.id !== fileId))
+    } catch (error: unknown) {
+      console.error('Error removing file:', error)
+      toast({
+        title: "Erro",
+        description: error instanceof Error ? error.message : "Falha ao remover arquivo",
+        variant: "destructive",
+      })
+    }
+  }
+
   const handleUpload = async (value: InvoiceFormData) => {
-    // Validation: For new invoices, must have files. For editing, can have existing files or new files
     if (!isEditing && files.length === 0) {
       toast({
         title: "Arquivos Necessários",
@@ -218,10 +450,8 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
     }
 
     if (editingInvoiceId) {
-      // Update existing invoice
+      // Update existing invoice (keep old flow for editing)
       try {
-
-        // Upload new files if any
         let uploadedNewFiles: Array<{
           fileKey: string
           fileType: 'invoice' | 'timesheet'
@@ -233,6 +463,15 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
           setIsUploading(true)
           uploadedNewFiles = await Promise.all(
             files.map(async (fileData, index) => {
+              if (fileData.fileKey) {
+                return {
+                  fileKey: fileData.fileKey,
+                  fileType: fileData.fileType,
+                  originalName: fileData.file.name,
+                  fileSize: fileData.file.size,
+                }
+              }
+
               setFiles(prev => prev.map((f, i) => 
                 i === index ? { ...f, progress: 50 } : f
               ))
@@ -254,19 +493,16 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
           setIsUploading(false)
         }
 
-        // Delete files marked for deletion
         if (filesToDelete.size > 0) {
           await Promise.all(
             Array.from(filesToDelete).map(fileId => 
               deleteInvoiceFileMutation.mutateAsync({ invoiceId: editingInvoiceId, fileId }).catch(err => {
                 console.warn('Error deleting file:', err)
-                // Continue even if some deletions fail
               })
             )
           )
         }
 
-        // Update invoice
         await updateInvoiceMutation.mutateAsync({
           invoiceId: editingInvoiceId,
           updates: {
@@ -303,7 +539,6 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
       }
     } else {
       // Create new invoice
-      // Validate: must have at least one invoice file
       const hasInvoice = files.some(f => f.fileType === 'invoice')
       if (!hasInvoice) {
         toast({
@@ -314,7 +549,6 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
         return
       }
 
-      // Validate: if client requires timesheet, must have timesheet file
       if (selectedClient?.requires_timesheet) {
         const hasTimesheet = files.some(f => f.fileType === 'timesheet')
         if (!hasTimesheet) {
@@ -330,18 +564,18 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
       setIsUploading(true)
 
       try {
-        // Upload all files
         const uploadedFiles = await Promise.all(
-          files.map(async (fileData, index) => {
-            setFiles(prev => prev.map((f, i) => 
-              i === index ? { ...f, progress: 50 } : f
-            ))
+          files.map(async (fileData) => {
+            if (fileData.fileKey) {
+              return {
+                fileKey: fileData.fileKey,
+                fileType: fileData.fileType,
+                originalName: fileData.file.name,
+                fileSize: fileData.file.size,
+              }
+            }
 
             const result = await uploadFile(fileData.file)
-
-            setFiles(prev => prev.map((f, i) => 
-              i === index ? { ...f, progress: 100, uploaded: true, fileKey: result.fileKey } : f
-            ))
 
             return {
               fileKey: result.fileKey,
@@ -354,9 +588,29 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
 
         setIsUploading(false)
 
-        // Create invoice
+        // Determine clientId and clientName
+        let finalClientId = value.clientId
+        let finalClientName: string | undefined = undefined
+        
+        // Use extracted client name if available, otherwise use manually entered name
+        if (isNewClient) {
+          const nameToUse = extractedData?.clientName || newClientName.trim()
+          if (nameToUse) {
+            // Creating new client - use a temporary ID, will be replaced by server
+            finalClientId = `__new__${nameToUse}`
+            finalClientName = nameToUse
+          }
+        } else {
+          // If client exists but we have extracted name, use it as fallback
+          // (in case clientId doesn't match any existing client)
+          if (extractedData?.clientName && !clients.find(c => c.id === value.clientId)) {
+            finalClientName = extractedData.clientName
+          }
+        }
+
         await createInvoiceMutation.mutateAsync({
-          clientId: value.clientId,
+          clientId: finalClientId,
+          clientName: finalClientName,
           invoiceAmount: value.invoiceAmount,
           dueDate: value.dueDate,
           month: value.month,
@@ -364,49 +618,453 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
           files: uploadedFiles,
         })
 
-        toast({
-          title: "Sucesso!",
-          description: "Invoice criada com sucesso!",
-          variant: "default",
-        })
+        // Delete draft if exists
+        if (currentDraftId) {
+          deleteDraft(currentDraftId)
+        }
 
-        // Reset form
+        // Show warning if new client was created without email
+        const createdClientName = finalClientName || newClientName.trim()
+        if (isNewClient && createdClientName) {
+          toast({
+            title: "Invoice Criada!",
+            description: `Cliente "${createdClientName}" foi criado automaticamente sem email. Adicione o email na lista de invoices.`,
+            variant: "default",
+          })
+        } else {
+          toast({
+            title: "Sucesso!",
+            description: "Invoice criada com sucesso!",
+            variant: "default",
+          })
+        }
+
         setFiles([])
+        setExtractedData(null)
+        setCurrentStep(1)
         form.reset()
 
         if (onUploadSuccess) {
           onUploadSuccess()
         }
-    } catch (error: unknown) {
-      console.error('Upload error:', error)
-      toast({
-        title: "Erro no Upload",
-        description: error instanceof Error ? error.message : "Falha ao fazer upload dos arquivos",
-        variant: "destructive",
-      })
+      } catch (error: unknown) {
+        console.error('Upload error:', error)
+        toast({
+          title: "Erro no Upload",
+          description: error instanceof Error ? error.message : "Falha ao criar invoice",
+          variant: "destructive",
+        })
       } finally {
         setIsUploading(false)
       }
     }
   }
 
-  const isEditing = !!editingInvoiceId
   const hasFiles = files.length > 0 || (isEditing && existingFiles.length > filesToDelete.size)
   const invoiceAmount = form.state.values.invoiceAmount
   const dueDate = form.state.values.dueDate
-  const canUpload = clientId && (isEditing || files.length > 0) && invoiceAmount && dueDate
+  const canProceed = clientId && (isEditing || files.length > 0) && invoiceAmount && dueDate
   const requiresTimesheet = selectedClient?.requires_timesheet
 
+  // For editing mode, use old layout (no steppers)
+  if (isEditing) {
+    return (
+      <div className="flex flex-col gap-6 w-full">
+        <Card className="w-full">
+          <CardContent className="p-6 space-y-4">
+            {loadingInvoice ? (
+              <div className="py-8 text-center text-muted-foreground">
+                Carregando invoice...
+              </div>
+            ) : (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  form.handleSubmit()
+                }}
+              >
+                <form.Field name="clientId">
+                  {(field) => (
+                    <div className="space-y-2">
+                      <Label htmlFor={field.name}>Cliente *</Label>
+                      <select
+                        id={field.name}
+                        name={field.name}
+                        value={field.state.value}
+                        onBlur={field.handleBlur}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                        className="w-full p-2 border rounded-md bg-background"
+                        disabled={isUploading || isCreatingInvoice || clients.length === 0}
+                      >
+                        {clients.length === 0 ? (
+                          <option value="">Nenhum cliente disponível</option>
+                        ) : (
+                          <>
+                            <option value="">Selecione um cliente...</option>
+                            {clients.map((client) => (
+                              <option key={client.id} value={client.id}>
+                                {client.name}
+                              </option>
+                            ))}
+                          </>
+                        )}
+                      </select>
+                    </div>
+                  )}
+                </form.Field>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <form.Field name="invoiceAmount">
+                    {(field) => (
+                      <div className="space-y-2">
+                        <Label htmlFor={field.name}>Valor da Invoice *</Label>
+                        <input
+                          id={field.name}
+                          name={field.name}
+                          type="number"
+                          step="0.01"
+                          value={field.state.value || ''}
+                          onBlur={field.handleBlur}
+                          onChange={(e) => field.handleChange(e.target.value ? parseFloat(e.target.value) : 0)}
+                          placeholder="0.00"
+                          className="w-full p-2 border rounded-md bg-background"
+                          disabled={isUploading || isCreatingInvoice}
+                        />
+                      </div>
+                    )}
+                  </form.Field>
+                  <form.Field name="dueDate">
+                    {(field) => (
+                      <div className="space-y-2">
+                        <Label htmlFor={field.name}>Data de Vencimento *</Label>
+                        <input
+                          id={field.name}
+                          name={field.name}
+                          type="date"
+                          value={field.state.value}
+                          onBlur={field.handleBlur}
+                          onChange={(e) => field.handleChange(e.target.value)}
+                          className="w-full p-2 border rounded-md bg-background"
+                          disabled={isUploading || isCreatingInvoice}
+                        />
+                      </div>
+                    )}
+                  </form.Field>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <form.Field name="month">
+                    {(field) => (
+                      <div className="space-y-2">
+                        <Label htmlFor={field.name}>Mês</Label>
+                        <select
+                          id={field.name}
+                          name={field.name}
+                          value={field.state.value}
+                          onBlur={field.handleBlur}
+                          onChange={(e) => field.handleChange(parseInt(e.target.value))}
+                          className="w-full p-2 border rounded-md bg-background"
+                          disabled={isUploading || isCreatingInvoice}
+                        >
+                          {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </form.Field>
+                  <form.Field name="year">
+                    {(field) => (
+                      <div className="space-y-2">
+                        <Label htmlFor={field.name}>Ano</Label>
+                        <input
+                          id={field.name}
+                          name={field.name}
+                          type="number"
+                          value={field.state.value}
+                          onBlur={field.handleBlur}
+                          onChange={(e) => field.handleChange(parseInt(e.target.value))}
+                          className="w-full p-2 border rounded-md bg-background"
+                          disabled={isUploading || isCreatingInvoice}
+                          min="2020"
+                          max="2100"
+                        />
+                      </div>
+                    )}
+                  </form.Field>
+                </div>
+              </form>
+            )}
+          </CardContent>
+        </Card>
+
+        {existingFiles.length > 0 && (
+          <Card className="w-full">
+            <CardContent className="p-6">
+              <h3 className="font-semibold mb-4">Arquivos Existentes</h3>
+              <div className="space-y-3">
+                {existingFiles.map((fileData) => (
+                  <div
+                    key={fileData.id}
+                    className="flex items-center gap-3 p-3 border rounded-md bg-card"
+                  >
+                    <FileText className="h-5 w-5 text-muted-foreground shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">{fileData.originalName}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {fileData.fileSize > 0 ? `${(fileData.fileSize / 1024).toFixed(2)} KB` : 'Tamanho desconhecido'} • {fileData.fileType === 'invoice' ? 'Invoice' : 'Timesheet'}
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeExistingFile(fileData.id)}
+                      disabled={isUploading || isCreatingInvoice}
+                      className="text-destructive hover:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        <Card {...getRootProps()} className={`w-full transition-all ${isUploading || isCreatingInvoice || !clientId ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'} ${isDragActive ? 'border-blue-500 border-2 bg-blue-50 dark:bg-blue-950' : 'border-dashed border-2 hover:border-blue-400 hover:bg-gray-50 dark:hover:bg-gray-900'}`}>
+          <CardContent className="p-8">
+            <input {...getInputProps()} />
+            <div className="flex flex-col items-center gap-3">
+              <Upload className="h-12 w-12 text-muted-foreground" />
+              <p className="text-xl font-bold">
+                {isDragActive ? 'Solte os arquivos aqui' : 'Arraste e solte os arquivos aqui'}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {files.length > 0 && (
+          <Card className="w-full">
+            <CardContent className="p-6">
+              <h3 className="font-semibold mb-4">Arquivos Adicionados</h3>
+              <div className="space-y-3">
+                {files.map((fileData, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center gap-3 p-3 border rounded-md bg-card"
+                  >
+                    <FileText className="h-5 w-5 text-muted-foreground shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">{fileData.file.name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {(fileData.file.size / 1024).toFixed(2)} KB
+                      </p>
+                      {fileData.progress > 0 && fileData.progress < 100 && (
+                        <Progress value={fileData.progress} className="mt-2" />
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={fileData.fileType}
+                        onChange={(e) => setFileType(index, e.target.value as 'invoice' | 'timesheet')}
+                        className="text-sm p-1 border rounded bg-background"
+                        disabled={isUploading || isCreatingInvoice || fileData.uploaded}
+                      >
+                        <option value="invoice">Invoice</option>
+                        {(requiresTimesheet === true || requiresTimesheet === 1) && <option value="timesheet">Timesheet</option>}
+                      </select>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeFile(index)}
+                        disabled={isUploading || isCreatingInvoice || fileData.uploaded}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {hasFiles && (
+          <div className="flex justify-end gap-2 w-full">
+            {onCancel && (
+              <Button
+                variant="outline"
+                onClick={onCancel}
+                disabled={isUploading || isCreatingInvoice}
+                size="lg"
+              >
+                Cancelar
+              </Button>
+            )}
+            <Button
+              onClick={(e) => {
+                e.preventDefault()
+                form.handleSubmit()
+              }}
+              disabled={!canProceed || isUploading || isCreatingInvoice}
+              size="lg"
+              type="button"
+            >
+              {isUploading ? 'Fazendo Upload...' : isCreatingInvoice ? 'Atualizando Invoice...' : 'Atualizar Invoice'}
+            </Button>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // New invoice creation flow with steppers
   return (
     <div className="flex flex-col gap-6 w-full">
-      
-      <Card className="w-full">
-        <CardContent className="p-6 space-y-4">
-          {loadingInvoice ? (
-            <div className="py-8 text-center text-muted-foreground">
-              Carregando invoice...
+      <Stepper
+        steps={STEPS}
+        currentStep={currentStep}
+        onStepChange={setCurrentStep}
+        className="mb-6"
+      />
+
+      {/* Step 1: Upload PDF */}
+      <StepContent step={1} currentStep={currentStep}>
+        <Card className="w-full">
+          <CardContent className="p-6 space-y-4">
+            <div className="text-center mb-6">
+              <h2 className="text-2xl font-bold mb-2">Anexe o PDF da Invoice</h2>
+              <p className="text-muted-foreground">
+                Faça upload do arquivo PDF. Os dados serão extraídos automaticamente.
+              </p>
             </div>
-          ) : (
+
+            {files.length === 0 ? (
+              <Card
+                {...getRootProps()}
+                className={`w-full transition-all ${
+                  isUploading || isExtracting ? 'cursor-wait opacity-60' : 'cursor-pointer'
+                } ${
+                  isDragActive 
+                    ? 'border-primary border-2 bg-primary/5' 
+                    : 'border-dashed border-2 hover:border-primary hover:bg-muted/50'
+                }`}
+              >
+                <CardContent className="p-12">
+                  <input {...getInputProps()} />
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex flex-col items-center gap-4"
+                  >
+                    {isExtracting ? (
+                      <>
+                        <motion.div
+                          animate={{ rotate: 360 }}
+                          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                        >
+                          <Loader2 className="h-12 w-12 text-primary" />
+                        </motion.div>
+                        <p className="text-lg font-semibold">Processando PDF...</p>
+                        <p className="text-sm text-muted-foreground">Extraindo dados do arquivo</p>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="h-16 w-16 text-muted-foreground" />
+                        <div>
+                          <p className="text-xl font-bold">
+                            {isDragActive ? 'Solte o PDF aqui' : 'Arraste e solte o PDF aqui'}
+                          </p>
+                          <p className="text-sm text-muted-foreground mt-2">
+                            ou clique para selecionar arquivo
+                          </p>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Apenas arquivos PDF (máx. 10MB)
+                        </p>
+                      </>
+                    )}
+                  </motion.div>
+                </CardContent>
+              </Card>
+            ) : (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="space-y-4"
+              >
+                {files.map((fileData, index) => (
+                  <Card key={index} className="border-primary/20">
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-4">
+                        <div className="p-3 bg-primary/10 rounded-lg">
+                          <FileText className="h-6 w-6 text-primary" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-semibold">{fileData.file.name}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {(fileData.file.size / 1024).toFixed(2)} KB
+                          </p>
+                          {fileData.progress > 0 && fileData.progress < 100 && (
+                            <Progress value={fileData.progress} className="mt-2" />
+                          )}
+                          {fileData.uploaded && extractedData && (
+                            <motion.div
+                              initial={{ opacity: 0, y: -10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              className="mt-2 flex items-center gap-2 text-sm text-green-600 dark:text-green-400"
+                            >
+                              <CheckCircle2 className="h-4 w-4" />
+                              <span>
+                                Dados extraídos {extractedData.confidence === 'high' ? '(alta confiança)' : extractedData.confidence === 'medium' ? '(média confiança)' : '(baixa confiança)'}
+                              </span>
+                            </motion.div>
+                          )}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setFiles([])
+                            setExtractedData(null)
+                          }}
+                          disabled={isUploading || isExtracting}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+
+                <div className="flex justify-end gap-2 mt-6">
+                  <Button
+                    onClick={handleNextStep}
+                    disabled={files.length === 0 || !files[0].uploaded}
+                    size="lg"
+                  >
+                    Continuar
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Button>
+                </div>
+              </motion.div>
+            )}
+          </CardContent>
+        </Card>
+      </StepContent>
+
+      {/* Step 2: Review and Edit */}
+      <StepContent step={2} currentStep={currentStep}>
+        <Card className="w-full">
+          <CardContent className="p-6 space-y-6">
+            <div className="text-center mb-6">
+              <h2 className="text-2xl font-bold mb-2">Revisar e Editar Dados</h2>
+              <p className="text-muted-foreground">
+                Confirme os dados extraídos e faça ajustes se necessário.
+              </p>
+            </div>
+
             <form
               onSubmit={(e) => {
                 e.preventDefault()
@@ -414,78 +1072,78 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
                 form.handleSubmit()
               }}
             >
-              {/* Client Selection */}
-              <form.Field
-                name="clientId"
-                validators={{
-                  onChange: ({ value }): string | undefined => {
-                    // Only validate if there's a value (allow empty for initial state)
-                    if (!value || value === '') {
-                      return undefined
-                    }
-                    const result = invoiceSchema.shape.clientId.safeParse(value)
-                    if (!result.success) {
-                      return result.error.errors[0]?.message || 'Valor inválido'
-                    }
-                    return undefined
-                  },
-                }}
-              >
+              <form.Field name="clientId">
                 {(field) => (
                   <div className="space-y-2">
                     <Label htmlFor={field.name}>Cliente *</Label>
                     <select
                       id={field.name}
                       name={field.name}
-                      value={field.state.value}
+                      value={isNewClient ? '__new__' : field.state.value}
                       onBlur={field.handleBlur}
                       onChange={(e) => {
-                        field.handleChange(e.target.value)
+                        if (e.target.value === '__new__') {
+                          setIsNewClient(true)
+                          setNewClientName('')
+                          field.handleChange('')
+                        } else {
+                          setIsNewClient(false)
+                          field.handleChange(e.target.value)
+                        }
                       }}
                       className="w-full p-2 border rounded-md bg-background"
-                      disabled={isUploading || isCreatingInvoice || clients.length === 0}
+                      disabled={isUploading || isCreatingInvoice}
                     >
-                      {clients.length === 0 ? (
-                        <option value="">Nenhum cliente disponível - Crie um cliente primeiro</option>
-                      ) : (
-                        <>
-                          <option value="">Selecione um cliente...</option>
-                          {clients.map((client) => (
-                            <option key={client.id} value={client.id}>
-                              {client.name}{(client.requires_timesheet === 1 || client.requires_timesheet === true) ? ' (requer timesheet)' : ''}
-                            </option>
-                          ))}
-                        </>
-                      )}
+                      <option value="">Selecione um cliente...</option>
+                      {clients.map((client) => (
+                        <option key={client.id} value={client.id}>
+                          {client.name}{(client.requires_timesheet === 1 || client.requires_timesheet === true) ? ' (requer timesheet)' : ''}
+                        </option>
+                      ))}
+                      <option value="__new__">➕ Criar Novo Cliente</option>
                     </select>
+                    {isNewClient && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="mt-2 space-y-2"
+                      >
+                        <Label htmlFor="newClientName">Nome do Novo Cliente *</Label>
+                        <input
+                          id="newClientName"
+                          type="text"
+                          value={newClientName}
+                          onChange={(e) => {
+                            setNewClientName(e.target.value)
+                            // Use a temporary ID based on name for validation
+                            field.handleChange(`__new__${e.target.value}`)
+                          }}
+                          placeholder="Digite o nome do cliente"
+                          className="w-full p-2 border rounded-md bg-background"
+                          disabled={isUploading || isCreatingInvoice}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          O cliente será criado automaticamente sem email. Você poderá adicionar o email depois.
+                        </p>
+                      </motion.div>
+                    )}
                     {field.state.meta.errors && field.state.meta.errors.length > 0 && (
                       <p className="text-sm text-destructive">
                         {String(field.state.meta.errors[0])}
                       </p>
                     )}
-                    {selectedClient && (
+                    {selectedClient && !isNewClient && (
                       <p className="text-sm text-muted-foreground">
-                        Email: {selectedClient.email}
+                        Email: {selectedClient.email || <span className="text-amber-600 dark:text-amber-400 font-semibold">Não configurado</span>}
                       </p>
                     )}
                   </div>
                 )}
               </form.Field>
 
-              {/* Invoice Details */}
               <div className="grid grid-cols-2 gap-4">
-                <form.Field
-                  name="invoiceAmount"
-                  validators={{
-                    onChange: ({ value }): string | undefined => {
-                      const result = invoiceSchema.shape.invoiceAmount.safeParse(value)
-                      if (!result.success) {
-                        return result.error.errors[0]?.message || 'Valor inválido'
-                      }
-                      return undefined
-                    },
-                  }}
-                >
+                <form.Field name="invoiceAmount">
                   {(field) => (
                     <div className="space-y-2">
                       <Label htmlFor={field.name}>Valor da Invoice *</Label>
@@ -509,18 +1167,7 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
                     </div>
                   )}
                 </form.Field>
-                <form.Field
-                  name="dueDate"
-                  validators={{
-                    onChange: ({ value }): string | undefined => {
-                      const result = invoiceSchema.shape.dueDate.safeParse(value)
-                      if (!result.success) {
-                        return result.error.errors[0]?.message || 'Valor inválido'
-                      }
-                      return undefined
-                    },
-                  }}
-                >
+                <form.Field name="dueDate">
                   {(field) => (
                     <div className="space-y-2">
                       <Label htmlFor={field.name}>Data de Vencimento *</Label>
@@ -544,20 +1191,8 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
                 </form.Field>
               </div>
 
-              {/* Month/Year */}
               <div className="grid grid-cols-2 gap-4">
-                <form.Field
-                  name="month"
-                  validators={{
-                    onChange: ({ value }): string | undefined => {
-                      const result = invoiceSchema.shape.month.safeParse(value)
-                      if (!result.success) {
-                        return result.error.errors[0]?.message || 'Valor inválido'
-                      }
-                      return undefined
-                    },
-                  }}
-                >
+                <form.Field name="month">
                   {(field) => (
                     <div className="space-y-2">
                       <Label htmlFor={field.name}>Mês</Label>
@@ -574,26 +1209,10 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
                           <option key={m} value={m}>{m}</option>
                         ))}
                       </select>
-                      {field.state.meta.errors && field.state.meta.errors.length > 0 && (
-                        <p className="text-sm text-destructive">
-                          {String(field.state.meta.errors[0])}
-                        </p>
-                      )}
                     </div>
                   )}
                 </form.Field>
-                <form.Field
-                  name="year"
-                  validators={{
-                    onChange: ({ value }): string | undefined => {
-                      const result = invoiceSchema.shape.year.safeParse(value)
-                      if (!result.success) {
-                        return result.error.errors[0]?.message || 'Valor inválido'
-                      }
-                      return undefined
-                    },
-                  }}
-                >
+                <form.Field name="year">
                   {(field) => (
                     <div className="space-y-2">
                       <Label htmlFor={field.name}>Ano</Label>
@@ -609,172 +1228,207 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
                         min="2020"
                         max="2100"
                       />
-                      {field.state.meta.errors && field.state.meta.errors.length > 0 && (
-                        <p className="text-sm text-destructive">
-                          {String(field.state.meta.errors[0])}
-                        </p>
-                      )}
                     </div>
                   )}
                 </form.Field>
               </div>
+
+              {/* Add timesheet if needed */}
+              {selectedClient?.requires_timesheet && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-950 rounded-md">
+                    <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                    <p className="text-sm text-blue-900 dark:text-blue-100">
+                      Este cliente requer um arquivo de timesheet
+                    </p>
+                  </div>
+
+                  {files.filter(f => f.fileType === 'timesheet').length === 0 && (
+                    <Card {...getRootProps()} className="border-dashed border-2 cursor-pointer hover:border-primary">
+                      <CardContent className="p-6">
+                        <input {...getInputProps()} />
+                        <div className="flex flex-col items-center gap-2">
+                          <Upload className="h-8 w-8 text-muted-foreground" />
+                          <p className="text-sm font-medium">Adicionar Timesheet</p>
+                          <p className="text-xs text-muted-foreground">Clique ou arraste arquivo</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+              )}
+
+              {/* Files list */}
+              {files.length > 0 && (
+                <div className="space-y-2">
+                  <Label>Arquivos Anexados</Label>
+                  <div className="space-y-2">
+                    {files.map((fileData, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center gap-3 p-3 border rounded-md bg-card"
+                      >
+                        <FileText className="h-5 w-5 text-muted-foreground shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate">{fileData.file.name}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {(fileData.file.size / 1024).toFixed(2)} KB
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={fileData.fileType}
+                            onChange={(e) => setFileType(index, e.target.value as 'invoice' | 'timesheet')}
+                            className="text-sm p-1 border rounded bg-background"
+                            disabled={isUploading || isCreatingInvoice}
+                          >
+                            <option value="invoice">Invoice</option>
+                            {(requiresTimesheet === true || requiresTimesheet === 1) && <option value="timesheet">Timesheet</option>}
+                          </select>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeFile(index)}
+                            disabled={isUploading || isCreatingInvoice}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Notes */}
+              <div className="space-y-2">
+                <Label htmlFor="notes">Notas (opcional)</Label>
+                <textarea
+                  id="notes"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  className="w-full p-2 border rounded-md bg-background min-h-[100px]"
+                  placeholder="Adicione notas sobre esta invoice..."
+                  disabled={isUploading || isCreatingInvoice}
+                />
+              </div>
+
+              <div className="flex justify-between gap-2 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handlePreviousStep}
+                  disabled={isUploading || isCreatingInvoice}
+                >
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Voltar
+                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleSaveDraft}
+                    disabled={!canProceed || isUploading || isCreatingInvoice}
+                  >
+                    <Save className="mr-2 h-4 w-4" />
+                    Salvar Draft
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={handleNextStep}
+                    disabled={!canProceed || isUploading || isCreatingInvoice}
+                  >
+                    Continuar
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
             </form>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </StepContent>
 
-      {/* Existing Files List */}
-      {isEditing && existingFiles.length > 0 && (
+      {/* Step 3: Confirmation */}
+      <StepContent step={3} currentStep={currentStep}>
         <Card className="w-full">
           <CardContent className="p-6">
-            <h3 className="font-semibold mb-4">Arquivos Existentes</h3>
-            <div className="space-y-3">
-              {existingFiles.map((fileData) => (
-                <div
-                  key={fileData.id}
-                  className="flex items-center gap-3 p-3 border rounded-md bg-card"
+            <div className="text-center mb-6">
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ type: "spring", stiffness: 200, damping: 15 }}
+              >
+                <CheckCircle2 className="h-16 w-16 text-primary mx-auto mb-4" />
+              </motion.div>
+              <h2 className="text-2xl font-bold mb-2">Confirmar Criação</h2>
+              <p className="text-muted-foreground">
+                Revise os dados antes de criar a invoice
+              </p>
+            </div>
+
+            <InvoiceSummary
+              client={selectedClient}
+              invoiceAmount={form.state.values.invoiceAmount}
+              dueDate={form.state.values.dueDate}
+              month={form.state.values.month}
+              year={form.state.values.year}
+              files={files.map(f => ({
+                fileKey: f.fileKey || '',
+                fileType: f.fileType,
+                originalName: f.file.name,
+                fileSize: f.file.size,
+              }))}
+              notes={notes || null}
+            />
+
+            <div className="flex justify-between gap-2 pt-6 mt-6 border-t">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handlePreviousStep}
+                disabled={isUploading || isCreatingInvoice}
+                size="lg"
+              >
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Voltar
+              </Button>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleSaveDraft}
+                  disabled={isUploading || isCreatingInvoice}
+                  size="lg"
                 >
-                  <FileText className="h-5 w-5 text-muted-foreground shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">{fileData.originalName}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {fileData.fileSize > 0 ? `${(fileData.fileSize / 1024).toFixed(2)} KB` : 'Tamanho desconhecido'} • {fileData.fileType === 'invoice' ? 'Invoice' : 'Timesheet'}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeExistingFile(fileData.id)}
-                      disabled={isUploading || isCreatingInvoice}
-                      className="text-destructive hover:text-destructive"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
+                  <Save className="mr-2 h-4 w-4" />
+                  Salvar Draft
+                </Button>
+                <Button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    form.handleSubmit()
+                  }}
+                  disabled={!canProceed || isUploading || isCreatingInvoice}
+                  size="lg"
+                >
+                  {isCreatingInvoice ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Criando...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="mr-2 h-4 w-4" />
+                      Criar Invoice
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
-      )}
-
-      {/* File Upload Area */}
-      <Card
-        {...getRootProps()}
-        className={`w-full transition-all ${
-          isUploading || isCreatingInvoice || !clientId ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
-        } ${
-          isDragActive 
-            ? 'border-blue-500 border-2 bg-blue-50 dark:bg-blue-950' 
-            : 'border-dashed border-2 hover:border-blue-400 hover:bg-gray-50 dark:hover:bg-gray-900'
-        }`}
-      >
-        <CardContent className="p-8">
-          <input {...getInputProps()} />
-          <div className="flex flex-col items-center gap-3">
-            {!clientId ? (
-              <>
-                <p className="text-xl font-bold text-muted-foreground">
-                  Selecione um cliente primeiro
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  Você precisa selecionar um cliente antes de fazer upload dos arquivos
-                </p>
-              </>
-            ) : (
-              <>
-                <Upload className="h-12 w-12 text-muted-foreground" />
-                <p className="text-xl font-bold">
-                  {isDragActive ? 'Solte os arquivos aqui' : 'Arraste e solte os arquivos aqui'}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  ou clique para selecionar arquivos
-                </p>
-                {(requiresTimesheet === true || requiresTimesheet === 1) ? (
-                  <p className="text-sm text-blue-600 dark:text-blue-400 font-medium mt-2">
-                    ⚠️ Este cliente requer: Invoice + Timesheet
-                  </p>
-                ) : null}
-              </>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* New Uploaded Files List */}
-      {files.length > 0 && (
-        <Card className="w-full">
-          <CardContent className="p-6">
-            <h3 className="font-semibold mb-4">Arquivos Adicionados</h3>
-            <div className="space-y-3">
-              {files.map((fileData, index) => (
-                <div
-                  key={index}
-                  className="flex items-center gap-3 p-3 border rounded-md bg-card"
-                >
-                  <FileText className="h-5 w-5 text-muted-foreground shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">{fileData.file.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {(fileData.file.size / 1024).toFixed(2)} KB
-                    </p>
-                    {fileData.progress > 0 && fileData.progress < 100 && (
-                      <Progress value={fileData.progress} className="mt-2" />
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={fileData.fileType}
-                      onChange={(e) => setFileType(index, e.target.value as 'invoice' | 'timesheet')}
-                      className="text-sm p-1 border rounded bg-background"
-                      disabled={isUploading || isCreatingInvoice || fileData.uploaded}
-                    >
-                      <option value="invoice">Invoice</option>
-                      {(requiresTimesheet === true || requiresTimesheet === 1) && <option value="timesheet">Timesheet</option>}
-                    </select>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeFile(index)}
-                      disabled={isUploading || isCreatingInvoice || fileData.uploaded}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Upload/Update Button */}
-      {(hasFiles || isEditing) && (
-        <div className="flex justify-end gap-2 w-full">
-          {isEditing && onCancel && (
-            <Button
-              variant="outline"
-              onClick={onCancel}
-              disabled={isUploading || isCreatingInvoice}
-              size="lg"
-            >
-              Cancelar
-            </Button>
-          )}
-          <Button
-            onClick={(e) => {
-              e.preventDefault()
-              form.handleSubmit()
-            }}
-            disabled={!canUpload || isUploading || isCreatingInvoice}
-            size="lg"
-            type="button"
-          >
-            {isUploading ? 'Fazendo Upload...' : isCreatingInvoice ? (isEditing ? 'Atualizando Invoice...' : 'Criando Invoice...') : (isEditing ? 'Atualizar Invoice' : 'Criar Invoice')}
-          </Button>
-        </div>
-      )}
+      </StepContent>
     </div>
   )
 }

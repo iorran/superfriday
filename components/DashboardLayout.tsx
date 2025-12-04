@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Menu, X, FileText, Settings, Users, FileCode } from 'lucide-react'
+import { Menu, X, FileText, Settings, Users, FileCode, TrendingUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface DashboardLayoutProps {
@@ -14,12 +14,23 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const pathname = usePathname()
 
-  const menuItems = [
+  const mainMenuItems = [
     {
       name: 'Invoices',
       href: '/',
       icon: FileText,
     },
+  ]
+
+  const financesMenuItems = [
+    {
+      name: 'Finanças',
+      href: '/finances',
+      icon: TrendingUp,
+    },
+  ]
+
+  const settingsMenuItems = [
     {
       name: 'Templates',
       href: '/settings/templates',
@@ -67,28 +78,97 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 p-4 space-y-2">
-            {menuItems.map((item) => {
-              const Icon = item.icon
-              const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href))
-              
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setSidebarOpen(false)}
-                  className={cn(
-                    'flex items-center gap-3 px-4 py-3 rounded-lg transition-colors',
-                    isActive
-                      ? 'bg-primary text-primary-foreground'
-                      : 'hover:bg-accent text-muted-foreground hover:text-foreground'
-                  )}
-                >
-                  <Icon className="h-5 w-5" />
-                  <span className="font-medium">{item.name}</span>
-                </Link>
-              )
-            })}
+          <nav className="flex-1 p-4 space-y-6 overflow-y-auto">
+            {/* Main Section */}
+            <div className="space-y-2">
+              {mainMenuItems.map((item) => {
+                const Icon = item.icon
+                const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href))
+                
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setSidebarOpen(false)}
+                    className={cn(
+                      'flex items-center gap-3 px-4 py-3 rounded-lg transition-colors',
+                      isActive
+                        ? 'bg-primary text-primary-foreground'
+                        : 'hover:bg-accent text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    <Icon className="h-5 w-5" />
+                    <span className="font-medium">{item.name}</span>
+                  </Link>
+                )
+              })}
+            </div>
+
+            {/* Separator */}
+            <div className="border-t border-border" />
+
+            {/* Finances Section */}
+            <div className="space-y-2">
+              <div className="px-4 py-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Análise
+                </p>
+              </div>
+              {financesMenuItems.map((item) => {
+                const Icon = item.icon
+                const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href))
+                
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setSidebarOpen(false)}
+                    className={cn(
+                      'flex items-center gap-3 px-4 py-3 rounded-lg transition-colors',
+                      isActive
+                        ? 'bg-primary text-primary-foreground'
+                        : 'hover:bg-accent text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    <Icon className="h-5 w-5" />
+                    <span className="font-medium">{item.name}</span>
+                  </Link>
+                )
+              })}
+            </div>
+
+            {/* Separator */}
+            <div className="border-t border-border" />
+
+            {/* Settings Section */}
+            <div className="space-y-2">
+              <div className="px-4 py-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Configurações
+                </p>
+              </div>
+              {settingsMenuItems.map((item) => {
+                const Icon = item.icon
+                const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href))
+                
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setSidebarOpen(false)}
+                    className={cn(
+                      'flex items-center gap-3 px-4 py-3 rounded-lg transition-colors',
+                      isActive
+                        ? 'bg-primary text-primary-foreground'
+                        : 'hover:bg-accent text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    <Icon className="h-5 w-5" />
+                    <span className="font-medium">{item.name}</span>
+                  </Link>
+                )
+              })}
+            </div>
           </nav>
         </div>
       </aside>

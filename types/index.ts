@@ -54,3 +54,35 @@ export interface EmailTemplate {
 export interface WindowWithTemplateField extends Window {
   __currentTemplateField?: 'subject' | 'body'
 }
+
+export interface ExtractedPDFData {
+  amount: number | null
+  dueDate: string | null
+  month: number | null
+  year: number | null
+  clientName: string | null // Client/vendor name extracted from PDF
+  rawText: string
+  confidence: 'high' | 'medium' | 'low'
+}
+
+export interface InvoiceDraft {
+  id: string
+  createdAt: string
+  updatedAt: string
+  step: number
+  formData: {
+    clientId: string
+    invoiceAmount: number
+    dueDate: string
+    month: number
+    year: number
+    notes?: string | null
+  }
+  files: Array<{
+    fileKey: string
+    fileType: 'invoice' | 'timesheet'
+    originalName: string
+    fileSize: number
+  }>
+  extractedData?: ExtractedPDFData
+}

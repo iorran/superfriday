@@ -151,6 +151,7 @@ export async function getAllInvoices(): Promise<Invoice[]> {
  */
 export async function createInvoice(invoiceData: {
   clientId: string
+  clientName?: string // Optional: name for new client if it needs to be created
   invoiceAmount: number
   dueDate: string
   month: number

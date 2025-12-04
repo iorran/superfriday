@@ -44,7 +44,7 @@ export default function BuildInfo() {
   }, [buildInfo.commitSha])
 
   return (
-    <div className="fixed bottom-4 right-4 bg-background border border-border rounded-lg p-3 shadow-lg text-xs">
+    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-background border border-border rounded-lg p-3 shadow-lg text-xs z-10">
       <div className="flex items-center gap-2 text-muted-foreground">
         <div className="flex items-center gap-1.5">
           <GitCommit className="h-3 w-3" />
@@ -66,7 +66,7 @@ export default function BuildInfo() {
         )}
       </div>
       {buildInfo.buildNumber !== '0' && (
-        <div className="mt-1 text-muted-foreground/70">
+        <div className="mt-1 text-muted-foreground/70 text-center">
           Build #{buildInfo.buildNumber}
         </div>
       )}

@@ -33,12 +33,35 @@ export async function getDatabase(): Promise<Db> {
     throw new Error('MONGODB_URI or DATABASE_URL environment variable is required')
   }
 
+  // Connection pool options for better performance
+  const clientOptions = {
+    maxPoolSize: 10, // Maximum number of connections in the pool
+    minPoolSize: 2, // Minimum number of connections to maintain
+    maxIdleTimeMS: 30000, // Close connections after 30 seconds of inactivity
+    serverSelectionTimeoutMS: 5000, // How long to try selecting a server
+    socketTimeoutMS: 45000, // How long a send or receive on a socket can take before timeout
+    connectTimeoutMS: 10000, // How long to wait for initial connection
+  }
+
   // In development, use global to prevent multiple connections during hot reload
   if (process.env.NODE_ENV === 'development') {
     if (!global._mongoClient) {
-      global._mongoClient = new MongoClient(databaseUrl)
+      global._mongoClient = new MongoClient(databaseUrl, clientOptions)
       await global._mongoClient.connect()
+      // Verify connection is established
+      await global._mongoClient.db('admin').command({ ping: 1 })
       console.log('MongoDB connected (development)')
+    } else {
+      // Verify existing connection is still alive
+      try {
+        await global._mongoClient.db('admin').command({ ping: 1 })
+      } catch (error) {
+        // Connection lost, reconnect
+        console.log('MongoDB connection lost, reconnecting...')
+        await global._mongoClient.connect()
+        await global._mongoClient.db('admin').command({ ping: 1 })
+        console.log('MongoDB reconnected (development)')
+      }
     }
     client = global._mongoClient
 
@@ -50,9 +73,22 @@ export async function getDatabase(): Promise<Db> {
   } else {
     // In production, create new connection if needed
     if (!client) {
-      client = new MongoClient(databaseUrl)
+      client = new MongoClient(databaseUrl, clientOptions)
       await client.connect()
+      // Verify connection is established
+      await client.db('admin').command({ ping: 1 })
       console.log('MongoDB connected (production)')
+    } else {
+      // Verify existing connection is still alive
+      try {
+        await client.db('admin').command({ ping: 1 })
+      } catch (error) {
+        // Connection lost, reconnect
+        console.log('MongoDB connection lost, reconnecting...')
+        await client.connect()
+        await client.db('admin').command({ ping: 1 })
+        console.log('MongoDB reconnected (production)')
+      }
     }
 
     if (!db) {
@@ -78,10 +114,12 @@ export async function initDatabase() {
   try {
     // Create indexes for better performance
     const clientsCollection = database.collection('clients')
+    await clientsCollection.createIndex({ id: 1 }, { unique: true })
     await clientsCollection.createIndex({ name: 1 })
     await clientsCollection.createIndex({ email: 1 })
 
     const invoicesCollection = database.collection('invoices')
+    await invoicesCollection.createIndex({ id: 1 }, { unique: true })
     await invoicesCollection.createIndex({ client_id: 1 })
     await invoicesCollection.createIndex({ year: -1, month: -1 })
     await invoicesCollection.createIndex({ sent_to_client: 1 })
@@ -89,14 +127,17 @@ export async function initDatabase() {
     await invoicesCollection.createIndex({ payment_received: 1 })
 
     const invoiceFilesCollection = database.collection('invoice_files')
+    await invoiceFilesCollection.createIndex({ id: 1 }, { unique: true })
     await invoiceFilesCollection.createIndex({ invoice_id: 1 })
     await invoiceFilesCollection.createIndex({ file_key: 1 })
 
     const emailHistoryCollection = database.collection('email_history')
+    await emailHistoryCollection.createIndex({ id: 1 }, { unique: true })
     await emailHistoryCollection.createIndex({ invoice_id: 1 })
     await emailHistoryCollection.createIndex({ sent_at: -1 })
 
     const emailTemplatesCollection = database.collection('email_templates')
+    await emailTemplatesCollection.createIndex({ id: 1 }, { unique: true })
     await emailTemplatesCollection.createIndex({ type: 1 })
 
     const settingsCollection = database.collection('settings')

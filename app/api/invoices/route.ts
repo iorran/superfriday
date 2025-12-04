@@ -25,6 +25,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const {
       clientId,
+      clientName, // Optional: name for client if it needs to be created
       invoiceAmount,
       dueDate,
       month,
@@ -68,6 +69,7 @@ export async function POST(request: NextRequest) {
 
     const invoiceId = await createInvoice({
       clientId,
+      clientName: clientName || undefined, // Pass clientName if provided
       invoiceAmount: parseFloat(invoiceAmount),
       dueDate,
       month: parseInt(month),

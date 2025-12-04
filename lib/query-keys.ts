@@ -42,5 +42,10 @@ export const queryKeys = {
     all: ['settings'] as const,
     accountantEmail: () => [...queryKeys.settings.all, 'accountantEmail'] as const,
   },
+
+  // Finances
+  finances: {
+    all: () => ['finances'] as const,
+  },
 }
 

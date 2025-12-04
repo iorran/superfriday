@@ -19,7 +19,8 @@ import {
 import { useInvoices, useUpdateInvoiceState, useDeleteInvoice } from '@/lib/hooks/use-invoices'
 import { useSendEmail } from '@/lib/hooks/use-email'
 import { useEmailTemplates } from '@/lib/hooks/use-email-templates'
-import { FileText, Calendar, Trash2, CheckCircle2, Send, Edit, Loader2 } from 'lucide-react'
+import { useClients, useUpdateClient } from '@/lib/hooks/use-clients'
+import { FileText, Calendar, Trash2, CheckCircle2, Send, Edit, Loader2, Mail, AlertCircle } from 'lucide-react'
 import FileUpload from './FileUpload'
 import type { Invoice, InvoiceFile, EmailTemplate } from '@/types'
 import {
@@ -38,15 +39,18 @@ interface FormattedInvoice extends Invoice {
 
 export default function FileList() {
   const { data: invoicesData = [], isLoading: loading } = useInvoices()
+  const { data: clients = [] } = useClients()
   const updateInvoiceStateMutation = useUpdateInvoiceState()
   const deleteInvoiceMutation = useDeleteInvoice()
   const sendEmailMutation = useSendEmail()
+  const updateClientMutation = useUpdateClient()
   const { data: emailTemplates = [] } = useEmailTemplates()
   
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set())
   const [deletingInvoice, setDeletingInvoice] = useState<string | null>(null)
   const [sendingEmail, setSendingEmail] = useState<string | null>(null)
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null)
+  const [editingClientEmail, setEditingClientEmail] = useState<{ clientId: string; email: string } | null>(null)
   const { toast } = useToast()
 
   // Get current month key (YYYY-MM format)
@@ -319,12 +323,48 @@ export default function FileList() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-2">
                               <FileText className="h-5 w-5 text-muted-foreground shrink-0" />
-                              <div>
-                                <p className="font-medium">{invoice.client_name || 'Sem cliente'}</p>
-                                <p className="text-sm text-muted-foreground">
-                                  {formatDate(invoice.lastModified)} • {formatCurrency(invoice.invoice_amount)}
-                                  {totalSize > 0 && ` • ${formatFileSize(totalSize)}`}
-                                </p>
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                  <p className="font-medium">{invoice.client_name || 'Sem cliente'}</p>
+                                  {(!invoice.client_email || invoice.client_email.trim() === '') && (
+                                    <span 
+                                      className="inline-flex items-center gap-1 text-xs bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300 px-2 py-0.5 rounded cursor-pointer hover:bg-amber-200 dark:hover:bg-amber-800 transition-colors"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        const client = clients.find(c => c.id === invoice.client_id)
+                                        if (client) {
+                                          setEditingClientEmail({ clientId: client.id, email: client.email || '' })
+                                        }
+                                      }}
+                                      title="Clique para adicionar email"
+                                    >
+                                      <AlertCircle className="h-3 w-3" />
+                                      Email ausente
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <p className="text-sm text-muted-foreground">
+                                    {formatDate(invoice.lastModified)} • {formatCurrency(invoice.invoice_amount)}
+                                    {totalSize > 0 && ` • ${formatFileSize(totalSize)}`}
+                                  </p>
+                                  {invoice.client_email && invoice.client_email.trim() !== '' && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        const client = clients.find(c => c.id === invoice.client_id)
+                                        if (client) {
+                                          setEditingClientEmail({ clientId: client.id, email: client.email || '' })
+                                        }
+                                      }}
+                                      className="text-xs text-primary hover:underline flex items-center gap-1"
+                                      title="Editar email do cliente"
+                                    >
+                                      <Mail className="h-3 w-3" />
+                                      {invoice.client_email}
+                                    </button>
+                                  )}
+                                </div>
                               </div>
                             </div>
 
@@ -504,6 +544,77 @@ export default function FileList() {
               setEditingInvoiceId(null)
             }}
           />
+        </DialogContent>
+      </Dialog>
+
+      {/* Quick Edit Client Email Dialog */}
+      <Dialog open={!!editingClientEmail} onOpenChange={(open) => !open && setEditingClientEmail(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar Email do Cliente</DialogTitle>
+          </DialogHeader>
+          {editingClientEmail && (() => {
+            const client = clients.find(c => c.id === editingClientEmail.clientId)
+            if (!client) return null
+            
+            return (
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm font-medium mb-1">Cliente:</p>
+                  <p className="text-sm text-muted-foreground">{client.name}</p>
+                </div>
+                <div>
+                  <label htmlFor="clientEmail" className="text-sm font-medium mb-1 block">
+                    Email:
+                  </label>
+                  <input
+                    id="clientEmail"
+                    type="email"
+                    value={editingClientEmail.email}
+                    onChange={(e) => setEditingClientEmail({ ...editingClientEmail, email: e.target.value })}
+                    className="w-full p-2 border rounded-md bg-background"
+                    placeholder="email@exemplo.com"
+                  />
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setEditingClientEmail(null)}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    onClick={async () => {
+                      if (!editingClientEmail) return
+                      
+                      try {
+                        await updateClientMutation.mutateAsync({
+                          clientId: editingClientEmail.clientId,
+                          data: { email: editingClientEmail.email.trim() || '' },
+                        })
+                        
+                        toast({
+                          title: "Email Atualizado",
+                          description: `Email do cliente ${client.name} foi atualizado com sucesso.`,
+                          variant: "default",
+                        })
+                        
+                        setEditingClientEmail(null)
+                      } catch (error) {
+                        toast({
+                          title: "Erro",
+                          description: error instanceof Error ? error.message : "Falha ao atualizar email",
+                          variant: "destructive",
+                        })
+                      }
+                    }}
+                  >
+                    Salvar
+                  </Button>
+                </div>
+              </div>
+            )
+          })()}
         </DialogContent>
       </Dialog>
     </div>

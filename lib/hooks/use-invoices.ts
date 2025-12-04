@@ -12,6 +12,7 @@ import { queryKeys } from '@/lib/query-keys'
 
 interface CreateInvoiceData {
   clientId: string
+  clientName?: string // Optional: name for new client if it needs to be created
   invoiceAmount: number
   dueDate: string
   month: number

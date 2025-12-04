@@ -4,7 +4,7 @@
  */
 
 import { getDatabase } from './db'
-import type { Client, Invoice, InvoiceFile, EmailTemplate } from '@/types'
+import type { Client, Invoice, EmailTemplate } from '@/types'
 
 interface CreateClientData {
   name: string
@@ -142,73 +142,158 @@ export async function setAccountantEmail(email: string) {
 
 /**
  * Get invoice by ID with files
+ * Optimized using MongoDB aggregation pipeline with $lookup for server-side joins
  */
 export async function getInvoice(invoiceId: string): Promise<Invoice | null> {
   const db = await getDatabase()
   
-  // Get invoice
-  const invoice = await db.collection('invoices').findOne({ id: invoiceId })
-  if (!invoice) return null
+  // Use aggregation pipeline to join client and files server-side
+  const result = await db.collection('invoices').aggregate([
+    // Match invoice by ID
+    {
+      $match: { id: invoiceId }
+    },
+    // Lookup client information
+    {
+      $lookup: {
+        from: 'clients',
+        localField: 'client_id',
+        foreignField: 'id',
+        as: 'client'
+      }
+    },
+    // Unwind client array (should be single client)
+    {
+      $unwind: {
+        path: '$client',
+        preserveNullAndEmptyArrays: true
+      }
+    },
+    // Lookup invoice files with sorting
+    {
+      $lookup: {
+        from: 'invoice_files',
+        let: { invoiceId: '$id' },
+        pipeline: [
+          {
+            $match: {
+              $expr: { $eq: ['$invoice_id', '$$invoiceId'] }
+            }
+          },
+          {
+            $sort: { file_type: 1, uploaded_at: 1 }
+          }
+        ],
+        as: 'files'
+      }
+    },
+    // Project final structure
+    {
+      $project: {
+        id: 1,
+        client_id: 1,
+        invoice_amount: 1,
+        due_date: 1,
+        month: 1,
+        year: 1,
+        notes: 1,
+        uploaded_at: 1,
+        sent_to_client: 1,
+        sent_to_client_at: 1,
+        payment_received: 1,
+        payment_received_at: 1,
+        sent_to_accountant: 1,
+        sent_to_accountant_at: 1,
+        client_name: { $ifNull: ['$client.name', ''] },
+        client_email: { $ifNull: ['$client.email', ''] },
+        requires_timesheet: { $ifNull: ['$client.requires_timesheet', false] },
+        files: { $ifNull: ['$files', []] }
+      }
+    },
+    // Limit to single result
+    {
+      $limit: 1
+    }
+  ]).toArray()
   
-  // Get client info
-  const client = await db.collection('clients').findOne({ id: invoice.client_id })
+  if (result.length === 0) return null
   
-  // Get files for this invoice
-  const files = await db.collection('invoice_files')
-    .find({ invoice_id: invoiceId })
-    .sort({ file_type: 1, uploaded_at: 1 })
-    .toArray()
-  
-  const result = {
-    ...invoice,
-    client_name: client?.name || '',
-    client_email: client?.email || '',
-    requires_timesheet: client?.requires_timesheet || false,
-    files: files as unknown as InvoiceFile[],
-  }
-  return result as unknown as Invoice
+  return result[0] as unknown as Invoice
 }
 
 /**
  * Get all invoices with client info and files
+ * Optimized using MongoDB aggregation pipeline with $lookup for server-side joins
  */
 export async function getAllInvoices(): Promise<Invoice[]> {
   const db = await getDatabase()
   
-  // Get all invoices sorted by year, month, uploaded_at
-  const invoices = await db.collection('invoices')
-    .find({})
-    .sort({ year: -1, month: -1, uploaded_at: -1 })
-    .toArray()
-  
-  // Get all clients for lookup
-  const clients = await db.collection('clients').find({}).toArray()
-  const clientMap = new Map(clients.map((c) => [c.id, c]))
-  
-  // Get all files grouped by invoice_id
-  const allFiles = await db.collection('invoice_files').find({}).toArray()
-  const filesByInvoice = new Map<string, InvoiceFile[]>()
-  
-  for (const file of allFiles) {
-    const invoiceId = file.invoice_id as string
-    if (!filesByInvoice.has(invoiceId)) {
-      filesByInvoice.set(invoiceId, [])
+  // Use aggregation pipeline to join clients and files server-side
+  const invoices = await db.collection('invoices').aggregate([
+    // Sort invoices first (can use index)
+    {
+      $sort: { year: -1, month: -1, uploaded_at: -1 }
+    },
+    // Lookup client information
+    {
+      $lookup: {
+        from: 'clients',
+        localField: 'client_id',
+        foreignField: 'id',
+        as: 'client'
+      }
+    },
+    // Unwind client array (should be single client)
+    {
+      $unwind: {
+        path: '$client',
+        preserveNullAndEmptyArrays: true
+      }
+    },
+    // Lookup invoice files with sorting
+    {
+      $lookup: {
+        from: 'invoice_files',
+        let: { invoiceId: '$id' },
+        pipeline: [
+          {
+            $match: {
+              $expr: { $eq: ['$invoice_id', '$$invoiceId'] }
+            }
+          },
+          {
+            $sort: { file_type: 1, uploaded_at: 1 }
+          }
+        ],
+        as: 'files'
+      }
+    },
+    // Project final structure
+    {
+      $project: {
+        id: 1,
+        client_id: 1,
+        invoice_amount: 1,
+        due_date: 1,
+        month: 1,
+        year: 1,
+        notes: 1,
+        uploaded_at: 1,
+        sent_to_client: 1,
+        sent_to_client_at: 1,
+        payment_received: 1,
+        payment_received_at: 1,
+        sent_to_accountant: 1,
+        sent_to_accountant_at: 1,
+        client_name: { $ifNull: ['$client.name', ''] },
+        client_email: { $ifNull: ['$client.email', ''] },
+        requires_timesheet: { $ifNull: ['$client.requires_timesheet', false] },
+        files: { $ifNull: ['$files', []] }
+      }
     }
-    filesByInvoice.get(invoiceId)!.push(file as unknown as InvoiceFile)
-  }
+  ]).toArray()
   
-  // Combine invoices with client info and files
-  return invoices.map((invoice) => {
-    const client = clientMap.get(invoice.client_id as string)
-    const result = {
-      ...invoice,
-      client_name: client?.name || '',
-      client_email: client?.email || '',
-      requires_timesheet: client?.requires_timesheet || false,
-      files: filesByInvoice.get(invoice.id as string) || [],
-    }
-    return result as unknown as Invoice
-  })
+  return invoices as unknown as Invoice[]
 }
 
 /**
@@ -216,6 +301,7 @@ export async function getAllInvoices(): Promise<Invoice[]> {
  */
 export async function createInvoice(invoiceData: {
   clientId: string
+  clientName?: string // Optional: if client doesn't exist, create with this name
   invoiceAmount: number
   dueDate: string
   month: number
@@ -231,6 +317,7 @@ export async function createInvoice(invoiceData: {
   const db = await getDatabase()
   const {
     clientId,
+    clientName,
     invoiceAmount,
     dueDate,
     month,
@@ -239,12 +326,44 @@ export async function createInvoice(invoiceData: {
     files,
   } = invoiceData
 
+  // Check if client exists, if not create it
+  let finalClientId = clientId
+  const existingClient = await db.collection('clients').findOne({ id: clientId })
+  
+  if (!existingClient) {
+    // Client doesn't exist, create it
+    // Use provided clientName, or extract from clientId if it's in format __new__Name
+    let newClientName = clientName
+    if (!newClientName && clientId.startsWith('__new__')) {
+      newClientName = clientId.replace('__new__', '')
+    }
+    // Fallback to clientId if no name available
+    if (!newClientName) {
+      newClientName = clientId
+    }
+    
+    const newClientId = `client-${Date.now()}`
+    
+    await db.collection('clients').insertOne({
+      id: newClientId,
+      name: newClientName,
+      email: '', // Empty email as requested
+      requires_timesheet: false,
+      cc_emails: null,
+      created_at: new Date(),
+      updated_at: null,
+    })
+    
+    finalClientId = newClientId
+    console.log(`Created new client: ${newClientName} (${newClientId}) - Email missing, needs to be added`)
+  }
+
   const invoiceId = `invoice-${Date.now()}`
   
   // Create invoice
   await db.collection('invoices').insertOne({
     id: invoiceId,
-    client_id: clientId,
+    client_id: finalClientId,
     invoice_amount: invoiceAmount,
     due_date: dueDate,
     month,
