@@ -1,5 +1,6 @@
 'use client'
 
+import React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -20,22 +21,24 @@ interface StepperProps {
 export function Stepper({ steps, currentStep, onStepChange, className }: StepperProps) {
   return (
     <div className={cn('w-full', className)}>
-      <div className="flex items-center justify-between">
+      {/* Circles and Connector Lines Row */}
+      <div className="flex items-center relative">
         {steps.map((step, index) => {
           const isActive = currentStep === step.id
           const isCompleted = currentStep > step.id
           const isClickable = onStepChange && (isCompleted || isActive)
+          const isLast = index === steps.length - 1
 
           return (
-            <div key={step.id} className="flex items-center flex-1">
+            <React.Fragment key={step.id}>
               {/* Step Circle */}
-              <div className="flex flex-col items-center flex-1">
+              <div className="flex flex-col items-center flex-1 relative z-10">
                 <button
                   type="button"
                   onClick={() => isClickable && onStepChange?.(step.id)}
                   disabled={!isClickable}
                   className={cn(
-                    'relative flex items-center justify-center w-10 h-10 rounded-full border-2 transition-all duration-300',
+                    'relative flex items-center justify-center w-10 h-10 rounded-full border-2 transition-all duration-300 shrink-0',
                     isCompleted
                       ? 'bg-primary border-primary text-primary-foreground'
                       : isActive
@@ -70,37 +73,11 @@ export function Stepper({ steps, currentStep, onStepChange, className }: Stepper
                     )}
                   </AnimatePresence>
                 </button>
-
-                {/* Step Label */}
-                <div className="mt-2 text-center">
-                  <p
-                    className={cn(
-                      'text-sm font-medium transition-colors',
-                      isActive || isCompleted
-                        ? 'text-foreground'
-                        : 'text-muted-foreground'
-                    )}
-                  >
-                    {step.label}
-                  </p>
-                  {step.description && (
-                    <p
-                      className={cn(
-                        'text-xs mt-1 transition-colors',
-                        isActive || isCompleted
-                          ? 'text-muted-foreground'
-                          : 'text-muted-foreground/60'
-                      )}
-                    >
-                      {step.description}
-                    </p>
-                  )}
-                </div>
               </div>
 
               {/* Connector Line */}
-              {index < steps.length - 1 && (
-                <div className="flex-1 mx-2 h-0.5 relative">
+              {!isLast && (
+                <div className="flex-1 h-0.5 relative -mx-2 z-0">
                   <div className="absolute inset-0 bg-muted-foreground/20" />
                   <motion.div
                     className="absolute inset-0 bg-primary"
@@ -112,6 +89,41 @@ export function Stepper({ steps, currentStep, onStepChange, className }: Stepper
                     style={{ transformOrigin: 'left' }}
                   />
                 </div>
+              )}
+            </React.Fragment>
+          )
+        })}
+      </div>
+
+      {/* Labels Row */}
+      <div className="flex items-start mt-2">
+        {steps.map((step, index) => {
+          const isActive = currentStep === step.id
+          const isCompleted = currentStep > step.id
+
+          return (
+            <div key={step.id} className="flex flex-col items-center flex-1 min-w-0 px-1">
+              <p
+                className={cn(
+                  'text-sm font-medium transition-colors text-center',
+                  isActive || isCompleted
+                    ? 'text-foreground'
+                    : 'text-muted-foreground'
+                )}
+              >
+                {step.label}
+              </p>
+              {step.description && (
+                <p
+                  className={cn(
+                    'text-xs mt-1 transition-colors text-center',
+                    isActive || isCompleted
+                      ? 'text-muted-foreground'
+                      : 'text-muted-foreground/60'
+                  )}
+                >
+                  {step.description}
+                </p>
               )}
             </div>
           )

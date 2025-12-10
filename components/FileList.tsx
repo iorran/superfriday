@@ -31,8 +31,8 @@ import {
 } from '@/components/ui/dialog'
 
 interface FormattedInvoice extends Invoice {
-  monthKey: string
-  monthName: string
+  groupKey: string
+  groupLabel: string
   sentToClient: boolean
   sentToAccountant: boolean
 }
@@ -46,75 +46,120 @@ export default function FileList() {
   const updateClientMutation = useUpdateClient()
   const { data: emailTemplates = [] } = useEmailTemplates()
   
-  const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set())
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
   const [deletingInvoice, setDeletingInvoice] = useState<string | null>(null)
   const [sendingEmail, setSendingEmail] = useState<string | null>(null)
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null)
   const [editingClientEmail, setEditingClientEmail] = useState<{ clientId: string; email: string } | null>(null)
   const { toast } = useToast()
 
-  // Get current month key (YYYY-MM format)
-  const currentMonthKey = useMemo(() => {
-    const now = new Date()
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  // Get current year
+  const currentYear = useMemo(() => {
+    return new Date().getFullYear()
   }, [])
 
-  // Initialize: expand current month
+  // Initialize: expand first group
   useEffect(() => {
-    setExpandedMonths(new Set([currentMonthKey]))
-  }, [currentMonthKey])
+    if (invoicesData.length > 0) {
+      // Will be set after grouping is calculated
+    }
+  }, [invoicesData.length])
 
-  // Format invoices
-  const invoices = useMemo(() => {
-    return invoicesData.map((inv: Invoice) => {
-      // Use month/year from invoice, or fallback to uploaded_at
-      const monthKey = inv.year && inv.month 
-        ? `${inv.year}-${String(inv.month).padStart(2, '0')}`
-        : currentMonthKey
-      
-      const monthName = inv.year && inv.month
-        ? new Date(inv.year, inv.month - 1).toLocaleString('default', { month: 'long', year: 'numeric' })
-        : new Date().toLocaleString('default', { month: 'long', year: 'numeric' })
-
+  // Format invoices and group by client and year
+  const invoicesByClientAndYear = useMemo(() => {
+    const formatted: FormattedInvoice[] = invoicesData.map((inv: Invoice) => {
       const date = inv.uploaded_at ? new Date(inv.uploaded_at) : new Date()
+      const year = inv.year || date.getFullYear()
+      const clientName = inv.client_name || 'Sem cliente'
+      const clientId = inv.client_id || 'unknown'
+      
+      // Create group key: clientId-year
+      const groupKey = `${clientId}-${year}`
+      const groupLabel = `${clientName} - ${year}`
 
       return {
         ...inv,
         lastModified: date,
-        monthKey,
-        monthName,
+        groupKey,
+        groupLabel,
         sentToClient: inv.sent_to_client === 1 || inv.sent_to_client === true,
         sentToAccountant: inv.sent_to_accountant === 1 || inv.sent_to_accountant === true,
       }
     })
-  }, [invoicesData, currentMonthKey])
 
-  // Group invoices by month
-  const invoicesByMonth = useMemo(() => {
-    const grouped: Record<string, { monthName: string; invoices: FormattedInvoice[] }> = {}
-    invoices.forEach((inv: FormattedInvoice) => {
-      if (!grouped[inv.monthKey]) {
-        grouped[inv.monthKey] = {
-          monthName: inv.monthName,
+    // Group by client and year
+    const grouped: Record<string, { groupLabel: string; clientName: string; year: number; invoices: FormattedInvoice[] }> = {}
+    formatted.forEach((inv: FormattedInvoice) => {
+      if (!grouped[inv.groupKey]) {
+        const year = inv.year || new Date(inv.uploaded_at || Date.now()).getFullYear()
+        const clientName = inv.client_name || 'Sem cliente'
+        grouped[inv.groupKey] = {
+          groupLabel: inv.groupLabel,
+          clientName,
+          year,
           invoices: [],
         }
       }
-      grouped[inv.monthKey].invoices.push(inv)
+      grouped[inv.groupKey].invoices.push(inv)
     })
-    return grouped
-  }, [invoices])
 
-  const toggleMonth = (monthKey: string) => {
-    setExpandedMonths((prev) => {
-      const newSet = new Set(prev)
-      if (newSet.has(monthKey)) {
-        newSet.delete(monthKey)
+    // Sort invoices within each group by date (newest first)
+    Object.values(grouped).forEach((group) => {
+      group.invoices.sort((a, b) => {
+        const dateA = a.uploaded_at ? new Date(a.uploaded_at).getTime() : 0
+        const dateB = b.uploaded_at ? new Date(b.uploaded_at).getTime() : 0
+        return dateB - dateA
+      })
+    })
+
+    return grouped
+  }, [invoicesData])
+
+  // Initialize: expand first group or current year groups
+  useEffect(() => {
+    const groupKeys = Object.keys(invoicesByClientAndYear)
+    if (groupKeys.length > 0 && expandedGroups.size === 0) {
+      // Expand groups from current year first, or first group if none from current year
+      const currentYearGroups = groupKeys.filter(key => {
+        const group = invoicesByClientAndYear[key]
+        return group.year === currentYear
+      })
+      
+      if (currentYearGroups.length > 0) {
+        setExpandedGroups(new Set(currentYearGroups))
       } else {
-        newSet.add(monthKey)
+        setExpandedGroups(new Set([groupKeys[0]]))
+      }
+    }
+  }, [invoicesByClientAndYear, currentYear, expandedGroups.size])
+
+  const toggleGroup = (groupKey: string) => {
+    setExpandedGroups((prev) => {
+      const newSet = new Set(prev)
+      if (newSet.has(groupKey)) {
+        newSet.delete(groupKey)
+      } else {
+        newSet.add(groupKey)
       }
       return newSet
     })
   }
+
+  // Create flat list of all invoices for lookup
+  const allInvoices = useMemo(() => {
+    return Object.values(invoicesByClientAndYear).flatMap(group => group.invoices)
+  }, [invoicesByClientAndYear])
+
+  // Sort groups: by client name, then by year (descending)
+  const sortedGroups = useMemo(() => {
+    return Object.entries(invoicesByClientAndYear).sort(([keyA, groupA], [keyB, groupB]) => {
+      // First sort by client name
+      const clientCompare = groupA.clientName.localeCompare(groupB.clientName)
+      if (clientCompare !== 0) return clientCompare
+      // Then by year (descending)
+      return groupB.year - groupA.year
+    })
+  }, [invoicesByClientAndYear])
 
   const handleStateChange = useCallback(async (invoiceId: string, updates: {
     sentToClient?: boolean
@@ -141,7 +186,7 @@ export default function FileList() {
     try {
       setSendingEmail(`${invoiceId}-${recipientType}`)
       
-      const invoice = invoices.find((inv: FormattedInvoice) => inv.id === invoiceId)
+      const invoice = allInvoices.find((inv: FormattedInvoice) => inv.id === invoiceId)
       if (!invoice) {
         throw new Error('Invoice not found')
       }
@@ -217,7 +262,7 @@ export default function FileList() {
     } finally {
       setSendingEmail(null)
     }
-  }, [invoices, toast, handleStateChange, sendEmailMutation, emailTemplates])
+  }, [allInvoices, toast, handleStateChange, sendEmailMutation, emailTemplates])
 
   const handleDelete = useCallback(async (invoiceId: string, clientName: string) => {
     try {
@@ -281,7 +326,7 @@ export default function FileList() {
     )
   }
 
-  if (invoices.length === 0) {
+  if (Object.keys(invoicesByClientAndYear).length === 0) {
     return (
       <Card className="w-full">
         <CardContent className="p-6">
@@ -293,17 +338,23 @@ export default function FileList() {
 
   return (
     <div className="w-full space-y-4">
-      {Object.entries(invoicesByMonth).map(([monthKey, group]) => {
-        const isExpanded = expandedMonths.has(monthKey)
+      {sortedGroups.map(([groupKey, group]) => {
+        const isExpanded = expandedGroups.has(groupKey)
+        const totalAmount = group.invoices.reduce((sum, inv) => sum + (inv.invoice_amount || 0), 0)
         return (
-          <Card key={monthKey}>
-            <Collapsible open={isExpanded} onOpenChange={() => toggleMonth(monthKey)}>
+          <Card key={groupKey}>
+            <Collapsible open={isExpanded} onOpenChange={() => toggleGroup(groupKey)}>
               <CollapsibleTrigger className="w-full p-4">
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4" />
-                  <span className="font-semibold">{group.monthName}</span>
-                  <span className="text-sm text-muted-foreground">
-                    ({group.invoices.length} {group.invoices.length === 1 ? 'invoice' : 'invoices'})
+                <div className="flex items-center justify-between w-full">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-4 w-4" />
+                    <span className="font-semibold">{group.groupLabel}</span>
+                    <span className="text-sm text-muted-foreground">
+                      ({group.invoices.length} {group.invoices.length === 1 ? 'invoice' : 'invoices'})
+                    </span>
+                  </div>
+                  <span className="text-sm font-medium text-muted-foreground">
+                    {formatCurrency(totalAmount)}
                   </span>
                 </div>
               </CollapsibleTrigger>
