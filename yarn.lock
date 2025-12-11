@@ -6270,6 +6270,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"react-is@npm:^19.0.0":
+  version: 19.2.2
+  resolution: "react-is@npm:19.2.2"
+  checksum: 10c0/e8ccabc8a3479bf3423661066518e38ac1ed001509b25d1652e855b65d29cc1c4d54005505974ccfb956ce04c03912379d8a0624b4e0a23411593ec1fc976d7c
+  languageName: node
+  linkType: hard
+
 "react-redux@npm:8.x.x || 9.x.x":
   version: 9.2.0
   resolution: "react-redux@npm:9.2.0"
@@ -7070,6 +7077,7 @@ __metadata:
     react-dom: "npm:^19.0.0"
     react-dropzone: "npm:^14.3.8"
     react-grab: "npm:^0.0.54"
+    react-is: "npm:^19.0.0"
     recharts: "npm:^3.5.1"
     tailwind-merge: "npm:^3.4.0"
     tailwindcss: "npm:3.4.1"
