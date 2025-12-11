@@ -59,6 +59,11 @@ async function initDatabase() {
     await emailTemplatesCollection.createIndex({ user_id: 1 })
     await emailTemplatesCollection.createIndex({ type: 1 })
 
+    const emailAccountsCollection = db.collection('email_accounts')
+    await emailAccountsCollection.createIndex({ id: 1 }, { unique: true })
+    await emailAccountsCollection.createIndex({ user_id: 1 })
+    await emailAccountsCollection.createIndex({ user_id: 1, is_default: 1 })
+
     const settingsCollection = db.collection('settings')
     await settingsCollection.createIndex({ user_id: 1, key: 1 }, { unique: true })
 

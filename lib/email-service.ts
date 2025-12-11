@@ -1,31 +1,119 @@
 /**
  * Email Service
- * Handles sending emails via Gmail SMTP
+ * Handles sending emails via SMTP with support for multiple accounts
  */
 
 import nodemailer from 'nodemailer'
 import { getFile } from './storage'
+import { getEmailAccount, getDefaultEmailAccount } from './db-client'
+import type { EmailAccount } from '@/types'
 
-// Create reusable transporter
-let transporter: nodemailer.Transporter | null = null
+// Cache for transporters (keyed by account ID or 'env' for env vars)
+const transporterCache = new Map<string, nodemailer.Transporter>()
 
-function getTransporter() {
-  if (!transporter) {
-    if (!process.env.SMTP_HOST || !process.env.SMTP_PORT || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
-      throw new Error('SMTP configuration missing. Please set SMTP_HOST, SMTP_PORT, SMTP_USER, and SMTP_PASS environment variables.')
+/**
+ * Get transporter for a specific email account
+ */
+async function getTransporterForAccount(accountId?: string, userId?: string): Promise<{
+  transporter: nodemailer.Transporter
+  fromEmail: string
+}> {
+  // If accountId provided, use that account
+  if (accountId && userId) {
+    const cacheKey = `account-${accountId}`
+    
+    if (transporterCache.has(cacheKey)) {
+      const account = await getEmailAccount(accountId, userId)
+      if (account) {
+        return {
+          transporter: transporterCache.get(cacheKey)!,
+          fromEmail: account.email,
+        }
+      }
     }
-
-    transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: parseInt(process.env.SMTP_PORT),
-      secure: process.env.SMTP_PORT === '465', // true for 465, false for other ports
+    
+    const account = await getEmailAccount(accountId, userId)
+    if (!account) {
+      throw new Error(`Email account ${accountId} not found`)
+    }
+    
+    const transporter = nodemailer.createTransport({
+      host: account.smtp_host,
+      port: account.smtp_port,
+      secure: account.smtp_port === 465,
       auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
+        user: account.smtp_user,
+        pass: account.smtp_pass,
       },
     })
+    
+    transporterCache.set(cacheKey, transporter)
+    return {
+      transporter,
+      fromEmail: account.email,
+    }
   }
-  return transporter
+  
+  // Try to get default account if userId provided
+  if (userId) {
+    const defaultAccount = await getDefaultEmailAccount(userId)
+    if (defaultAccount) {
+      const cacheKey = `account-${defaultAccount.id}`
+      
+      if (transporterCache.has(cacheKey)) {
+        return {
+          transporter: transporterCache.get(cacheKey)!,
+          fromEmail: defaultAccount.email,
+        }
+      }
+      
+      const transporter = nodemailer.createTransport({
+        host: defaultAccount.smtp_host,
+        port: defaultAccount.smtp_port,
+        secure: defaultAccount.smtp_port === 465,
+        auth: {
+          user: defaultAccount.smtp_user,
+          pass: defaultAccount.smtp_pass,
+        },
+      })
+      
+      transporterCache.set(cacheKey, transporter)
+      return {
+        transporter,
+        fromEmail: defaultAccount.email,
+      }
+    }
+  }
+  
+  // Fallback to environment variables
+  const cacheKey = 'env'
+  
+  if (transporterCache.has(cacheKey)) {
+    return {
+      transporter: transporterCache.get(cacheKey)!,
+      fromEmail: process.env.SMTP_FROM || process.env.SMTP_USER || '',
+    }
+  }
+  
+  if (!process.env.SMTP_HOST || !process.env.SMTP_PORT || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+    throw new Error('SMTP configuration missing. Please set SMTP_HOST, SMTP_PORT, SMTP_USER, and SMTP_PASS environment variables, or configure an email account in settings.')
+  }
+
+  const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: parseInt(process.env.SMTP_PORT),
+    secure: process.env.SMTP_PORT === '465',
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+  })
+  
+  transporterCache.set(cacheKey, transporter)
+  return {
+    transporter,
+    fromEmail: process.env.SMTP_FROM || process.env.SMTP_USER || '',
+  }
 }
 
 /**
@@ -42,8 +130,12 @@ export async function sendEmailWithAttachments(data: {
     content?: Buffer
     contentType?: string
   }>
+  accountId?: string // Optional: specific email account to use
+  userId?: string // Required if using accountId
 }) {
-  const { to, cc, subject, html, attachments = [] } = data
+  const { to, cc, subject, html, attachments = [], accountId, userId } = data
+
+  const { transporter, fromEmail } = await getTransporterForAccount(accountId, userId)
 
   const mailOptions: {
     from?: string
@@ -58,7 +150,7 @@ export async function sendEmailWithAttachments(data: {
     }>
     cc?: string | string[]
   } = {
-    from: process.env.SMTP_FROM || process.env.SMTP_USER || '',
+    from: fromEmail,
     to,
     subject,
     html,
@@ -76,7 +168,6 @@ export async function sendEmailWithAttachments(data: {
     mailOptions.cc = Array.isArray(cc) ? cc : [cc]
   }
 
-  const transporter = getTransporter()
   const info = await transporter.sendMail(mailOptions)
   
   return info
@@ -93,8 +184,10 @@ export async function sendInvoiceToClient(data: {
   body: string
   fileKeys: string[] // Array of file keys to attach
   ccEmails?: string[] // Array of CC email addresses
+  accountId?: string // Optional: specific email account to use
+  userId?: string // Required if using accountId
 }) {
-  const { clientEmail, subject, body, fileKeys, ccEmails } = data
+  const { clientEmail, subject, body, fileKeys, ccEmails, accountId, userId } = data
 
   // Get files from blob storage
   const attachments = await Promise.all(
@@ -127,6 +220,8 @@ export async function sendInvoiceToClient(data: {
     subject,
     html: body.replace(/\n/g, '<br>'),
     attachments,
+    accountId,
+    userId,
   })
 }
 
@@ -140,8 +235,10 @@ export async function sendInvoiceToAccountant(data: {
   subject: string
   body: string
   fileKeys: string[] // Only invoice files, not timesheet
+  accountId?: string // Optional: specific email account to use
+  userId?: string // Required if using accountId
 }) {
-  const { accountantEmail, subject, body, fileKeys } = data
+  const { accountantEmail, subject, body, fileKeys, accountId, userId } = data
 
   // Get files from blob storage
   const attachments = await Promise.all(
@@ -172,15 +269,17 @@ export async function sendInvoiceToAccountant(data: {
     subject,
     html: body.replace(/\n/g, '<br>'),
     attachments,
+    accountId,
+    userId,
   })
 }
 
 /**
  * Verify SMTP connection
  */
-export async function verifySMTPConnection() {
+export async function verifySMTPConnection(accountId?: string, userId?: string) {
   try {
-    const transporter = getTransporter()
+    const { transporter } = await getTransporterForAccount(accountId, userId)
     await transporter.verify()
     return { success: true }
   } catch (error: unknown) {

@@ -3,9 +3,11 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Menu, X, FileText, Settings, Users, FileCode, TrendingUp, LogOut } from 'lucide-react'
+import { Menu, X, FileText, Settings, Users, FileCode, TrendingUp, LogOut, Mail } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useSession, signOut } from '@/lib/auth-client'
+import Tour from '@/components/Tour'
+import { useTour, tourSteps } from '@/lib/hooks/use-tour'
 
 interface DashboardLayoutProps {
   children: React.ReactNode
@@ -17,6 +19,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname()
   const router = useRouter()
   const { data: session, isPending } = useSession()
+  const { showTour, completeTour, skipTour } = useTour()
 
   useEffect(() => {
     setMounted(true)
@@ -91,6 +94,11 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       href: '/settings/general',
       icon: Settings,
     },
+    {
+      name: 'SMTP',
+      href: '/settings/email-accounts',
+      icon: Mail,
+    },
   ]
 
   return (
@@ -123,7 +131,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 p-4 space-y-6 overflow-y-auto">
+          <nav className="flex-1 p-4 space-y-6 overflow-y-auto" data-tour="sidebar-nav">
             {/* Main Section */}
             <div className="space-y-2">
               {mainMenuItems.map((item) => {
@@ -134,6 +142,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   <Link
                     key={item.href}
                     href={item.href}
+                    data-tour="nav-invoices"
                     onClick={() => setSidebarOpen(false)}
                     className={cn(
                       'flex items-center gap-3 px-4 py-3 rounded-lg transition-colors',
@@ -167,6 +176,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   <Link
                     key={item.href}
                     href={item.href}
+                    data-tour="nav-finances"
                     onClick={() => setSidebarOpen(false)}
                     className={cn(
                       'flex items-center gap-3 px-4 py-3 rounded-lg transition-colors',
@@ -186,7 +196,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             <div className="border-t border-border" />
 
             {/* Settings Section */}
-            <div className="space-y-2">
+            <div className="space-y-2" data-tour="nav-settings">
               <div className="px-4 py-2">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   Configurações
@@ -250,10 +260,19 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         </header>
 
         {/* Page content */}
-        <main className="p-4 lg:p-8 h-[calc(100vh-64px)] overflow-y-auto">
+        <main className="p-4 lg:p-8 h-[calc(100vh-64px)] overflow-y-auto" data-tour="main-content">
           {children}
         </main>
       </div>
+
+      {/* Tour */}
+      {showTour && (
+        <Tour
+          steps={tourSteps}
+          onComplete={completeTour}
+          onSkip={skipTour}
+        />
+      )}
     </div>
   )
 }

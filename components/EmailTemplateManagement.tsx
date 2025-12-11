@@ -422,7 +422,7 @@ export default function EmailTemplateManagement() {
                       value={field.state.value}
                       onBlur={field.handleBlur}
                       onChange={(e) => field.handleChange(e.target.value)}
-                      placeholder="Dear {{clientName}},\n\nPlease find attached invoice {{invoiceName}}.\n\nAmount: {{invoiceAmount}}\nDue Date: {{dueDate}}\n\nThank you!"
+                      placeholder="Olá {{clientName}},\n\nSegue em anexo a invoice {{invoiceName}}.\n\nValor: {{invoiceAmount}}\nPeríodo: {{monthYear}}\n\nAtenciosamente"
                       rows={8}
                       className="w-full"
                       onFocus={() => {

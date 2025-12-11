@@ -4,7 +4,7 @@
  */
 
 import { getDatabase } from './db'
-import type { Client, Invoice, EmailTemplate } from '@/types'
+import type { Client, Invoice, EmailTemplate, EmailAccount } from '@/types'
 
 interface CreateClientData {
   name: string
@@ -30,6 +30,26 @@ interface UpdateEmailTemplateData {
   subject?: string
   body?: string
   type?: string
+}
+
+interface CreateEmailAccountData {
+  name: string
+  email: string
+  smtp_host: string
+  smtp_port: number
+  smtp_user: string
+  smtp_pass: string
+  is_default?: boolean
+}
+
+interface UpdateEmailAccountData {
+  name?: string
+  email?: string
+  smtp_host?: string
+  smtp_port?: number
+  smtp_user?: string
+  smtp_pass?: string
+  is_default?: boolean
 }
 
 /**
@@ -652,4 +672,150 @@ export async function getEmailHistory(invoiceId: string, userId: string) {
     ...email,
     template_name: email.template_id ? templateMap.get(email.template_id)?.subject : null,
   }))
+}
+
+/**
+ * Get all email accounts for a user
+ */
+export async function getEmailAccounts(userId: string): Promise<EmailAccount[]> {
+  const db = await getDatabase()
+  const accounts = await db.collection('email_accounts')
+    .find({ user_id: userId })
+    .sort({ is_default: -1, created_at: 1 })
+    .toArray()
+  
+  return accounts.map((account) => ({
+    id: account.id,
+    name: account.name || '',
+    email: account.email || '',
+    smtp_host: account.smtp_host || '',
+    smtp_port: account.smtp_port || 587,
+    smtp_user: account.smtp_user || '',
+    smtp_pass: account.smtp_pass || '',
+    is_default: account.is_default || false,
+    created_at: account.created_at?.toISOString(),
+    updated_at: account.updated_at?.toISOString(),
+  })) as EmailAccount[]
+}
+
+/**
+ * Get email account by ID
+ */
+export async function getEmailAccount(accountId: string, userId: string): Promise<EmailAccount | null> {
+  const db = await getDatabase()
+  const account = await db.collection('email_accounts').findOne({ id: accountId, user_id: userId })
+  if (!account) return null
+  
+  return {
+    id: account.id,
+    name: account.name || '',
+    email: account.email || '',
+    smtp_host: account.smtp_host || '',
+    smtp_port: account.smtp_port || 587,
+    smtp_user: account.smtp_user || '',
+    smtp_pass: account.smtp_pass || '',
+    is_default: account.is_default || false,
+    created_at: account.created_at?.toISOString(),
+    updated_at: account.updated_at?.toISOString(),
+  } as EmailAccount
+}
+
+/**
+ * Get default email account for a user
+ */
+export async function getDefaultEmailAccount(userId: string): Promise<EmailAccount | null> {
+  const db = await getDatabase()
+  const account = await db.collection('email_accounts').findOne({ 
+    user_id: userId, 
+    is_default: true 
+  })
+  
+  if (!account) return null
+  
+  return {
+    id: account.id,
+    name: account.name || '',
+    email: account.email || '',
+    smtp_host: account.smtp_host || '',
+    smtp_port: account.smtp_port || 587,
+    smtp_user: account.smtp_user || '',
+    smtp_pass: account.smtp_pass || '',
+    is_default: account.is_default || false,
+    created_at: account.created_at?.toISOString(),
+    updated_at: account.updated_at?.toISOString(),
+  } as EmailAccount
+}
+
+/**
+ * Create a new email account
+ */
+export async function createEmailAccount(data: CreateEmailAccountData, userId: string): Promise<string> {
+  const db = await getDatabase()
+  const id = `email-account-${Date.now()}`
+  const { name, email, smtp_host, smtp_port, smtp_user, smtp_pass, is_default } = data
+  
+  // If this is set as default, unset all other defaults
+  if (is_default) {
+    await db.collection('email_accounts').updateMany(
+      { user_id: userId, is_default: true },
+      { $set: { is_default: false, updated_at: new Date() } }
+    )
+  }
+  
+  await db.collection('email_accounts').insertOne({
+    id,
+    user_id: userId,
+    name,
+    email,
+    smtp_host,
+    smtp_port,
+    smtp_user,
+    smtp_pass,
+    is_default: is_default || false,
+    created_at: new Date(),
+    updated_at: null,
+  })
+  
+  return id
+}
+
+/**
+ * Update an email account
+ */
+export async function updateEmailAccount(accountId: string, data: UpdateEmailAccountData, userId: string) {
+  const db = await getDatabase()
+  const update: Record<string, unknown> = {
+    updated_at: new Date(),
+  }
+  
+  if (data.name !== undefined) update.name = data.name
+  if (data.email !== undefined) update.email = data.email
+  if (data.smtp_host !== undefined) update.smtp_host = data.smtp_host
+  if (data.smtp_port !== undefined) update.smtp_port = data.smtp_port
+  if (data.smtp_user !== undefined) update.smtp_user = data.smtp_user
+  if (data.smtp_pass !== undefined) update.smtp_pass = data.smtp_pass
+  
+  // If setting as default, unset all other defaults
+  if (data.is_default === true) {
+    await db.collection('email_accounts').updateMany(
+      { user_id: userId, is_default: true, id: { $ne: accountId } },
+      { $set: { is_default: false, updated_at: new Date() } }
+    )
+    update.is_default = true
+  } else if (data.is_default === false) {
+    update.is_default = false
+  }
+  
+  await db.collection('email_accounts').updateOne(
+    { id: accountId, user_id: userId },
+    { $set: update }
+  )
+}
+
+/**
+ * Delete an email account
+ */
+export async function deleteEmailAccount(accountId: string, userId: string) {
+  const db = await getDatabase()
+  await db.collection('email_accounts').deleteOne({ id: accountId, user_id: userId })
 }

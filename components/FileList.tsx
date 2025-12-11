@@ -205,12 +205,22 @@ export default function FileList() {
       if (template) {
         templateId = template.id
         
+        // Format month name in Portuguese
+        const monthNames = [
+          'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+          'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+        ]
+        const monthName = invoice.month ? monthNames[invoice.month - 1] || String(invoice.month) : ''
+        const monthYear = invoice.month && invoice.year ? `${monthName} ${invoice.year}` : (invoice.year ? String(invoice.year) : '')
+        
         // Replace template variables in subject
         subject = template.subject
           .replace(/\{\{clientName\}\}/g, invoice.client_name || '')
           .replace(/\{\{invoiceName\}\}/g, invoice.id || '')
           .replace(/\{\{invoiceAmount\}\}/g, invoice.invoice_amount ? new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(invoice.invoice_amount) : '')
-          .replace(/\{\{dueDate\}\}/g, invoice.due_date ? new Date(invoice.due_date).toLocaleDateString('pt-PT') : '')
+          .replace(/\{\{month\}\}/g, invoice.month ? String(invoice.month) : '')
+          .replace(/\{\{year\}\}/g, invoice.year ? String(invoice.year) : '')
+          .replace(/\{\{monthYear\}\}/g, monthYear)
           .replace(/\{\{downloadLink\}\}/g, '') // Not applicable for attachments
         
         // Replace template variables in body
@@ -218,7 +228,9 @@ export default function FileList() {
           .replace(/\{\{clientName\}\}/g, invoice.client_name || '')
           .replace(/\{\{invoiceName\}\}/g, invoice.id || '')
           .replace(/\{\{invoiceAmount\}\}/g, invoice.invoice_amount ? new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(invoice.invoice_amount) : '')
-          .replace(/\{\{dueDate\}\}/g, invoice.due_date ? new Date(invoice.due_date).toLocaleDateString('pt-PT') : '')
+          .replace(/\{\{month\}\}/g, invoice.month ? String(invoice.month) : '')
+          .replace(/\{\{year\}\}/g, invoice.year ? String(invoice.year) : '')
+          .replace(/\{\{monthYear\}\}/g, monthYear)
           .replace(/\{\{downloadLink\}\}/g, '') // Not applicable for attachments
       } else {
         // Fallback to default if no template found

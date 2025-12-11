@@ -65,3 +65,16 @@ export interface ExtractedPDFData {
   confidence: 'high' | 'medium' | 'low'
 }
 
+export interface EmailAccount {
+  id: string
+  name: string
+  email: string // The "from" email address
+  smtp_host: string
+  smtp_port: number
+  smtp_user: string
+  smtp_pass: string // Encrypted or plain (will be encrypted in production)
+  is_default?: boolean
+  created_at?: string
+  updated_at?: string
+}
+
