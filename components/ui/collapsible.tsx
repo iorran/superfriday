@@ -53,7 +53,13 @@ const CollapsibleTrigger = React.forwardRef<HTMLButtonElement, CollapsibleTrigge
     onOpenChange,
     ...props 
   }, ref) => {
-    // onOpenChange is already extracted, props doesn't contain it
+    const handleClick = React.useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+      e.preventDefault()
+      e.stopPropagation()
+      // Always toggle - let parent handle the state
+      onOpenChange?.(!open)
+    }, [open, onOpenChange])
+    
     return (
       <button
         ref={ref}
@@ -62,7 +68,7 @@ const CollapsibleTrigger = React.forwardRef<HTMLButtonElement, CollapsibleTrigge
           "flex w-full items-center justify-between p-4 text-left font-medium transition-all hover:bg-accent [&[data-state=open]>svg]:rotate-180",
           className
         )}
-        onClick={() => onOpenChange?.(!open)}
+        onClick={handleClick}
         data-state={open ? "open" : "closed"}
         {...props}
       >

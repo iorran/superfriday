@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/use-toast'
@@ -131,11 +131,16 @@ export default function FileList() {
     return grouped
   }, [invoicesData])
 
-  // Initialize: expand first group or current year groups
+  // Initialize: expand first group or current year groups (only once on initial load)
+  const hasInitialized = useRef(false)
+  
   useEffect(() => {
     const groupKeys = Object.keys(invoicesByClientAndYear)
-    if (groupKeys.length > 0 && expandedGroups.size === 0) {
-      // Expand groups from current year first, or first group if none from current year
+    
+    // Only auto-expand on the very first load when we have groups and haven't initialized yet
+    // This prevents re-expanding when user manually closes all groups
+    if (groupKeys.length > 0 && !hasInitialized.current) {
+      // Initial load - expand current year groups
       const currentYearGroups = groupKeys.filter(key => {
         const group = invoicesByClientAndYear[key]
         return group.year === currentYear
@@ -146,11 +151,13 @@ export default function FileList() {
       } else {
         setExpandedGroups(new Set([groupKeys[0]]))
       }
+      hasInitialized.current = true
     }
-  }, [invoicesByClientAndYear, currentYear, expandedGroups.size])
+  }, [invoicesByClientAndYear, currentYear])
 
-  const toggleGroup = (groupKey: string) => {
+  const toggleGroup = useCallback((groupKey: string) => {
     setExpandedGroups((prev) => {
+      // Create a completely new Set to ensure React detects the change
       const newSet = new Set(prev)
       if (newSet.has(groupKey)) {
         newSet.delete(groupKey)
@@ -159,7 +166,16 @@ export default function FileList() {
       }
       return newSet
     })
-  }
+  }, [])
+  
+  // Create a memoized map of toggle handlers to ensure stability
+  const toggleHandlers = useMemo(() => {
+    const handlers: Record<string, () => void> = {}
+    Object.keys(invoicesByClientAndYear).forEach((key) => {
+      handlers[key] = () => toggleGroup(key)
+    })
+    return handlers
+  }, [invoicesByClientAndYear, toggleGroup])
 
   // Create flat list of all invoices for lookup
   const allInvoices = useMemo(() => {
@@ -395,9 +411,14 @@ export default function FileList() {
       {sortedGroups.map(([groupKey, group]) => {
         const isExpanded = expandedGroups.has(groupKey)
         const totalAmount = group.invoices.reduce((sum, inv) => sum + (inv.invoice_amount || 0), 0)
+        const handleToggle = toggleHandlers[groupKey] || (() => toggleGroup(groupKey))
+        
         return (
           <Card key={groupKey}>
-            <Collapsible open={isExpanded} onOpenChange={() => toggleGroup(groupKey)}>
+            <Collapsible 
+              open={isExpanded} 
+              onOpenChange={handleToggle}
+            >
               <CollapsibleTrigger className="w-full p-4">
                 <div className="flex items-center justify-between w-full">
                   <div className="flex items-center gap-2">
