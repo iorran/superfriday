@@ -8,13 +8,13 @@ export default function BuildInfo() {
 
   // Build metadata - simplified for Next.js
   const buildInfo = {
-    commitSha: process.env.NEXT_PUBLIC_BUILD_COMMIT_SHA || 'dev',
+    commitSha: process.env.NEXT_PUBLIC_BUILD_COMMIT_SHA || '',
     buildDate: process.env.NEXT_PUBLIC_BUILD_DATE || new Date().toISOString(),
-    branch: process.env.NEXT_PUBLIC_BUILD_BRANCH || 'local',
-    buildNumber: process.env.NEXT_PUBLIC_BUILD_NUMBER || '0',
+    branch: process.env.NEXT_PUBLIC_BUILD_BRANCH || '',
+    buildNumber: process.env.NEXT_PUBLIC_BUILD_NUMBER || '',
   }
 
-  const shortSha = buildInfo.commitSha.substring(0, 7)
+  const shortSha = buildInfo.commitSha ? buildInfo.commitSha.substring(0, 7) : 'dev'
   const buildDate = new Date(buildInfo.buildDate)
   const formattedDate = buildDate.toLocaleString('en-US', {
     month: 'short',
@@ -29,7 +29,7 @@ export default function BuildInfo() {
     // In production, you could call an API to check the latest deployment
     // For now, we'll assume it's latest (can be enhanced later)
     const checkLatest = async () => {
-      if (process.env.NODE_ENV === 'production' && buildInfo.commitSha !== 'dev') {
+      if (process.env.NODE_ENV === 'production' && buildInfo.commitSha) {
         try {
           // You could add an API endpoint to check latest build
           // For now, we'll just mark as latest
@@ -65,7 +65,7 @@ export default function BuildInfo() {
           </>
         )}
       </div>
-      {buildInfo.buildNumber !== '0' && (
+      {buildInfo.buildNumber && (
         <div className="mt-1 text-muted-foreground/70 text-center">
           Build #{buildInfo.buildNumber}
         </div>

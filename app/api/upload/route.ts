@@ -31,8 +31,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate file size (default: 10MB = 10485760 bytes)
-    const maxFileSize = parseInt(process.env.MAX_FILE_SIZE || '10485760', 10)
+    // Validate file size
+    if (!process.env.MAX_FILE_SIZE) {
+      return NextResponse.json(
+        { error: true, message: 'MAX_FILE_SIZE environment variable is required' },
+        { status: 500 }
+      )
+    }
+    const maxFileSize = parseInt(process.env.MAX_FILE_SIZE, 10)
     if (file.size > maxFileSize) {
       const maxSizeMB = (maxFileSize / 1024 / 1024).toFixed(1)
       return NextResponse.json(

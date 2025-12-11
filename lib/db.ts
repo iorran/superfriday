@@ -12,7 +12,7 @@ import { MongoClient, Db } from 'mongodb'
 const databaseUrl = process.env.MONGODB_URI || process.env.DATABASE_URL
 
 if (!databaseUrl) {
-  console.warn('Warning: MONGODB_URI or DATABASE_URL environment variable is not set')
+  throw new Error('MONGODB_URI or DATABASE_URL environment variable is required')
 }
 
 // Use global to store the client in development (prevents multiple connections during hot reload)

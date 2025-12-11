@@ -11,7 +11,7 @@ import { MongoClient, Db } from 'mongodb'
 const databaseUrl = process.env.MONGODB_URI || process.env.DATABASE_URL
 
 if (!databaseUrl) {
-  console.warn('Warning: MONGODB_URI or DATABASE_URL environment variable is not set')
+  throw new Error('MONGODB_URI or DATABASE_URL environment variable is required')
 }
 
 // Create a dedicated MongoDB connection for Better Auth
@@ -49,14 +49,30 @@ function getAuthDb(): Db {
   return authDbInstance
 }
 
+const baseURL = process.env.BETTER_AUTH_URL || process.env.NEXT_PUBLIC_BETTER_AUTH_URL
+if (!baseURL || baseURL.trim() === '') {
+  throw new Error('BETTER_AUTH_URL or NEXT_PUBLIC_BETTER_AUTH_URL environment variable is required and cannot be empty')
+}
+
+// Validate that baseURL is a valid absolute URL
+try {
+  new URL(baseURL)
+} catch {
+  throw new Error(`BETTER_AUTH_URL or NEXT_PUBLIC_BETTER_AUTH_URL must be a valid absolute URL (e.g., https://yourdomain.com). Got: ${baseURL}`)
+}
+
+if (!process.env.BETTER_AUTH_SECRET) {
+  throw new Error('BETTER_AUTH_SECRET environment variable is required')
+}
+
 export const auth = betterAuth({
   database: mongodbAdapter(getAuthDb()),
   emailAndPassword: {
     enabled: true,
   },
-  baseURL: process.env.BETTER_AUTH_URL || process.env.NEXT_PUBLIC_BETTER_AUTH_URL || 'http://localhost:3000',
+  baseURL,
   basePath: '/api/auth',
-  secret: process.env.BETTER_AUTH_SECRET || 'change-this-secret-in-production',
+  secret: process.env.BETTER_AUTH_SECRET,
 })
 
 export type Session = typeof auth.$Infer.Session
