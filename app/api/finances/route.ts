@@ -5,13 +5,20 @@
 
 import { NextResponse } from 'next/server'
 import { getDatabase } from '@/lib/db'
+import { requireAuth } from '@/lib/auth-server'
 
 export async function GET() {
   try {
+    const session = await requireAuth()
+    const userId = session.user.id
+
     const db = await getDatabase()
 
-    // Get all invoices with client info
+    // Get all invoices with client info for this user
     const invoices = await db.collection('invoices').aggregate([
+      {
+        $match: { user_id: userId }
+      },
       {
         $lookup: {
           from: 'clients',
@@ -104,6 +111,12 @@ export async function GET() {
       byYear: yearData,
     })
   } catch (error: unknown) {
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return NextResponse.json(
+        { error: true, message: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
     console.error('Error fetching finances:', error)
     const errorMessage = error instanceof Error ? error.message : 'Failed to fetch finances'
     return NextResponse.json(

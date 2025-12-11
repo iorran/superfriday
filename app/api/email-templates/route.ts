@@ -11,14 +11,18 @@ import {
   updateEmailTemplate,
   deleteEmailTemplate,
 } from '@/lib/db-client'
+import { requireAuth } from '@/lib/auth-server'
 
 export async function GET(request: NextRequest) {
   try {
+    const session = await requireAuth()
+    const userId = session.user.id
+
     const { searchParams } = new URL(request.url)
     const templateId = searchParams.get('id')
 
     if (templateId) {
-      const template = await getEmailTemplate(templateId)
+      const template = await getEmailTemplate(templateId, userId)
       if (!template) {
         return NextResponse.json(
           { error: true, message: 'Template not found' },
@@ -28,9 +32,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(template)
     }
 
-    const templates = await getEmailTemplates()
+    const templates = await getEmailTemplates(userId)
     return NextResponse.json(templates)
   } catch (error: unknown) {
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return NextResponse.json(
+        { error: true, message: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
     console.error('Error fetching email templates:', error)
     const errorMessage = error instanceof Error ? error.message : 'Failed to fetch email templates'
     return NextResponse.json(
@@ -42,10 +52,19 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const session = await requireAuth()
+    const userId = session.user.id
+
     const body = await request.json()
-    const id = await createEmailTemplate(body)
+    const id = await createEmailTemplate(body, userId)
     return NextResponse.json({ id })
   } catch (error: unknown) {
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return NextResponse.json(
+        { error: true, message: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
     console.error('Error creating email template:', error)
     const errorMessage = error instanceof Error ? error.message : 'Failed to create email template'
     return NextResponse.json(
@@ -57,6 +76,9 @@ export async function POST(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
+    const session = await requireAuth()
+    const userId = session.user.id
+
     const body = await request.json()
     const { id, ...updates } = body
 
@@ -67,9 +89,15 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
-    await updateEmailTemplate(id, updates)
+    await updateEmailTemplate(id, updates, userId)
     return NextResponse.json({ success: true })
   } catch (error: unknown) {
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return NextResponse.json(
+        { error: true, message: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
     console.error('Error updating email template:', error)
     const errorMessage = error instanceof Error ? error.message : 'Failed to update email template'
     return NextResponse.json(
@@ -81,6 +109,9 @@ export async function PATCH(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const session = await requireAuth()
+    const userId = session.user.id
+
     const { searchParams } = new URL(request.url)
     const templateId = searchParams.get('id')
 
@@ -91,9 +122,15 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    await deleteEmailTemplate(templateId)
+    await deleteEmailTemplate(templateId, userId)
     return NextResponse.json({ success: true })
   } catch (error: unknown) {
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return NextResponse.json(
+        { error: true, message: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
     console.error('Error deleting email template:', error)
     const errorMessage = error instanceof Error ? error.message : 'Failed to delete email template'
     return NextResponse.json(

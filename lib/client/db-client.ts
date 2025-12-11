@@ -153,10 +153,8 @@ export async function createInvoice(invoiceData: {
   clientId: string
   clientName?: string // Optional: name for new client if it needs to be created
   invoiceAmount: number
-  dueDate: string
   month: number
   year: number
-  notes?: string | null
   files: Array<{
     fileKey: string
     fileType: 'invoice' | 'timesheet'
@@ -210,7 +208,6 @@ export async function updateInvoiceState(invoiceId: string, updates: {
 export async function updateInvoice(invoiceId: string, updates: {
   clientId?: string
   invoiceAmount?: number
-  dueDate?: string
   month?: number
   year?: number
   filesToDelete?: string[]

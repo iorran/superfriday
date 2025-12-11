@@ -18,7 +18,6 @@ export type ClientFormData = z.infer<typeof clientSchema>
 export const invoiceSchema = z.object({
   clientId: z.string().min(1, 'Cliente é obrigatório'),
   invoiceAmount: z.coerce.number().positive('Valor deve ser positivo'),
-  dueDate: z.string().min(1, 'Data de vencimento é obrigatória'),
   month: z.coerce.number().int().min(1, 'Mês inválido').max(12, 'Mês inválido'),
   year: z.coerce.number().int().min(2020, 'Ano inválido').max(2100, 'Ano inválido'),
 })

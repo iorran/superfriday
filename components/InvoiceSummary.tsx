@@ -10,7 +10,6 @@ import type { Client } from '@/types'
 interface InvoiceSummaryProps {
   client: Client | null
   invoiceAmount: number
-  dueDate: string
   month: number
   year: number
   files: Array<{
@@ -19,17 +18,14 @@ interface InvoiceSummaryProps {
     originalName: string
     fileSize: number
   }>
-  notes?: string | null
 }
 
 export function InvoiceSummary({
   client,
   invoiceAmount,
-  dueDate,
   month,
   year,
   files,
-  notes,
 }: InvoiceSummaryProps) {
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('pt-PT', {
@@ -143,7 +139,7 @@ export function InvoiceSummary({
           </Card>
         </motion.div>
 
-        {/* Due Date Card */}
+        {/* Period Card */}
         <motion.div
           variants={cardVariants}
           initial="hidden"
@@ -157,12 +153,9 @@ export function InvoiceSummary({
                   <Calendar className="h-6 w-6 text-primary" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm text-muted-foreground mb-1">Data de Vencimento</p>
+                  <p className="text-sm text-muted-foreground mb-1">Período</p>
                   <p className="text-lg font-semibold">
-                    {formatDate(dueDate)}
-                  </p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Período: {getMonthName(month, year)}
+                    {getMonthName(month, year)}
                   </p>
                 </div>
               </div>
@@ -210,21 +203,6 @@ export function InvoiceSummary({
         </motion.div>
       </div>
 
-      {/* Notes */}
-      {notes && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5 }}
-        >
-          <Card>
-            <CardContent className="p-6">
-              <p className="text-sm text-muted-foreground mb-2">Notas</p>
-              <p className="text-sm whitespace-pre-wrap">{notes}</p>
-            </CardContent>
-          </Card>
-        </motion.div>
-      )}
     </div>
   )
 }

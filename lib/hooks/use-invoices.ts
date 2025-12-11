@@ -14,10 +14,8 @@ interface CreateInvoiceData {
   clientId: string
   clientName?: string // Optional: name for new client if it needs to be created
   invoiceAmount: number
-  dueDate: string
   month: number
   year: number
-  notes?: string | null
   files: Array<{
     fileKey: string
     fileType: 'invoice' | 'timesheet'
@@ -29,7 +27,6 @@ interface CreateInvoiceData {
 interface UpdateInvoiceData {
   clientId?: string
   invoiceAmount?: number
-  dueDate?: string
   month?: number
   year?: number
   filesToDelete?: string[]

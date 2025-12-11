@@ -7,10 +7,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { sendInvoiceToClient, sendInvoiceToAccountant } from '@/lib/email-service'
 import { updateInvoiceState, recordEmail, getInvoice, getAccountantEmail, getEmailTemplate } from '@/lib/db-client'
 import { getDatabase } from '@/lib/db'
+import { requireAuth } from '@/lib/auth-server'
 import type { Invoice, InvoiceFile } from '@/types'
 
 export async function POST(request: NextRequest) {
   try {
+    const session = await requireAuth()
+    const userId = session.user.id
+
     const body = await request.json()
     const { invoiceId, recipientType, templateId, subject, body: emailBody } = body
 
@@ -22,7 +26,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get invoice with client info
-    const invoice = await getInvoice(invoiceId) as Invoice | null
+    const invoice = await getInvoice(invoiceId, userId) as Invoice | null
     if (!invoice) {
       return NextResponse.json(
         { error: true, message: 'Invoice not found' },
@@ -47,7 +51,7 @@ export async function POST(request: NextRequest) {
     let finalBody = emailBody
     
     if (templateId) {
-      const template = await getEmailTemplate(templateId)
+      const template = await getEmailTemplate(templateId, userId)
       if (template) {
         console.log('Using template:', { templateId, templateSubject: template.subject, templateBody: String(template.body || '').substring(0, 50) })
         
@@ -96,7 +100,7 @@ export async function POST(request: NextRequest) {
       let ccEmails: string[] = []
       if (invoice.client_id) {
         const db = await getDatabase()
-        const client = await db.collection('clients').findOne({ id: invoice.client_id })
+        const client = await db.collection('clients').findOne({ id: invoice.client_id, user_id: userId })
         if (client && client.cc_emails) {
           // MongoDB stores arrays directly, no need to parse JSON
           ccEmails = Array.isArray(client.cc_emails)
@@ -126,7 +130,7 @@ export async function POST(request: NextRequest) {
       })
 
       // Update invoice state
-      await updateInvoiceState(invoiceId, { sentToClient: true })
+      await updateInvoiceState(invoiceId, { sentToClient: true }, userId)
     } else if (recipientType === 'accountant') {
       // Check if invoice was sent to client first
       if (!invoice.sent_to_client) {
@@ -136,7 +140,7 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      const accountantEmailResult = await getAccountantEmail()
+      const accountantEmailResult = await getAccountantEmail(userId)
       recipientEmail = accountantEmailResult || ''
 
       if (!recipientEmail) {
@@ -170,7 +174,7 @@ export async function POST(request: NextRequest) {
       })
 
       // Update invoice state
-      await updateInvoiceState(invoiceId, { sentToAccountant: true })
+      await updateInvoiceState(invoiceId, { sentToAccountant: true }, userId)
     } else {
       return NextResponse.json(
         { error: true, message: 'Invalid recipientType. Must be "client" or "accountant"' },
@@ -188,7 +192,7 @@ export async function POST(request: NextRequest) {
       subject: finalSubject || 'Invoice',
       body: finalBody || '',
       status: 'sent',
-    })
+    }, userId)
 
     return NextResponse.json({
       success: true,
@@ -199,6 +203,8 @@ export async function POST(request: NextRequest) {
     
     // Try to record failed email
     try {
+      const session = await requireAuth()
+      const userId = session.user.id
       const body = await request.json()
       await recordEmail({
         invoiceId: body.invoiceId,
@@ -208,11 +214,17 @@ export async function POST(request: NextRequest) {
         body: body.body || '',
         status: 'failed',
         errorMessage: error instanceof Error ? error.message : 'Unknown error',
-      })
+      }, userId)
     } catch {
       // Ignore record error
     }
 
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return NextResponse.json(
+        { error: true, message: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
     return NextResponse.json(
       { error: true, message: error instanceof Error ? error.message : 'Failed to send email' },
       { status: 500 }

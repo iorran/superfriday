@@ -5,12 +5,22 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createInvoice, getAllInvoices } from '@/lib/db-client'
+import { requireAuth } from '@/lib/auth-server'
 
 export async function GET() {
   try {
-    const invoices = await getAllInvoices()
+    const session = await requireAuth()
+    const userId = session.user.id
+
+    const invoices = await getAllInvoices(userId)
     return NextResponse.json(invoices)
   } catch (error: unknown) {
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return NextResponse.json(
+        { error: true, message: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
     console.error('Error fetching invoices:', error)
     const errorMessage = error instanceof Error ? error.message : 'Failed to fetch invoices'
     return NextResponse.json(
@@ -22,21 +32,22 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    const session = await requireAuth()
+    const userId = session.user.id
+
     const body = await request.json()
     const {
       clientId,
       clientName, // Optional: name for client if it needs to be created
       invoiceAmount,
-      dueDate,
       month,
       year,
-      notes,
       files,
     } = body
 
-    if (!clientId || !invoiceAmount || !dueDate || !month || !year || !files || files.length === 0) {
+    if (!clientId || !invoiceAmount || !month || !year || !files || files.length === 0) {
       return NextResponse.json(
-        { error: true, message: 'Missing required fields: clientId, invoiceAmount, dueDate, month, year, files' },
+        { error: true, message: 'Missing required fields: clientId, invoiceAmount, month, year, files' },
         { status: 400 }
       )
     }
@@ -71,18 +82,22 @@ export async function POST(request: NextRequest) {
       clientId,
       clientName: clientName || undefined, // Pass clientName if provided
       invoiceAmount: parseFloat(invoiceAmount),
-      dueDate,
       month: parseInt(month),
       year: parseInt(year),
-      notes: notes || null,
       files,
-    })
+    }, userId)
 
     return NextResponse.json({
       success: true,
       invoiceId,
     })
   } catch (error: unknown) {
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return NextResponse.json(
+        { error: true, message: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
     console.error('Invoice creation error:', error)
     const errorMessage = error instanceof Error ? error.message : 'Failed to create invoice'
     return NextResponse.json(

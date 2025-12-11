@@ -7,12 +7,16 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getInvoice, deleteInvoice, updateInvoice } from '@/lib/db-client'
 import { deleteFile } from '@/lib/storage'
 import { getDatabase } from '@/lib/db'
+import { requireAuth } from '@/lib/auth-server'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ invoiceId: string }> }
 ) {
   try {
+    const session = await requireAuth()
+    const userId = session.user.id
+
     const { invoiceId } = await params
 
     if (!invoiceId) {
@@ -22,7 +26,7 @@ export async function GET(
       )
     }
 
-    const invoice = await getInvoice(invoiceId)
+    const invoice = await getInvoice(invoiceId, userId)
 
     if (!invoice) {
       return NextResponse.json(
@@ -33,6 +37,12 @@ export async function GET(
 
     return NextResponse.json(invoice)
   } catch (error: unknown) {
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return NextResponse.json(
+        { error: true, message: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
     console.error('Error fetching invoice:', error)
     const errorMessage = error instanceof Error ? error.message : 'Failed to fetch invoice'
     return NextResponse.json(
@@ -47,6 +57,9 @@ export async function PATCH(
   { params }: { params: Promise<{ invoiceId: string }> }
 ) {
   try {
+    const session = await requireAuth()
+    const userId = session.user.id
+
     const { invoiceId } = await params
     const body = await request.json()
 
@@ -57,10 +70,16 @@ export async function PATCH(
       )
     }
 
-    await updateInvoice(invoiceId, body)
+    await updateInvoice(invoiceId, body, userId)
 
     return NextResponse.json({ success: true })
   } catch (error: unknown) {
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return NextResponse.json(
+        { error: true, message: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
     console.error('Error updating invoice:', error)
     const errorMessage = error instanceof Error ? error.message : 'Failed to update invoice'
     return NextResponse.json(
@@ -75,6 +94,9 @@ export async function DELETE(
   { params }: { params: Promise<{ invoiceId: string }> }
 ) {
   try {
+    const session = await requireAuth()
+    const userId = session.user.id
+
     const { invoiceId } = await params
 
     if (!invoiceId) {
@@ -87,7 +109,7 @@ export async function DELETE(
     // Get all file keys before deleting from database
     const db = await getDatabase()
     const files = await db.collection('invoice_files')
-      .find({ invoice_id: invoiceId })
+      .find({ invoice_id: invoiceId, user_id: userId })
       .project({ file_key: 1 })
       .toArray()
 
@@ -105,10 +127,16 @@ export async function DELETE(
     await Promise.allSettled(deletePromises)
 
     // Delete from database (this will also delete invoice_files records)
-    await deleteInvoice(invoiceId)
+    await deleteInvoice(invoiceId, userId)
 
     return NextResponse.json({ success: true })
   } catch (error: unknown) {
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return NextResponse.json(
+        { error: true, message: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
     console.error('Error deleting invoice:', error)
     const errorMessage = error instanceof Error ? error.message : 'Failed to delete invoice'
     return NextResponse.json(

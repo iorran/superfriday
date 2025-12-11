@@ -4,13 +4,17 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { del } from '@vercel/blob'
-import { deleteInvoice } from '@/lib/db-client'
+import { getDatabase } from '@/lib/db'
+import { requireAuth } from '@/lib/auth-server'
 
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ fileKey: string }> }
 ) {
   try {
+    const session = await requireAuth()
+    const userEmail = session.user.email
+
     if (!process.env.BLOB_READ_WRITE_TOKEN) {
       return NextResponse.json(
         { error: true, message: 'BLOB_READ_WRITE_TOKEN not configured' },
@@ -27,6 +31,15 @@ export async function DELETE(
       )
     }
 
+    // Verify file belongs to user (check if fileKey starts with user's email folder)
+    const sanitizedEmail = userEmail.replace(/[@.]/g, '_')
+    if (!fileKey.startsWith(sanitizedEmail + '/')) {
+      return NextResponse.json(
+        { error: true, message: 'Unauthorized' },
+        { status: 403 }
+      )
+    }
+
     // Delete from Vercel Blob
     try {
       await del(fileKey, {
@@ -40,11 +53,18 @@ export async function DELETE(
       }
     }
 
-    // Delete from database
-    await deleteInvoice(fileKey)
+    // Delete from database (remove file reference from invoice_files)
+    const db = await getDatabase()
+    await db.collection('invoice_files').deleteMany({ file_key: fileKey })
 
     return NextResponse.json({ success: true })
   } catch (error: unknown) {
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return NextResponse.json(
+        { error: true, message: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
     console.error('Error deleting file:', error)
     const errorMessage = error instanceof Error ? error.message : 'Failed to delete file'
     return NextResponse.json(

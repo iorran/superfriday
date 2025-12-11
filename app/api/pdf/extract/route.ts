@@ -4,6 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/auth-server'
 import type { ExtractedPDFData } from '@/types'
 
 /**
@@ -111,6 +112,9 @@ function mapVeryfiResponse(veryfiData: VeryfiResponse): ExtractedPDFData {
 export async function POST(request: NextRequest) {
   console.log('PDF extract route called')
   try {
+    // Require authentication
+    await requireAuth()
+
     // Check for Veryfi API credentials
     const clientId = process.env.VERYFI_CLIENT_ID
     const username = process.env.VERYFI_USERNAME
@@ -262,6 +266,12 @@ export async function POST(request: NextRequest) {
       data: extractedData,
     })
   } catch (error: unknown) {
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return NextResponse.json(
+        { error: true, message: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
     console.error('PDF extraction error:', error)
     const errorMessage = error instanceof Error 
       ? `${error.message}${error.stack ? `\nStack: ${error.stack.substring(0, 500)}` : ''}` 

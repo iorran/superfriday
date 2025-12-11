@@ -35,9 +35,9 @@ interface UpdateEmailTemplateData {
 /**
  * Get all clients
  */
-export async function getClients() {
+export async function getClients(userId: string) {
   const db = await getDatabase()
-  const clients = await db.collection('clients').find({}).sort({ name: 1 }).toArray()
+  const clients = await db.collection('clients').find({ user_id: userId }).sort({ name: 1 }).toArray()
   return clients.map((client) => ({
     ...client,
     name: client.name || '',
@@ -48,9 +48,9 @@ export async function getClients() {
 /**
  * Get client by ID
  */
-export async function getClient(clientId: string): Promise<Client | null> {
+export async function getClient(clientId: string, userId: string): Promise<Client | null> {
   const db = await getDatabase()
-  const client = await db.collection('clients').findOne({ id: clientId })
+  const client = await db.collection('clients').findOne({ id: clientId, user_id: userId })
   if (!client) return null
   return {
     ...client,
@@ -62,13 +62,14 @@ export async function getClient(clientId: string): Promise<Client | null> {
 /**
  * Create a new client
  */
-export async function createClient(data: CreateClientData) {
+export async function createClient(data: CreateClientData, userId: string) {
   const db = await getDatabase()
   const id = `client-${Date.now()}`
   const { name, email, requiresTimesheet, ccEmails } = data
   
   await db.collection('clients').insertOne({
     id,
+    user_id: userId,
     name,
     email,
     requires_timesheet: requiresTimesheet,
@@ -83,7 +84,7 @@ export async function createClient(data: CreateClientData) {
 /**
  * Update a client
  */
-export async function updateClient(clientId: string, data: UpdateClientData) {
+export async function updateClient(clientId: string, data: UpdateClientData, userId: string) {
   const db = await getDatabase()
   const update: Record<string, unknown> = {
     updated_at: new Date(),
@@ -94,34 +95,34 @@ export async function updateClient(clientId: string, data: UpdateClientData) {
   if (data.requiresTimesheet !== undefined) update.requires_timesheet = data.requiresTimesheet
   if (data.ccEmails !== undefined) update.cc_emails = data.ccEmails.length > 0 ? data.ccEmails : null
   
-  await db.collection('clients').updateOne({ id: clientId }, { $set: update })
+  await db.collection('clients').updateOne({ id: clientId, user_id: userId }, { $set: update })
 }
 
 /**
  * Delete a client
  */
-export async function deleteClient(clientId: string) {
+export async function deleteClient(clientId: string, userId: string) {
   const db = await getDatabase()
-  await db.collection('clients').deleteOne({ id: clientId })
+  await db.collection('clients').deleteOne({ id: clientId, user_id: userId })
 }
 
 /**
  * Get setting value
  */
-export async function getSetting(key: string): Promise<string | null> {
+export async function getSetting(key: string, userId: string): Promise<string | null> {
   const db = await getDatabase()
-  const setting = await db.collection('settings').findOne({ key })
+  const setting = await db.collection('settings').findOne({ key, user_id: userId })
   return (setting?.value as string) || null
 }
 
 /**
  * Set setting value
  */
-export async function setSetting(key: string, value: string) {
+export async function setSetting(key: string, value: string, userId: string) {
   const db = await getDatabase()
   await db.collection('settings').updateOne(
-    { key },
-    { $set: { key, value, updated_at: new Date() } },
+    { key, user_id: userId },
+    { $set: { key, value, user_id: userId, updated_at: new Date() } },
     { upsert: true }
   )
 }
@@ -129,29 +130,29 @@ export async function setSetting(key: string, value: string) {
 /**
  * Get accountant email (from settings)
  */
-export async function getAccountantEmail(): Promise<string | null> {
-  return await getSetting('accountant_email')
+export async function getAccountantEmail(userId: string): Promise<string | null> {
+  return await getSetting('accountant_email', userId)
 }
 
 /**
  * Set accountant email (in settings)
  */
-export async function setAccountantEmail(email: string) {
-  await setSetting('accountant_email', email)
+export async function setAccountantEmail(email: string, userId: string) {
+  await setSetting('accountant_email', email, userId)
 }
 
 /**
  * Get invoice by ID with files
  * Optimized using MongoDB aggregation pipeline with $lookup for server-side joins
  */
-export async function getInvoice(invoiceId: string): Promise<Invoice | null> {
+export async function getInvoice(invoiceId: string, userId: string): Promise<Invoice | null> {
   const db = await getDatabase()
   
   // Use aggregation pipeline to join client and files server-side
   const result = await db.collection('invoices').aggregate([
-    // Match invoice by ID
+    // Match invoice by ID and user_id
     {
-      $match: { id: invoiceId }
+      $match: { id: invoiceId, user_id: userId }
     },
     // Lookup client information
     {
@@ -225,11 +226,15 @@ export async function getInvoice(invoiceId: string): Promise<Invoice | null> {
  * Get all invoices with client info and files
  * Optimized using MongoDB aggregation pipeline with $lookup for server-side joins
  */
-export async function getAllInvoices(): Promise<Invoice[]> {
+export async function getAllInvoices(userId: string): Promise<Invoice[]> {
   const db = await getDatabase()
   
   // Use aggregation pipeline to join clients and files server-side
   const invoices = await db.collection('invoices').aggregate([
+    // Match by user_id first
+    {
+      $match: { user_id: userId }
+    },
     // Sort invoices first (can use index)
     {
       $sort: { year: -1, month: -1, uploaded_at: -1 }
@@ -303,32 +308,28 @@ export async function createInvoice(invoiceData: {
   clientId: string
   clientName?: string // Optional: if client doesn't exist, create with this name
   invoiceAmount: number
-  dueDate: string
   month: number
   year: number
-  notes?: string | null
   files: Array<{
     fileKey: string
     fileType: 'invoice' | 'timesheet'
     originalName: string
     fileSize: number
   }>
-}) {
+}, userId: string) {
   const db = await getDatabase()
   const {
     clientId,
     clientName,
     invoiceAmount,
-    dueDate,
     month,
     year,
-    notes,
     files,
   } = invoiceData
 
   // Check if client exists, if not create it
   let finalClientId = clientId
-  const existingClient = await db.collection('clients').findOne({ id: clientId })
+  const existingClient = await db.collection('clients').findOne({ id: clientId, user_id: userId })
   
   if (!existingClient) {
     // Client doesn't exist, create it
@@ -346,6 +347,7 @@ export async function createInvoice(invoiceData: {
     
     await db.collection('clients').insertOne({
       id: newClientId,
+      user_id: userId,
       name: newClientName,
       email: '', // Empty email as requested
       requires_timesheet: false,
@@ -363,12 +365,13 @@ export async function createInvoice(invoiceData: {
   // Create invoice
   await db.collection('invoices').insertOne({
     id: invoiceId,
+    user_id: userId,
     client_id: finalClientId,
     invoice_amount: invoiceAmount,
-    due_date: dueDate,
+    due_date: null,
     month,
     year,
-    notes: notes || null,
+    notes: null,
     uploaded_at: new Date(),
     sent_to_client: false,
     sent_to_client_at: null,
@@ -382,6 +385,7 @@ export async function createInvoice(invoiceData: {
   if (files.length > 0) {
     const fileDocuments = files.map((file) => ({
       id: `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      user_id: userId,
       invoice_id: invoiceId,
       file_key: file.fileKey,
       file_type: file.fileType,
@@ -403,7 +407,7 @@ export async function updateInvoiceState(invoiceId: string, updates: {
   sentToClient?: boolean
   paymentReceived?: boolean
   sentToAccountant?: boolean
-}) {
+}, userId: string) {
   const db = await getDatabase()
   const update: Record<string, unknown> = {}
   
@@ -429,7 +433,7 @@ export async function updateInvoiceState(invoiceId: string, updates: {
   }
   
   if (Object.keys(update).length > 0) {
-    await db.collection('invoices').updateOne({ id: invoiceId }, { $set: update })
+    await db.collection('invoices').updateOne({ id: invoiceId, user_id: userId }, { $set: update })
   }
 }
 
@@ -439,7 +443,6 @@ export async function updateInvoiceState(invoiceId: string, updates: {
 export async function updateInvoice(invoiceId: string, updates: {
   clientId?: string
   invoiceAmount?: number
-  dueDate?: string
   month?: number
   year?: number
   filesToDelete?: string[]
@@ -449,12 +452,11 @@ export async function updateInvoice(invoiceId: string, updates: {
     originalName: string
     fileSize: number
   }>
-}) {
+}, userId: string) {
   const db = await getDatabase()
   const {
     clientId,
     invoiceAmount,
-    dueDate,
     month,
     year,
     filesToDelete,
@@ -465,12 +467,11 @@ export async function updateInvoice(invoiceId: string, updates: {
   const update: Record<string, unknown> = {}
   if (clientId !== undefined) update.client_id = clientId
   if (invoiceAmount !== undefined) update.invoice_amount = invoiceAmount
-  if (dueDate !== undefined) update.due_date = dueDate
   if (month !== undefined) update.month = month
   if (year !== undefined) update.year = year
 
   if (Object.keys(update).length > 0) {
-    await db.collection('invoices').updateOne({ id: invoiceId }, { $set: update })
+    await db.collection('invoices').updateOne({ id: invoiceId, user_id: userId }, { $set: update })
   }
 
   // Delete files
@@ -478,6 +479,7 @@ export async function updateInvoice(invoiceId: string, updates: {
     await db.collection('invoice_files').deleteMany({
       id: { $in: filesToDelete },
       invoice_id: invoiceId,
+      user_id: userId,
     })
   }
 
@@ -485,6 +487,7 @@ export async function updateInvoice(invoiceId: string, updates: {
   if (newFiles && newFiles.length > 0) {
     const fileDocuments = newFiles.map((file) => ({
       id: `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      user_id: userId,
       invoice_id: invoiceId,
       file_key: file.fileKey,
       file_type: file.fileType,
@@ -500,20 +503,20 @@ export async function updateInvoice(invoiceId: string, updates: {
 /**
  * Delete invoice and its files
  */
-export async function deleteInvoice(invoiceId: string) {
+export async function deleteInvoice(invoiceId: string, userId: string) {
   const db = await getDatabase()
-  await db.collection('invoice_files').deleteMany({ invoice_id: invoiceId })
-  await db.collection('email_history').deleteMany({ invoice_id: invoiceId })
-  await db.collection('invoices').deleteOne({ id: invoiceId })
+  await db.collection('invoice_files').deleteMany({ invoice_id: invoiceId, user_id: userId })
+  await db.collection('email_history').deleteMany({ invoice_id: invoiceId, user_id: userId })
+  await db.collection('invoices').deleteOne({ id: invoiceId, user_id: userId })
 }
 
 /**
  * Get email templates
  */
-export async function getEmailTemplates() {
+export async function getEmailTemplates(userId: string) {
   const db = await getDatabase()
   const templates = await db.collection('email_templates')
-    .find({})
+    .find({ user_id: userId })
     .sort({ type: 1, created_at: 1 })
     .toArray()
   return templates as unknown as EmailTemplate[]
@@ -522,22 +525,23 @@ export async function getEmailTemplates() {
 /**
  * Get email template by ID
  */
-export async function getEmailTemplate(templateId: string): Promise<EmailTemplate | null> {
+export async function getEmailTemplate(templateId: string, userId: string): Promise<EmailTemplate | null> {
   const db = await getDatabase()
-  const template = await db.collection('email_templates').findOne({ id: templateId })
+  const template = await db.collection('email_templates').findOne({ id: templateId, user_id: userId })
   return (template as EmailTemplate | null) || null
 }
 
 /**
  * Create email template
  */
-export async function createEmailTemplate(templateData: CreateEmailTemplateData) {
+export async function createEmailTemplate(templateData: CreateEmailTemplateData, userId: string) {
   const db = await getDatabase()
   const id = `template-${Date.now()}`
   const { subject, body, type } = templateData
   
   await db.collection('email_templates').insertOne({
     id,
+    user_id: userId,
     subject,
     body,
     type,
@@ -551,7 +555,7 @@ export async function createEmailTemplate(templateData: CreateEmailTemplateData)
 /**
  * Update email template
  */
-export async function updateEmailTemplate(templateId: string, templateData: UpdateEmailTemplateData) {
+export async function updateEmailTemplate(templateId: string, templateData: UpdateEmailTemplateData, userId: string) {
   const db = await getDatabase()
   const update: Record<string, unknown> = {
     updated_at: new Date(),
@@ -561,15 +565,15 @@ export async function updateEmailTemplate(templateId: string, templateData: Upda
   if (templateData.body !== undefined) update.body = templateData.body
   if (templateData.type !== undefined) update.type = templateData.type
   
-  await db.collection('email_templates').updateOne({ id: templateId }, { $set: update })
+  await db.collection('email_templates').updateOne({ id: templateId, user_id: userId }, { $set: update })
 }
 
 /**
  * Delete email template
  */
-export async function deleteEmailTemplate(templateId: string) {
+export async function deleteEmailTemplate(templateId: string, userId: string) {
   const db = await getDatabase()
-  await db.collection('email_templates').deleteOne({ id: templateId })
+  await db.collection('email_templates').deleteOne({ id: templateId, user_id: userId })
 }
 
 /**
@@ -585,7 +589,7 @@ export async function recordEmail(emailData: {
   body: string
   status?: string
   errorMessage?: string | null
-}) {
+}, userId: string) {
   const db = await getDatabase()
   const id = `email-${Date.now()}`
   const {
@@ -602,6 +606,7 @@ export async function recordEmail(emailData: {
 
   await db.collection('email_history').insertOne({
     id,
+    user_id: userId,
     invoice_id: invoiceId,
     template_id: templateId || null,
     recipient_email: recipientEmail,
@@ -620,12 +625,12 @@ export async function recordEmail(emailData: {
 /**
  * Get email history for an invoice
  */
-export async function getEmailHistory(invoiceId: string) {
+export async function getEmailHistory(invoiceId: string, userId: string) {
   const db = await getDatabase()
   
   // Get email history
   const emails = await db.collection('email_history')
-    .find({ invoice_id: invoiceId })
+    .find({ invoice_id: invoiceId, user_id: userId })
     .sort({ sent_at: -1 })
     .toArray()
   
@@ -636,7 +641,7 @@ export async function getEmailHistory(invoiceId: string) {
   
   const templates = templateIds.length > 0
     ? await db.collection('email_templates')
-        .find({ id: { $in: templateIds } })
+        .find({ id: { $in: templateIds }, user_id: userId })
         .toArray()
     : []
   

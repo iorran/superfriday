@@ -115,11 +115,13 @@ export async function initDatabase() {
     // Create indexes for better performance
     const clientsCollection = database.collection('clients')
     await clientsCollection.createIndex({ id: 1 }, { unique: true })
+    await clientsCollection.createIndex({ user_id: 1 })
     await clientsCollection.createIndex({ name: 1 })
     await clientsCollection.createIndex({ email: 1 })
 
     const invoicesCollection = database.collection('invoices')
     await invoicesCollection.createIndex({ id: 1 }, { unique: true })
+    await invoicesCollection.createIndex({ user_id: 1 })
     await invoicesCollection.createIndex({ client_id: 1 })
     await invoicesCollection.createIndex({ year: -1, month: -1 })
     await invoicesCollection.createIndex({ sent_to_client: 1 })
@@ -128,20 +130,23 @@ export async function initDatabase() {
 
     const invoiceFilesCollection = database.collection('invoice_files')
     await invoiceFilesCollection.createIndex({ id: 1 }, { unique: true })
+    await invoiceFilesCollection.createIndex({ user_id: 1 })
     await invoiceFilesCollection.createIndex({ invoice_id: 1 })
     await invoiceFilesCollection.createIndex({ file_key: 1 })
 
     const emailHistoryCollection = database.collection('email_history')
     await emailHistoryCollection.createIndex({ id: 1 }, { unique: true })
+    await emailHistoryCollection.createIndex({ user_id: 1 })
     await emailHistoryCollection.createIndex({ invoice_id: 1 })
     await emailHistoryCollection.createIndex({ sent_at: -1 })
 
     const emailTemplatesCollection = database.collection('email_templates')
     await emailTemplatesCollection.createIndex({ id: 1 }, { unique: true })
+    await emailTemplatesCollection.createIndex({ user_id: 1 })
     await emailTemplatesCollection.createIndex({ type: 1 })
 
     const settingsCollection = database.collection('settings')
-    await settingsCollection.createIndex({ key: 1 }, { unique: true })
+    await settingsCollection.createIndex({ user_id: 1, key: 1 }, { unique: true })
 
     // Insert default settings if they don't exist
     await settingsCollection.updateOne(

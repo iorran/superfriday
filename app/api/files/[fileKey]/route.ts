@@ -5,12 +5,17 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { head } from '@vercel/blob'
+import { requireAuth } from '@/lib/auth-server'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ fileKey: string }> }
 ) {
   try {
+    // Require authentication
+    const session = await requireAuth()
+    const userEmail = session.user.email
+
     if (!process.env.BLOB_READ_WRITE_TOKEN) {
       return NextResponse.json(
         { error: true, message: 'BLOB_READ_WRITE_TOKEN not configured' },
@@ -24,6 +29,15 @@ export async function GET(
       return NextResponse.json(
         { error: true, message: 'fileKey parameter is required' },
         { status: 400 }
+      )
+    }
+
+    // Verify file belongs to user (check if fileKey starts with user's email folder)
+    const sanitizedEmail = userEmail.replace(/[@.]/g, '_')
+    if (!fileKey.startsWith(sanitizedEmail + '/')) {
+      return NextResponse.json(
+        { error: true, message: 'Unauthorized' },
+        { status: 403 }
       )
     }
 
@@ -75,6 +89,12 @@ export async function GET(
     })
   } catch (error: unknown) {
     console.error('Error serving file:', error)
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return NextResponse.json(
+        { error: true, message: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
     const errorObj = error as { status?: number; message?: string }
     
     if (errorObj.status === 404 || errorObj.message?.includes('not found')) {

@@ -11,7 +11,8 @@
     "db:init": "node scripts/init-db.cjs",
     "db:migrate": "node scripts/init-db.cjs",
     "db:test": "tsx scripts/test-db-connection.ts",
-    "cleanup:storage": "tsx scripts/cleanup-orphaned-files.ts"
+    "cleanup:storage": "tsx scripts/cleanup-orphaned-files.ts",
+    "truncate:all": "tsx scripts/truncate-all.ts"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "^1.1.15",
@@ -24,6 +25,7 @@
     "@tanstack/react-form": "^1.0.0",
     "@tanstack/react-query": "^5.62.11",
     "@vercel/blob": "^2.0.0",
+    "better-auth": "^1.4.6",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",

@@ -5,12 +5,16 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { updateInvoiceState } from '@/lib/db-client'
+import { requireAuth } from '@/lib/auth-server'
 
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ invoiceId: string }> }
 ) {
   try {
+    const session = await requireAuth()
+    const userId = session.user.id
+
     const { invoiceId } = await params
     const body = await request.json()
 
@@ -21,10 +25,16 @@ export async function PATCH(
       )
     }
 
-    await updateInvoiceState(invoiceId, body)
+    await updateInvoiceState(invoiceId, body, userId)
 
     return NextResponse.json({ success: true })
   } catch (error: unknown) {
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return NextResponse.json(
+        { error: true, message: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
     console.error('Error updating invoice state:', error)
     const errorMessage = error instanceof Error ? error.message : 'Failed to update invoice state'
     return NextResponse.json(

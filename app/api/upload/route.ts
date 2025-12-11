@@ -6,9 +6,14 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { put } from '@vercel/blob'
+import { requireAuth } from '@/lib/auth-server'
 
 export async function POST(request: NextRequest) {
   try {
+    // Require authentication
+    const session = await requireAuth()
+    const userEmail = session.user.email
+
     if (!process.env.BLOB_READ_WRITE_TOKEN) {
       return NextResponse.json(
         { error: true, message: 'BLOB_READ_WRITE_TOKEN not configured' },
@@ -39,7 +44,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const fileKey = `${Date.now()}-${file.name}`
+    // Sanitize email for folder name (replace @ and . with safe characters)
+    const sanitizedEmail = userEmail.replace(/[@.]/g, '_')
+    const fileKey = `${sanitizedEmail}/${Date.now()}-${file.name}`
     const fileBuffer = Buffer.from(await file.arrayBuffer())
 
     // Upload file to Vercel Blob
@@ -58,6 +65,12 @@ export async function POST(request: NextRequest) {
     })
   } catch (error: unknown) {
     console.error('Upload error:', error)
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return NextResponse.json(
+        { error: true, message: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
     const errorMessage = error instanceof Error ? error.message : 'Upload failed'
     return NextResponse.json(
       { error: true, message: errorMessage },
