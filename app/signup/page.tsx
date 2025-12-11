@@ -9,6 +9,7 @@ import Link from 'next/link'
 
 export default function SignUpPage() {
   const router = useRouter()
+  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -33,6 +34,7 @@ export default function SignUpPage() {
 
     try {
       const result = await signUp.email({
+        name,
         email,
         password,
       })
@@ -71,6 +73,20 @@ export default function SignUpPage() {
             </div>
           )}
           <div className="space-y-4">
+            <div>
+              <Label htmlFor="name">Name</Label>
+              <input
+                id="name"
+                name="name"
+                type="text"
+                autoComplete="name"
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                placeholder="Your name"
+              />
+            </div>
             <div>
               <Label htmlFor="email">Email address</Label>
               <input

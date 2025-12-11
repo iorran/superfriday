@@ -528,7 +528,6 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
           month: value.month,
           year: value.year,
           files: uploadedFiles,
-          extractedData: extractedData || undefined,
         })
 
         // Show warning if new client was created without email
