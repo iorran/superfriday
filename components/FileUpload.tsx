@@ -1257,7 +1257,6 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
                   )}
                 </Button>
               </div>
-            </div>
           </CardContent>
         </Card>
       </StepContent>
