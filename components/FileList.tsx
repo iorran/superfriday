@@ -104,8 +104,24 @@ export default function FileList() {
     })
 
     // Sort invoices within each group by date (newest first)
+    // Sort by year, then month, then uploaded_at as tiebreaker
     Object.values(grouped).forEach((group) => {
       group.invoices.sort((a, b) => {
+        // First compare by year (descending)
+        const yearA = a.year || 0
+        const yearB = b.year || 0
+        if (yearB !== yearA) {
+          return yearB - yearA
+        }
+        
+        // Then compare by month (descending)
+        const monthA = a.month || 0
+        const monthB = b.month || 0
+        if (monthB !== monthA) {
+          return monthB - monthA
+        }
+        
+        // Finally compare by uploaded_at (newest first)
         const dateA = a.uploaded_at ? new Date(a.uploaded_at).getTime() : 0
         const dateB = b.uploaded_at ? new Date(b.uploaded_at).getTime() : 0
         return dateB - dateA
@@ -316,6 +332,32 @@ export default function FileList() {
     })
   }
 
+  const formatInvoiceDate = (month: number | null, year: number | null, uploadedAt?: string) => {
+    if (!month || !year) return ''
+    
+    const monthNames = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ]
+    
+    const monthName = monthNames[month - 1] || String(month)
+    
+    // Try to get day from uploaded_at, otherwise use day 1
+    let day = 1
+    if (uploadedAt) {
+      try {
+        const date = new Date(uploadedAt)
+        if (!isNaN(date.getTime())) {
+          day = date.getDate()
+        }
+      } catch {
+        // Use default day 1
+      }
+    }
+    
+    return `${day} ${monthName} ${year}`
+  }
+
   const formatCurrency = (amount: number | null | undefined) => {
     if (amount === null || amount === undefined) return '€0,00'
     return new Intl.NumberFormat('pt-PT', {
@@ -388,7 +430,9 @@ export default function FileList() {
                               <FileText className="h-5 w-5 text-muted-foreground shrink-0" />
                               <div className="flex-1">
                                 <div className="flex items-center gap-2">
-                                  <p className="font-medium">{invoice.client_name || 'Sem cliente'}</p>
+                                  <p className="font-medium">
+                                    {formatInvoiceDate(invoice.month, invoice.year, invoice.uploaded_at) || invoice.client_name || 'Sem cliente'}
+                                  </p>
                                   {(!invoice.client_email || invoice.client_email.trim() === '') && (
                                     <span 
                                       className="inline-flex items-center gap-1 text-xs bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300 px-2 py-0.5 rounded cursor-pointer hover:bg-amber-200 dark:hover:bg-amber-800 transition-colors"
@@ -408,7 +452,7 @@ export default function FileList() {
                                 </div>
                                 <div className="flex items-center gap-2 mt-1">
                                   <p className="text-sm text-muted-foreground">
-                                    {formatDate(invoice.lastModified)} • {formatCurrency(invoice.invoice_amount)}
+                                    {formatCurrency(invoice.invoice_amount)}
                                     {totalSize > 0 && ` • ${formatFileSize(totalSize)}`}
                                   </p>
                                   {invoice.client_email && invoice.client_email.trim() !== '' && (
