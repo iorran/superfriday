@@ -1,10 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { Menu, X, FileText, Settings, Users, FileCode, TrendingUp } from 'lucide-react'
+import { usePathname, useRouter } from 'next/navigation'
+import { Menu, X, FileText, Settings, Users, FileCode, TrendingUp, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useSession, signOut } from '@/lib/auth-client'
 
 interface DashboardLayoutProps {
   children: React.ReactNode
@@ -12,7 +13,51 @@ interface DashboardLayoutProps {
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [mounted, setMounted] = useState(false)
   const pathname = usePathname()
+  const router = useRouter()
+  const { data: session, isPending } = useSession()
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  useEffect(() => {
+    // Redirect to login if not authenticated (except on login/signup pages)
+    if (mounted && !isPending && !session && pathname !== '/login' && pathname !== '/signup') {
+      router.push('/login')
+    }
+  }, [mounted, session, isPending, pathname, router])
+
+  // Don't render dashboard layout on login/signup pages
+  if (pathname === '/login' || pathname === '/signup') {
+    return <>{children}</>
+  }
+
+  // Show loading state while checking authentication or before mount
+  if (!mounted || isPending || !session) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-4 text-muted-foreground">Carregando...</p>
+        </div>
+      </div>
+    )
+  }
+
+  const handleSignOut = async () => {
+    try {
+      await signOut()
+      router.push('/login')
+      router.refresh()
+    } catch (error) {
+      console.error('Error signing out:', error)
+      // Force redirect even if signOut fails
+      router.push('/login')
+      router.refresh()
+    }
+  }
 
   const mainMenuItems = [
     {
@@ -168,6 +213,22 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   </Link>
                 )
               })}
+            </div>
+
+            {/* User section */}
+            <div className="mt-auto border-t border-border p-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{session.user.email}</p>
+                </div>
+              </div>
+              <button
+                onClick={handleSignOut}
+                className="w-full flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
+              >
+                <LogOut className="h-4 w-4" />
+                <span>Sair</span>
+              </button>
             </div>
           </nav>
         </div>

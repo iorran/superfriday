@@ -65,24 +65,3 @@ export interface ExtractedPDFData {
   confidence: 'high' | 'medium' | 'low'
 }
 
-export interface InvoiceDraft {
-  id: string
-  createdAt: string
-  updatedAt: string
-  step: number
-  formData: {
-    clientId: string
-    invoiceAmount: number
-    dueDate: string
-    month: number
-    year: number
-    notes?: string | null
-  }
-  files: Array<{
-    fileKey: string
-    fileType: 'invoice' | 'timesheet'
-    originalName: string
-    fileSize: number
-  }>
-  extractedData?: ExtractedPDFData
-}

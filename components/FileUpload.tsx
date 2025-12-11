@@ -16,8 +16,7 @@ import { uploadFile } from '@/lib/client/storage-client'
 import { useClients } from '@/lib/hooks/use-clients'
 import { useInvoice, useCreateInvoice, useUpdateInvoice, useDeleteInvoiceFile } from '@/lib/hooks/use-invoices'
 import { usePDFExtraction } from '@/lib/hooks/use-pdf-extraction'
-import { saveDraft, deleteDraft, type DraftFormData, type DraftFile } from '@/lib/utils/drafts'
-import { Upload, X, FileText, Trash2, Loader2, CheckCircle2, ArrowLeft, ArrowRight, Save } from 'lucide-react'
+import { Upload, X, FileText, Trash2, Loader2, CheckCircle2, ArrowLeft, ArrowRight } from 'lucide-react'
 import type { Client, InvoiceFile, ExtractedPDFData } from '@/types'
 import { invoiceSchema, type InvoiceFormData } from '@/lib/validations'
 
@@ -67,9 +66,6 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
   const [filesToDelete, setFilesToDelete] = useState<Set<string>>(new Set())
   const [isUploading, setIsUploading] = useState(false)
   const [extractedData, setExtractedData] = useState<ExtractedPDFData | null>(null)
-  const [currentDraftId, setCurrentDraftId] = useState<string | null>(null)
-  const [notes, setNotes] = useState<string>('')
-  const autoSaveIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const { toast } = useToast()
   
   const isCreatingInvoice = createInvoiceMutation.isPending
@@ -79,7 +75,6 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
     defaultValues: {
       clientId: '',
       invoiceAmount: 0,
-      dueDate: '',
       month: new Date().getMonth() + 1,
       year: new Date().getFullYear(),
     },
@@ -124,12 +119,12 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
     },
   })
 
+
   // Load invoice data when editing
   useEffect(() => {
     if (invoiceData) {
       form.setFieldValue('clientId', invoiceData.client_id)
       form.setFieldValue('invoiceAmount', invoiceData.invoice_amount || 0)
-      form.setFieldValue('dueDate', invoiceData.due_date || '')
       form.setFieldValue('month', invoiceData.month || new Date().getMonth() + 1)
       form.setFieldValue('year', invoiceData.year || new Date().getFullYear())
       
@@ -178,85 +173,6 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
     }
   }, [clientId, clients])
 
-  // Auto-save draft every 30 seconds
-  useEffect(() => {
-    if (isEditing || currentStep === 1) return
-
-    const saveDraftData = () => {
-      const formValues = form.state.values
-      if (!formValues.clientId || files.length === 0) return
-
-      const draftFiles: DraftFile[] = files
-        .filter(f => f.fileKey)
-        .map(f => ({
-          fileKey: f.fileKey!,
-          fileType: f.fileType,
-          originalName: f.file.name,
-          fileSize: f.file.size,
-        }))
-
-      if (draftFiles.length === 0) return
-
-      const draftFormData: DraftFormData = {
-        clientId: formValues.clientId,
-        invoiceAmount: formValues.invoiceAmount,
-        dueDate: formValues.dueDate,
-        month: formValues.month,
-        year: formValues.year,
-        notes: notes || null,
-      }
-
-      const draftId = saveDraft(draftFormData, draftFiles, currentStep, extractedData || undefined, currentDraftId || undefined)
-      setCurrentDraftId(draftId)
-    }
-
-    autoSaveIntervalRef.current = setInterval(saveDraftData, 30000)
-
-    return () => {
-      if (autoSaveIntervalRef.current) {
-        clearInterval(autoSaveIntervalRef.current)
-      }
-    }
-  }, [form.state.values, files, currentStep, extractedData, notes, currentDraftId, isEditing])
-
-  const handleSaveDraft = () => {
-    const formValues = form.state.values
-    if (!formValues.clientId || files.length === 0) {
-      toast({
-        title: "Dados Insuficientes",
-        description: "Preencha os dados antes de salvar como draft.",
-        variant: "destructive",
-      })
-      return
-    }
-
-    const draftFiles: DraftFile[] = files
-      .filter(f => f.fileKey)
-      .map(f => ({
-        fileKey: f.fileKey!,
-        fileType: f.fileType,
-        originalName: f.file.name,
-        fileSize: f.file.size,
-      }))
-
-    const draftFormData: DraftFormData = {
-      clientId: formValues.clientId,
-      invoiceAmount: formValues.invoiceAmount,
-      dueDate: formValues.dueDate,
-      month: formValues.month,
-      year: formValues.year,
-      notes: notes || null,
-    }
-
-    const draftId = saveDraft(draftFormData, draftFiles, currentStep, extractedData || undefined, currentDraftId || undefined)
-    setCurrentDraftId(draftId)
-
-    toast({
-      title: "Draft Salvo",
-      description: "Seu progresso foi salvo. Você pode continuar depois.",
-      variant: "default",
-    })
-  }
 
   const handleNextStep = () => {
     if (currentStep < 3) {
@@ -306,9 +222,6 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
           // Pre-fill form with extracted data
           if (extracted.amount) {
             form.setFieldValue('invoiceAmount', extracted.amount)
-          }
-          if (extracted.dueDate) {
-            form.setFieldValue('dueDate', extracted.dueDate)
           }
           if (extracted.month) {
             form.setFieldValue('month', extracted.month)
@@ -430,7 +343,7 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
       setFilesToDelete(prev => new Set(prev).add(fileId))
       setExistingFiles(prev => prev.filter(f => f.id !== fileId))
     } catch (error: unknown) {
-      console.error('Error removing file:', error)
+      console.error('Error removing existing file:', error)
       toast({
         title: "Erro",
         description: error instanceof Error ? error.message : "Falha ao remover arquivo",
@@ -508,7 +421,6 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
           updates: {
             clientId: value.clientId,
             invoiceAmount: value.invoiceAmount,
-            dueDate: value.dueDate,
             month: value.month,
             year: value.year,
             newFiles: uploadedNewFiles,
@@ -564,6 +476,7 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
       setIsUploading(true)
 
       try {
+        // Process new files (upload if needed)
         const uploadedFiles = await Promise.all(
           files.map(async (fileData) => {
             if (fileData.fileKey) {
@@ -612,16 +525,11 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
           clientId: finalClientId,
           clientName: finalClientName,
           invoiceAmount: value.invoiceAmount,
-          dueDate: value.dueDate,
           month: value.month,
           year: value.year,
           files: uploadedFiles,
+          extractedData: extractedData || undefined,
         })
-
-        // Delete draft if exists
-        if (currentDraftId) {
-          deleteDraft(currentDraftId)
-        }
 
         // Show warning if new client was created without email
         const createdClientName = finalClientName || newClientName.trim()
@@ -662,8 +570,7 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
 
   const hasFiles = files.length > 0 || (isEditing && existingFiles.length > filesToDelete.size)
   const invoiceAmount = form.state.values.invoiceAmount
-  const dueDate = form.state.values.dueDate
-  const canProceed = clientId && (isEditing || files.length > 0) && invoiceAmount && dueDate
+  const canProceed = clientId && (isEditing || files.length > 0) && invoiceAmount
   const requiresTimesheet = selectedClient?.requires_timesheet
 
   // For editing mode, use old layout (no steppers)
@@ -728,23 +635,6 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
                           onBlur={field.handleBlur}
                           onChange={(e) => field.handleChange(e.target.value ? parseFloat(e.target.value) : 0)}
                           placeholder="0.00"
-                          className="w-full p-2 border rounded-md bg-background"
-                          disabled={isUploading || isCreatingInvoice}
-                        />
-                      </div>
-                    )}
-                  </form.Field>
-                  <form.Field name="dueDate">
-                    {(field) => (
-                      <div className="space-y-2">
-                        <Label htmlFor={field.name}>Data de Vencimento *</Label>
-                        <input
-                          id={field.name}
-                          name={field.name}
-                          type="date"
-                          value={field.state.value}
-                          onBlur={field.handleBlur}
-                          onChange={(e) => field.handleChange(e.target.value)}
                           className="w-full p-2 border rounded-md bg-background"
                           disabled={isUploading || isCreatingInvoice}
                         />
@@ -1167,28 +1057,6 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
                     </div>
                   )}
                 </form.Field>
-                <form.Field name="dueDate">
-                  {(field) => (
-                    <div className="space-y-2">
-                      <Label htmlFor={field.name}>Data de Vencimento *</Label>
-                      <input
-                        id={field.name}
-                        name={field.name}
-                        type="date"
-                        value={field.state.value}
-                        onBlur={field.handleBlur}
-                        onChange={(e) => field.handleChange(e.target.value)}
-                        className="w-full p-2 border rounded-md bg-background"
-                        disabled={isUploading || isCreatingInvoice}
-                      />
-                      {field.state.meta.errors && field.state.meta.errors.length > 0 && (
-                        <p className="text-sm text-destructive">
-                          {String(field.state.meta.errors[0])}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </form.Field>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -1300,18 +1168,6 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
                 </div>
               )}
 
-              {/* Notes */}
-              <div className="space-y-2">
-                <Label htmlFor="notes">Notas (opcional)</Label>
-                <textarea
-                  id="notes"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  className="w-full p-2 border rounded-md bg-background min-h-[100px]"
-                  placeholder="Adicione notas sobre esta invoice..."
-                  disabled={isUploading || isCreatingInvoice}
-                />
-              </div>
 
               <div className="flex justify-between gap-2 pt-4">
                 <Button
@@ -1323,25 +1179,14 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
                   <ArrowLeft className="mr-2 h-4 w-4" />
                   Voltar
                 </Button>
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleSaveDraft}
-                    disabled={!canProceed || isUploading || isCreatingInvoice}
-                  >
-                    <Save className="mr-2 h-4 w-4" />
-                    Salvar Draft
-                  </Button>
-                  <Button
-                    type="button"
-                    onClick={handleNextStep}
-                    disabled={!canProceed || isUploading || isCreatingInvoice}
-                  >
-                    Continuar
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Button>
-                </div>
+                <Button
+                  type="button"
+                  onClick={handleNextStep}
+                  disabled={!canProceed || isUploading || isCreatingInvoice}
+                >
+                  Continuar
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
               </div>
             </form>
           </CardContent>
@@ -1369,7 +1214,6 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
             <InvoiceSummary
               client={selectedClient}
               invoiceAmount={form.state.values.invoiceAmount}
-              dueDate={form.state.values.dueDate}
               month={form.state.values.month}
               year={form.state.values.year}
               files={files.map(f => ({
@@ -1378,7 +1222,6 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
                 originalName: f.file.name,
                 fileSize: f.file.size,
               }))}
-              notes={notes || null}
             />
 
             <div className="flex justify-between gap-2 pt-6 mt-6 border-t">
@@ -1392,26 +1235,15 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Voltar
               </Button>
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleSaveDraft}
-                  disabled={isUploading || isCreatingInvoice}
-                  size="lg"
-                >
-                  <Save className="mr-2 h-4 w-4" />
-                  Salvar Draft
-                </Button>
-                <Button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault()
-                    form.handleSubmit()
-                  }}
-                  disabled={!canProceed || isUploading || isCreatingInvoice}
-                  size="lg"
-                >
+              <Button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault()
+                  form.handleSubmit()
+                }}
+                disabled={!canProceed || isUploading || isCreatingInvoice}
+                size="lg"
+              >
                   {isCreatingInvoice ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
