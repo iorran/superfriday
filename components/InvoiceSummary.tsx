@@ -42,15 +42,6 @@ export function InvoiceSummary({
     return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
   }
 
-  const formatDate = (dateStr: string) => {
-    try {
-      const date = new Date(dateStr)
-      return format(date, "dd 'de' MMMM 'de' yyyy", { locale: ptBR })
-    } catch {
-      return dateStr
-    }
-  }
-
   const getMonthName = (month: number, year: number) => {
     try {
       const date = new Date(year, month - 1, 1)

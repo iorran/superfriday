@@ -20,7 +20,7 @@ import { useInvoices, useUpdateInvoiceState, useDeleteInvoice } from '@/lib/hook
 import { useSendEmail } from '@/lib/hooks/use-email'
 import { useEmailTemplates } from '@/lib/hooks/use-email-templates'
 import { useClients, useUpdateClient } from '@/lib/hooks/use-clients'
-import { FileText, Calendar, Trash2, CheckCircle2, Send, Edit, Loader2, Mail, AlertCircle } from 'lucide-react'
+import { FileText, Trash2, CheckCircle2, Send, Edit, Loader2, Mail, AlertCircle } from 'lucide-react'
 import FileUpload from './FileUpload'
 import type { Invoice, InvoiceFile, EmailTemplate } from '@/types'
 import {
@@ -152,7 +152,7 @@ export default function FileList() {
 
   // Sort groups: by client name, then by year (descending)
   const sortedGroups = useMemo(() => {
-    return Object.entries(invoicesByClientAndYear).sort(([keyA, groupA], [keyB, groupB]) => {
+    return Object.entries(invoicesByClientAndYear).sort(([, groupA], [, groupB]) => {
       // First sort by client name
       const clientCompare = groupA.clientName.localeCompare(groupB.clientName)
       if (clientCompare !== 0) return clientCompare

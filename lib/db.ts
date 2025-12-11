@@ -55,7 +55,7 @@ export async function getDatabase(): Promise<Db> {
       // Verify existing connection is still alive
       try {
         await global._mongoClient.db('admin').command({ ping: 1 })
-      } catch (error) {
+      } catch {
         // Connection lost, reconnect
         console.log('MongoDB connection lost, reconnecting...')
         await global._mongoClient.connect()
@@ -82,7 +82,7 @@ export async function getDatabase(): Promise<Db> {
       // Verify existing connection is still alive
       try {
         await client.db('admin').command({ ping: 1 })
-      } catch (error) {
+      } catch {
         // Connection lost, reconnect
         console.log('MongoDB connection lost, reconnecting...')
         await client.connect()

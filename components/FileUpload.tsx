@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useForm } from '@tanstack/react-form'
 import { useStore } from '@tanstack/react-store'
 import { useDropzone } from 'react-dropzone'
