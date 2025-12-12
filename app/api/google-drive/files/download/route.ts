@@ -82,6 +82,7 @@ export async function POST(request: NextRequest) {
         fileKey,
         fileName: metadata.name,
         fileSize: fileBuffer.length,
+        url: blobResult.url, // Return the direct blob URL
       })
     } catch (uploadError) {
       console.error('Error uploading to blob:', uploadError)

@@ -97,7 +97,7 @@ async function searchFiles(query?: string): Promise<GoogleDriveFile[]> {
 /**
  * Download file from Google Drive
  */
-async function downloadFile(fileId: string): Promise<{ fileKey: string; fileName: string; fileSize: number }> {
+async function downloadFile(fileId: string): Promise<{ fileKey: string; fileName: string; fileSize: number; url?: string }> {
   const response = await fetch('/api/google-drive/files/download', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -278,9 +278,16 @@ export default function GoogleDrivePicker({ onFilesSelected }: GoogleDrivePicker
           const downloadResult = await downloadFile(file.id)
           
           // Fetch file as Blob to create File object
-          // URL encode the fileKey to handle special characters
-          const encodedFileKey = encodeURIComponent(downloadResult.fileKey).replace(/%2F/g, '/')
-          const fileResponse = await fetch(`/api/files/${encodedFileKey}`)
+          // Use direct blob URL if available, otherwise use API route
+          let fileResponse: Response
+          if (downloadResult.url) {
+            // Use direct blob URL (preferred - faster and more reliable)
+            fileResponse = await fetch(downloadResult.url)
+          } else {
+            // Fallback to API route
+            const encodedFileKey = encodeURIComponent(downloadResult.fileKey).replace(/%2F/g, '/')
+            fileResponse = await fetch(`/api/files/${encodedFileKey}`)
+          }
           
           if (!fileResponse.ok) {
             throw new Error(`Failed to fetch file: ${fileResponse.status} ${fileResponse.statusText}`)
