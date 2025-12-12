@@ -103,11 +103,42 @@ async function downloadFile(fileId: string): Promise<{ fileKey: string; fileName
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ fileId }),
   })
+  
   if (!response.ok) {
-    const error = await response.json()
-    throw new Error(error.message || 'Failed to download file')
+    let errorMessage = 'Failed to download file'
+    try {
+      const error = await response.json()
+      errorMessage = error.message || errorMessage
+    } catch {
+      // If response is not JSON, try to get text
+      try {
+        const text = await response.text()
+        errorMessage = text || errorMessage
+      } catch {
+        // Use status text as fallback
+        errorMessage = response.statusText || errorMessage
+      }
+    }
+    throw new Error(errorMessage)
   }
-  return await response.json()
+  
+  // Check if response has content
+  const contentType = response.headers.get('content-type')
+  if (!contentType || !contentType.includes('application/json')) {
+    const text = await response.text()
+    if (!text) {
+      throw new Error('Empty response from server')
+    }
+    throw new Error(`Unexpected response type: ${contentType}`)
+  }
+  
+  try {
+    return await response.json()
+  } catch (error) {
+    const text = await response.text()
+    console.error('Failed to parse JSON response:', { text, error })
+    throw new Error('Invalid response from server')
+  }
 }
 
 /**
