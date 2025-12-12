@@ -6,7 +6,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth-server'
 import { getDatabase } from '@/lib/db'
-import { deleteFile } from '@/lib/storage'
 
 /**
  * DELETE /api/user/delete-all-data
@@ -19,21 +18,8 @@ export async function DELETE(_request: NextRequest) {
     const userId = session.user.id
     const db = await getDatabase()
 
-    // Get all invoice files to delete from blob storage
-    const invoiceFiles = await db.collection('invoice_files').find({ user_id: userId }).toArray()
-    
-    // Delete all files from blob storage
-    const deletePromises = invoiceFiles.map(async (file) => {
-      if (file.file_key) {
-        try {
-          await deleteFile(file.file_key)
-        } catch (error) {
-          // Log but don't fail if file deletion fails (file might not exist)
-          console.warn(`Failed to delete file ${file.file_key}:`, error)
-        }
-      }
-    })
-    await Promise.all(deletePromises)
+    // Note: Files in blob storage are NOT deleted - only database records are removed
+    // This allows users to keep their files while clearing all other data
 
     // Delete all database collections for the user
     await Promise.all([

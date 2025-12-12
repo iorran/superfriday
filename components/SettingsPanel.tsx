@@ -171,12 +171,15 @@ export default function SettingsPanel() {
                     </p>
                     <ul className="list-disc list-inside space-y-1 text-sm">
                       <li>Todas as suas invoices</li>
-                      <li>Todos os arquivos PDF anexados</li>
+                      <li>Todos os registros de arquivos (os arquivos PDF permanecerão no armazenamento)</li>
                       <li>Todos os seus clientes</li>
                       <li>Todas as contas de email configuradas</li>
                       <li>Todos os templates de email</li>
                       <li>Todas as configurações e preferências</li>
                     </ul>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      <strong>Nota:</strong> Os arquivos PDF permanecerão no armazenamento, mas não estarão mais associados a nenhuma invoice.
+                    </p>
                     <p className="font-semibold text-destructive mt-4">
                       Esta ação é irreversível!
                     </p>
