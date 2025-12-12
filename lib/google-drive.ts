@@ -59,8 +59,17 @@ export async function handleOAuthCallback(
     throw new Error('Failed to get access token')
   }
   
+  // Refresh token might not be provided if user has already granted access
+  // In that case, we'll use the existing refresh token from the database if available
   if (!tokens.refresh_token) {
-    throw new Error('Failed to get refresh token')
+    console.warn('No refresh token provided by Google. User may have already granted access.')
+    // Try to get existing refresh token from database
+    const existingToken = await getGoogleOAuthToken(userId)
+    if (!existingToken?.refresh_token) {
+      throw new Error('Failed to get refresh token. Please revoke access and try again, or ensure prompt=consent is set.')
+    }
+    // Use existing refresh token
+    tokens.refresh_token = existingToken.refresh_token
   }
   
   const expiresIn = tokens.expiry_date 
