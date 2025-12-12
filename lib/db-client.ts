@@ -849,26 +849,51 @@ export async function saveGoogleOAuthToken(
   const db = await getDatabase()
   const expiresAt = new Date(Date.now() + expiresIn * 1000)
   
-  // Encrypt tokens before storing
-  const encryptedAccessToken = encrypt(accessToken)
-  const encryptedRefreshToken = encrypt(refreshToken)
+  // Validate tokens before encryption
+  if (!accessToken || typeof accessToken !== 'string') {
+    throw new Error('Invalid access token: token is missing or not a string')
+  }
   
-  await db.collection('google_oauth_tokens').updateOne(
-    { user_id: userId },
-    {
-      $set: {
-        access_token: encryptedAccessToken,
-        refresh_token: encryptedRefreshToken,
-        expires_at: expiresAt,
-        updated_at: new Date(),
+  if (!refreshToken || typeof refreshToken !== 'string') {
+    throw new Error('Invalid refresh token: token is missing or not a string')
+  }
+  
+  // Check if encryption key is configured
+  if (!process.env.GOOGLE_OAUTH_ENCRYPTION_KEY) {
+    throw new Error('GOOGLE_OAUTH_ENCRYPTION_KEY environment variable is not set')
+  }
+  
+  try {
+    // Encrypt tokens before storing
+    const encryptedAccessToken = encrypt(accessToken)
+    const encryptedRefreshToken = encrypt(refreshToken)
+    
+    await db.collection('google_oauth_tokens').updateOne(
+      { user_id: userId },
+      {
+        $set: {
+          access_token: encryptedAccessToken,
+          refresh_token: encryptedRefreshToken,
+          expires_at: expiresAt,
+          updated_at: new Date(),
+        },
+        $setOnInsert: {
+          user_id: userId,
+          created_at: new Date(),
+        },
       },
-      $setOnInsert: {
-        user_id: userId,
-        created_at: new Date(),
-      },
-    },
-    { upsert: true }
-  )
+      { upsert: true }
+    )
+  } catch (error) {
+    console.error('Error saving Google OAuth token:', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      userId,
+      hasAccessToken: !!accessToken,
+      hasRefreshToken: !!refreshToken,
+      hasEncryptionKey: !!process.env.GOOGLE_OAUTH_ENCRYPTION_KEY,
+    })
+    throw error
+  }
 }
 
 /**

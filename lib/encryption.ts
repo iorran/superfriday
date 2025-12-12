@@ -56,8 +56,16 @@ export function encrypt(value: string): string {
     ])
     
     return combined.toString('base64')
-  } catch {
-    throw new Error('Failed to encrypt value')
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    console.error('Encryption error details:', {
+      error: errorMessage,
+      hasKey: !!process.env.GOOGLE_OAUTH_ENCRYPTION_KEY,
+      keyLength: process.env.GOOGLE_OAUTH_ENCRYPTION_KEY?.length,
+      valueType: typeof value,
+      valueLength: value?.length,
+    })
+    throw new Error(`Failed to encrypt value: ${errorMessage}`)
   }
 }
 
