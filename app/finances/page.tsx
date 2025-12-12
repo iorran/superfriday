@@ -1,6 +1,6 @@
 'use client'
 
-import { useFinances } from '@/lib/hooks/use-finances'
+import { useFinances } from '@/hooks/use-finances'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2, TrendingUp, DollarSign, Clock, Send } from 'lucide-react'
 import {
@@ -21,7 +21,7 @@ import {
 
 const COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#ef4444', '#06b6d4']
 
-export default function FinancesPage() {
+const FinancesPage = () => {
   const { data: finances, isLoading } = useFinances()
 
   const formatCurrency = (amount: number) => {
@@ -262,3 +262,4 @@ export default function FinancesPage() {
   )
 }
 
+export default FinancesPage

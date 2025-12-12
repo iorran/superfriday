@@ -96,7 +96,7 @@ async function verifyEmailAccount(accountId: string): Promise<{ success: boolean
   return response.json()
 }
 
-export default function EmailAccountManagement() {
+const EmailAccountManagement = () => {
   const queryClient = useQueryClient()
   const { data: accounts = [], isLoading: loading } = useQuery({
     queryKey: ['emailAccounts'],
@@ -583,3 +583,4 @@ export default function EmailAccountManagement() {
   )
 }
 
+export default EmailAccountManagement

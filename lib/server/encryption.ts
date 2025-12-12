@@ -12,7 +12,7 @@ const TAG_LENGTH = 16
 /**
  * Get encryption key from environment variable
  */
-function getEncryptionKey(): Buffer {
+const getEncryptionKey = (): Buffer => {
   const key = process.env.GOOGLE_OAUTH_ENCRYPTION_KEY
   if (!key) {
     throw new Error('GOOGLE_OAUTH_ENCRYPTION_KEY environment variable is required')
@@ -33,7 +33,7 @@ function getEncryptionKey(): Buffer {
 /**
  * Encrypt a string value
  */
-export function encrypt(value: string): string {
+export const encrypt = (value: string): string => {
   if (!value) {
     return value
   }
@@ -72,7 +72,7 @@ export function encrypt(value: string): string {
 /**
  * Decrypt a string value
  */
-export function decrypt(encryptedValue: string): string {
+export const decrypt = (encryptedValue: string): string => {
   if (!encryptedValue) {
     return encryptedValue
   }

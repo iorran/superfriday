@@ -4,8 +4,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { del } from '@vercel/blob'
-import { getDatabase } from '@/lib/db'
-import { requireAuth } from '@/lib/auth-server'
+import { getDatabase } from '@/lib/server/db'
+import { requireAuth } from '@/lib/server/auth'
 
 export async function DELETE(
   request: NextRequest,

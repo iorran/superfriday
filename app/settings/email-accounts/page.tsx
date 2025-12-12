@@ -2,7 +2,7 @@
 
 import EmailAccountManagement from '@/components/EmailAccountManagement'
 
-export default function EmailAccountsPage() {
+const EmailAccountsPage = () => {
   return (
     <div className="space-y-6">
       <div>
@@ -17,3 +17,4 @@ export default function EmailAccountsPage() {
   )
 }
 
+export default EmailAccountsPage

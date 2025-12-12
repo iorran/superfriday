@@ -4,8 +4,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getSMTPSettings, setSMTPSettings } from '@/lib/db-client'
-import { requireAuth } from '@/lib/auth-server'
+import { getSMTPSettings, setSMTPSettings } from '@/lib/server/db-operations'
+import { requireAuth } from '@/lib/server/auth'
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export async function GET(_request: NextRequest) {

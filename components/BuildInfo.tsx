@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { CheckCircle2, Clock, GitCommit } from 'lucide-react'
 
-export default function BuildInfo() {
+const BuildInfo = () => {
   const [isLatest, setIsLatest] = useState(true)
 
   // Build metadata - simplified for Next.js
@@ -74,4 +74,4 @@ export default function BuildInfo() {
   )
 }
 
-
+export default BuildInfo

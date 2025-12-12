@@ -1,11 +1,12 @@
 /**
- * Better Auth Configuration
- * Handles authentication with email and password
+ * Better Auth Server Configuration
+ * Server-side authentication setup and utilities
  */
 
 import { betterAuth } from 'better-auth'
 import { mongodbAdapter } from 'better-auth/adapters/mongodb'
 import { MongoClient, Db } from 'mongodb'
+import { headers } from 'next/headers'
 
 // Get database URL from environment variable
 const databaseUrl = process.env.MONGODB_URI || process.env.DATABASE_URL
@@ -20,7 +21,7 @@ let authDbInstance: Db | null = null
 
 // Initialize the database connection
 // This will be called when the adapter first needs the db
-function getAuthDb(): Db {
+const getAuthDb = (): Db => {
   if (!databaseUrl) {
     throw new Error('MONGODB_URI or DATABASE_URL environment variable is required')
   }
@@ -77,3 +78,37 @@ export const auth = betterAuth({
 
 export type Session = typeof auth.$Infer.Session
 export type User = typeof auth.$Infer.Session.user
+
+/**
+ * Get the current session on the server
+ */
+export const getSession = async () => {
+  const headersList = await headers()
+  const cookieHeader = headersList.get('cookie') || ''
+  
+  return await auth.api.getSession({
+    headers: {
+      cookie: cookieHeader,
+    },
+  })
+}
+
+/**
+ * Get the current user on the server
+ */
+export const getCurrentUser = async () => {
+  const session = await getSession()
+  return session?.user || null
+}
+
+/**
+ * Require authentication - throws error if not authenticated
+ */
+export const requireAuth = async () => {
+  const session = await getSession()
+  if (!session?.user) {
+    throw new Error('Unauthorized')
+  }
+  return session
+}
+

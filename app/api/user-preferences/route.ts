@@ -4,8 +4,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getUserPreferences, updateUserPreferences, getUserPreference, setUserPreference } from '@/lib/db-client'
-import { requireAuth } from '@/lib/auth-server'
+import { getUserPreferences, updateUserPreferences, getUserPreference, setUserPreference } from '@/lib/server/db-operations'
+import { requireAuth } from '@/lib/server/auth'
 
 /**
  * GET /api/user-preferences

@@ -4,8 +4,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { updateInvoiceState } from '@/lib/db-client'
-import { requireAuth } from '@/lib/auth-server'
+import { updateInvoiceState } from '@/lib/server/db-operations'
+import { requireAuth } from '@/lib/server/auth'
 
 export async function PATCH(
   request: NextRequest,

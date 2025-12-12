@@ -2,7 +2,7 @@
 
 import SettingsPanel from '@/components/SettingsPanel'
 
-export default function GeneralSettingsPage() {
+const GeneralSettingsPage = () => {
   return (
     <div className="space-y-6">
       <div>
@@ -17,3 +17,4 @@ export default function GeneralSettingsPage() {
   )
 }
 
+export default GeneralSettingsPage

@@ -4,16 +4,16 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { Menu, X, FileText, Settings, Users, FileCode, TrendingUp, LogOut, Mail, Upload } from 'lucide-react'
-import { cn } from '@/lib/utils'
-import { useSession, signOut } from '@/lib/auth-client'
+import { cn } from '@/lib/shared/utils'
+import { useSession, signOut } from '@/lib/client/auth'
 import Tour from '@/components/Tour'
-import { useTour, tourSteps } from '@/lib/hooks/use-tour'
+import { useTour, tourSteps } from '@/hooks/use-tour'
 
 interface DashboardLayoutProps {
   children: React.ReactNode
 }
 
-export default function DashboardLayout({ children }: DashboardLayoutProps) {
+const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
   const pathname = usePathname()
@@ -113,6 +113,10 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         <div
           className="fixed inset-0 bg-black/50 z-40 lg:hidden"
           onClick={() => setSidebarOpen(false)}
+          onKeyDown={(e) => e.key === 'Escape' && setSidebarOpen(false)}
+          role="button"
+          tabIndex={0}
+          aria-label="Fechar menu lateral"
         />
       )}
 
@@ -122,6 +126,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           'fixed top-0 left-0 z-50 h-full w-64 bg-card border-r transition-transform duration-300 ease-in-out lg:translate-x-0',
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         )}
+        role="navigation"
+        aria-label="Menu de navegação principal"
       >
         <div className="flex flex-col h-full">
           {/* Logo/Header */}
@@ -130,8 +136,10 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             <button
               onClick={() => setSidebarOpen(false)}
               className="lg:hidden p-2 hover:bg-accent rounded-md"
+              aria-label="Fechar menu lateral"
+              tabIndex={0}
             >
-              <X className="h-5 w-5" />
+              <X className="h-5 w-5" aria-hidden="true" />
             </button>
           </div>
 
@@ -155,8 +163,10 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                         ? 'bg-primary text-primary-foreground'
                         : 'hover:bg-accent text-muted-foreground hover:text-foreground'
                     )}
+                    aria-current={isActive ? 'page' : undefined}
+                    aria-label={item.name}
                   >
-                    <Icon className="h-5 w-5" />
+                    <Icon className="h-5 w-5" aria-hidden="true" />
                     <span className="font-medium">{item.name}</span>
                   </Link>
                 )
@@ -189,8 +199,10 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                         ? 'bg-primary text-primary-foreground'
                         : 'hover:bg-accent text-muted-foreground hover:text-foreground'
                     )}
+                    aria-current={isActive ? 'page' : undefined}
+                    aria-label={item.name}
                   >
-                    <Icon className="h-5 w-5" />
+                    <Icon className="h-5 w-5" aria-hidden="true" />
                     <span className="font-medium">{item.name}</span>
                   </Link>
                 )
@@ -222,8 +234,10 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                         ? 'bg-primary text-primary-foreground'
                         : 'hover:bg-accent text-muted-foreground hover:text-foreground'
                     )}
+                    aria-current={isActive ? 'page' : undefined}
+                    aria-label={item.name}
                   >
-                    <Icon className="h-5 w-5" />
+                    <Icon className="h-5 w-5" aria-hidden="true" />
                     <span className="font-medium">{item.name}</span>
                   </Link>
                 )
@@ -231,7 +245,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             </div>
 
             {/* User section */}
-            <div className="mt-auto border-t border-border p-4">
+            <div className="mt-auto border-t border-border p-4" role="region" aria-label="Informações do usuário">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{session.user.email}</p>
@@ -240,8 +254,10 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               <button
                 onClick={handleSignOut}
                 className="w-full flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
+                aria-label="Sair da conta"
+                tabIndex={0}
               >
-                <LogOut className="h-4 w-4" />
+                <LogOut className="h-4 w-4" aria-hidden="true" />
                 <span>Sair</span>
               </button>
             </div>
@@ -252,13 +268,16 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       {/* Main content */}
       <div className="lg:pl-64">
         {/* Top bar */}
-        <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-sm border-b">
+        <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-sm border-b" role="banner">
           <div className="flex items-center justify-between p-4">
             <button
               onClick={() => setSidebarOpen(true)}
               className="lg:hidden p-2 hover:bg-accent rounded-md"
+              aria-label="Abrir menu lateral"
+              aria-expanded={sidebarOpen}
+              tabIndex={0}
             >
-              <Menu className="h-6 w-6" />
+              <Menu className="h-6 w-6" aria-hidden="true" />
             </button>
             <div className="flex-1" />
           </div>
@@ -282,3 +301,4 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   )
 }
 
+export default DashboardLayout

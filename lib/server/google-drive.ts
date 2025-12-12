@@ -4,7 +4,7 @@
  */
 
 import { google } from 'googleapis'
-import { getGoogleOAuthToken, saveGoogleOAuthToken } from './db-client'
+import { getGoogleOAuthToken, saveGoogleOAuthToken } from './db-operations'
 
 const CLIENT_ID = process.env.GOOGLE_CLIENT_ID
 const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET
@@ -17,7 +17,7 @@ if (!CLIENT_ID || !CLIENT_SECRET || !REDIRECT_URI) {
 /**
  * Create OAuth2 client
  */
-function createOAuth2Client() {
+const createOAuth2Client = () => {
   if (!CLIENT_ID || !CLIENT_SECRET || !REDIRECT_URI) {
     throw new Error('Google OAuth credentials not configured')
   }
@@ -28,7 +28,7 @@ function createOAuth2Client() {
 /**
  * Generate OAuth authorization URL
  */
-export function getAuthUrl(state?: string): string {
+export const getAuthUrl = (state?: string): string => {
   const oauth2Client = createOAuth2Client()
   
   const scopes = [
@@ -47,10 +47,10 @@ export function getAuthUrl(state?: string): string {
 /**
  * Handle OAuth callback and exchange code for tokens
  */
-export async function handleOAuthCallback(
+export const handleOAuthCallback = async (
   code: string,
   userId: string
-): Promise<{ accessToken: string; refreshToken: string }> {
+): Promise<{ accessToken: string; refreshToken: string }> => {
   const oauth2Client = createOAuth2Client()
   
   const { tokens } = await oauth2Client.getToken(code)
@@ -93,7 +93,7 @@ export async function handleOAuthCallback(
 /**
  * Get or refresh access token for a user
  */
-export async function getAccessToken(userId: string): Promise<string> {
+export const getAccessToken = async (userId: string): Promise<string> => {
   const tokenData = await getGoogleOAuthToken(userId)
   
   if (!tokenData) {
@@ -116,7 +116,7 @@ export async function getAccessToken(userId: string): Promise<string> {
 /**
  * Refresh access token using refresh token
  */
-async function refreshAccessToken(userId: string, refreshToken: string): Promise<string> {
+const refreshAccessToken = async (userId: string, refreshToken: string): Promise<string> => {
   const oauth2Client = createOAuth2Client()
   oauth2Client.setCredentials({
     refresh_token: refreshToken,
@@ -151,7 +151,7 @@ async function refreshAccessToken(userId: string, refreshToken: string): Promise
 /**
  * Get authenticated Drive API client
  */
-export async function getDriveClient(userId: string) {
+export const getDriveClient = async (userId: string) => {
   const accessToken = await getAccessToken(userId)
   const oauth2Client = createOAuth2Client()
   oauth2Client.setCredentials({
@@ -164,7 +164,7 @@ export async function getDriveClient(userId: string) {
 /**
  * List folders in user's Google Drive
  */
-export async function listFolders(userId: string) {
+export const listFolders = async (userId: string) => {
   const drive = await getDriveClient(userId)
   
   const response = await drive.files.list({
@@ -180,7 +180,7 @@ export async function listFolders(userId: string) {
 /**
  * List PDF files in a specific folder
  */
-export async function listFilesInFolder(userId: string, folderId: string) {
+export const listFilesInFolder = async (userId: string, folderId: string) => {
   const drive = await getDriveClient(userId)
   
   const response = await drive.files.list({
@@ -196,7 +196,7 @@ export async function listFilesInFolder(userId: string, folderId: string) {
 /**
  * Search for PDF files in user's Google Drive
  */
-export async function searchFiles(userId: string, query?: string) {
+export const searchFiles = async (userId: string, query?: string) => {
   const drive = await getDriveClient(userId)
   
   let searchQuery = "mimeType='application/pdf' and trashed=false"
@@ -217,7 +217,7 @@ export async function searchFiles(userId: string, query?: string) {
 /**
  * Download a file from Google Drive
  */
-export async function downloadFile(userId: string, fileId: string): Promise<Buffer> {
+export const downloadFile = async (userId: string, fileId: string): Promise<Buffer> => {
   const drive = await getDriveClient(userId)
   
   const response = await drive.files.get(
@@ -231,7 +231,7 @@ export async function downloadFile(userId: string, fileId: string): Promise<Buff
 /**
  * Get file metadata
  */
-export async function getFileMetadata(userId: string, fileId: string) {
+export const getFileMetadata = async (userId: string, fileId: string) => {
   const drive = await getDriveClient(userId)
   
   const response = await drive.files.get({

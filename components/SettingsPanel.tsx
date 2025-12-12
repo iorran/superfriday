@@ -16,11 +16,11 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
-import { getAccountantEmail, setAccountantEmail } from '@/lib/client/db-client'
+import { getAccountantEmail, setAccountantEmail } from '@/lib/client/api'
 import { Settings, Trash2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
-export default function SettingsPanel() {
+const SettingsPanel = () => {
   const [accountantEmail, setAccountantEmailLocal] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -204,3 +204,4 @@ export default function SettingsPanel() {
   )
 }
 
+export default SettingsPanel

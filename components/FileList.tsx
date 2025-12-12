@@ -2,42 +2,20 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/use-toast'
-import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible'
+import { useInvoices, useUpdateInvoiceState, useDeleteInvoice } from '@/hooks/use-invoices'
+import { useSendEmail } from '@/hooks/use-email'
+import { useEmailTemplates } from '@/hooks/use-email-templates'
+import { useClients, useUpdateClient } from '@/hooks/use-clients'
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog'
-import { useInvoices, useUpdateInvoiceState, useDeleteInvoice } from '@/lib/hooks/use-invoices'
-import { useSendEmail } from '@/lib/hooks/use-email'
-import { useEmailTemplates } from '@/lib/hooks/use-email-templates'
-import { useClients, useUpdateClient } from '@/lib/hooks/use-clients'
-import { FileText, Trash2, CheckCircle2, Send, Edit, Loader2, Mail, AlertCircle } from 'lucide-react'
-import FileUpload from './FileUpload'
-import type { Invoice, InvoiceFile, EmailTemplate } from '@/types'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+  InvoiceGroup,
+  InvoiceEditDialog,
+  ClientEmailDialog,
+} from '@/components/features/invoices'
+import type { FormattedInvoice, EditingClientEmail } from '@/components/features/invoices'
+import type { Invoice, EmailTemplate } from '@/types'
 
-interface FormattedInvoice extends Invoice {
-  groupKey: string
-  groupLabel: string
-  sentToClient: boolean
-  sentToAccountant: boolean
-}
-
-export default function FileList() {
+const FileList = () => {
   const { data: invoicesData = [], isLoading: loading } = useInvoices()
   const { data: clients = [] } = useClients()
   const updateInvoiceStateMutation = useUpdateInvoiceState()
@@ -50,20 +28,13 @@ export default function FileList() {
   const [deletingInvoice, setDeletingInvoice] = useState<string | null>(null)
   const [sendingEmail, setSendingEmail] = useState<string | null>(null)
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null)
-  const [editingClientEmail, setEditingClientEmail] = useState<{ clientId: string; email: string } | null>(null)
+  const [editingClientEmail, setEditingClientEmail] = useState<EditingClientEmail | null>(null)
   const { toast } = useToast()
 
   // Get current year
   const currentYear = useMemo(() => {
     return new Date().getFullYear()
   }, [])
-
-  // Initialize: expand first group
-  useEffect(() => {
-    if (invoicesData.length > 0) {
-      // Will be set after grouping is calculated
-    }
-  }, [invoicesData.length])
 
   // Format invoices and group by client and year
   const invoicesByClientAndYear = useMemo(() => {
@@ -73,7 +44,6 @@ export default function FileList() {
       const clientName = inv.client_name || 'Sem cliente'
       const clientId = inv.client_id || 'unknown'
       
-      // Create group key: clientId-year
       const groupKey = `${clientId}-${year}`
       const groupLabel = `${clientName} - ${year}`
 
@@ -87,7 +57,6 @@ export default function FileList() {
       }
     })
 
-    // Group by client and year
     const grouped: Record<string, { groupLabel: string; clientName: string; year: number; invoices: FormattedInvoice[] }> = {}
     formatted.forEach((inv: FormattedInvoice) => {
       if (!grouped[inv.groupKey]) {
@@ -103,25 +72,17 @@ export default function FileList() {
       grouped[inv.groupKey].invoices.push(inv)
     })
 
-    // Sort invoices within each group by date (newest first)
-    // Sort by year, then month, then uploaded_at as tiebreaker
+    // Sort invoices within each group
     Object.values(grouped).forEach((group) => {
       group.invoices.sort((a, b) => {
-        // First compare by year (descending)
         const yearA = a.year || 0
         const yearB = b.year || 0
-        if (yearB !== yearA) {
-          return yearB - yearA
-        }
+        if (yearB !== yearA) return yearB - yearA
         
-        // Then compare by month (descending)
         const monthA = a.month || 0
         const monthB = b.month || 0
-        if (monthB !== monthA) {
-          return monthB - monthA
-        }
+        if (monthB !== monthA) return monthB - monthA
         
-        // Finally compare by uploaded_at (newest first)
         const dateA = a.uploaded_at ? new Date(a.uploaded_at).getTime() : 0
         const dateB = b.uploaded_at ? new Date(b.uploaded_at).getTime() : 0
         return dateB - dateA
@@ -131,16 +92,13 @@ export default function FileList() {
     return grouped
   }, [invoicesData])
 
-  // Initialize: expand first group or current year groups (only once on initial load)
+  // Initialize: expand first group or current year groups
   const hasInitialized = useRef(false)
   
   useEffect(() => {
     const groupKeys = Object.keys(invoicesByClientAndYear)
     
-    // Only auto-expand on the very first load when we have groups and haven't initialized yet
-    // This prevents re-expanding when user manually closes all groups
     if (groupKeys.length > 0 && !hasInitialized.current) {
-      // Initial load - expand current year groups
       const currentYearGroups = groupKeys.filter(key => {
         const group = invoicesByClientAndYear[key]
         return group.year === currentYear
@@ -157,7 +115,6 @@ export default function FileList() {
 
   const toggleGroup = useCallback((groupKey: string) => {
     setExpandedGroups((prev) => {
-      // Create a completely new Set to ensure React detects the change
       const newSet = new Set(prev)
       if (newSet.has(groupKey)) {
         newSet.delete(groupKey)
@@ -168,7 +125,6 @@ export default function FileList() {
     })
   }, [])
   
-  // Create a memoized map of toggle handlers to ensure stability
   const toggleHandlers = useMemo(() => {
     const handlers: Record<string, () => void> = {}
     Object.keys(invoicesByClientAndYear).forEach((key) => {
@@ -177,18 +133,14 @@ export default function FileList() {
     return handlers
   }, [invoicesByClientAndYear, toggleGroup])
 
-  // Create flat list of all invoices for lookup
   const allInvoices = useMemo(() => {
     return Object.values(invoicesByClientAndYear).flatMap(group => group.invoices)
   }, [invoicesByClientAndYear])
 
-  // Sort groups: by client name, then by year (descending)
   const sortedGroups = useMemo(() => {
     return Object.entries(invoicesByClientAndYear).sort(([, groupA], [, groupB]) => {
-      // First sort by client name
       const clientCompare = groupA.clientName.localeCompare(groupB.clientName)
       if (clientCompare !== 0) return clientCompare
-      // Then by year (descending)
       return groupB.year - groupA.year
     })
   }, [invoicesByClientAndYear])
@@ -223,12 +175,9 @@ export default function FileList() {
         throw new Error('Invoice not found')
       }
 
-      // Get templates for this recipient type
-      // Templates are stored with type 'to_client' or 'to_account_manager'
       const templateType = recipientType === 'client' ? 'to_client' : 'to_account_manager'
       const recipientTemplates = emailTemplates.filter((t: EmailTemplate) => t.type === templateType)
       
-      // Use the first template if available, otherwise use default
       const template = recipientTemplates.length > 0 ? recipientTemplates[0] : null
       let templateId: string | null = null
       let subject = ''
@@ -237,7 +186,6 @@ export default function FileList() {
       if (template) {
         templateId = template.id
         
-        // Format month name in Portuguese
         const monthNames = [
           'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
           'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
@@ -245,7 +193,6 @@ export default function FileList() {
         const monthName = invoice.month ? monthNames[invoice.month - 1] || String(invoice.month) : ''
         const monthYear = invoice.month && invoice.year ? `${monthName} ${invoice.year}` : (invoice.year ? String(invoice.year) : '')
         
-        // Replace template variables in subject
         subject = template.subject
           .replace(/\{\{clientName\}\}/g, invoice.client_name || '')
           .replace(/\{\{invoiceName\}\}/g, invoice.id || '')
@@ -253,9 +200,8 @@ export default function FileList() {
           .replace(/\{\{month\}\}/g, invoice.month ? String(invoice.month) : '')
           .replace(/\{\{year\}\}/g, invoice.year ? String(invoice.year) : '')
           .replace(/\{\{monthYear\}\}/g, monthYear)
-          .replace(/\{\{downloadLink\}\}/g, '') // Not applicable for attachments
+          .replace(/\{\{downloadLink\}\}/g, '')
         
-        // Replace template variables in body
         body = template.body
           .replace(/\{\{clientName\}\}/g, invoice.client_name || '')
           .replace(/\{\{invoiceName\}\}/g, invoice.id || '')
@@ -263,9 +209,8 @@ export default function FileList() {
           .replace(/\{\{month\}\}/g, invoice.month ? String(invoice.month) : '')
           .replace(/\{\{year\}\}/g, invoice.year ? String(invoice.year) : '')
           .replace(/\{\{monthYear\}\}/g, monthYear)
-          .replace(/\{\{downloadLink\}\}/g, '') // Not applicable for attachments
+          .replace(/\{\{downloadLink\}\}/g, '')
       } else {
-        // Fallback to default if no template found
         subject = recipientType === 'client' 
           ? `Invoice - ${invoice.client_name}`
           : `Invoice para ${invoice.client_name}`
@@ -283,7 +228,6 @@ export default function FileList() {
         body,
       })
 
-      // Update state based on recipient type
       if (recipientType === 'client') {
         await handleStateChange(invoiceId, { sentToClient: true })
       } else {
@@ -332,57 +276,47 @@ export default function FileList() {
     }
   }, [toast, deleteInvoiceMutation])
 
-  const formatFileSize = (bytes: number) => {
-    if (!bytes) return '0 Bytes'
-    const k = 1024
-    const sizes = ['Bytes', 'KB', 'MB', 'GB']
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
-  }
+  const handleShowToast = useCallback((title: string, description: string, variant: 'default' | 'destructive') => {
+    toast({ title, description, variant })
+  }, [toast])
 
-  const formatInvoiceDate = (month: number | null, year: number | null, uploadedAt?: string) => {
-    if (!month || !year) return ''
-    
-    const monthNames = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-    ]
-    
-    const monthName = monthNames[month - 1] || String(month)
-    
-    // Try to get day from uploaded_at, otherwise use day 1
-    let day = 1
-    if (uploadedAt) {
-      try {
-        const date = new Date(uploadedAt)
-        if (!isNaN(date.getTime())) {
-          day = date.getDate()
-        }
-      } catch {
-        // Use default day 1
-      }
+  const handleEditClientEmail = useCallback((clientId: string, email: string) => {
+    setEditingClientEmail({ clientId, email })
+  }, [])
+
+  const handleClientEmailUpdate = useCallback(async (clientId: string, email: string) => {
+    const client = clients.find(c => c.id === clientId)
+    if (!client) return
+
+    try {
+      await updateClientMutation.mutateAsync({
+        clientId,
+        data: { email },
+      })
+      
+      toast({
+        title: "Email Atualizado",
+        description: `Email do cliente ${client.name} foi atualizado com sucesso.`,
+        variant: "default",
+      })
+      
+      setEditingClientEmail(null)
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: error instanceof Error ? error.message : "Falha ao atualizar email",
+        variant: "destructive",
+      })
     }
-    
-    return `${day} ${monthName} ${year}`
-  }
-
-  const formatCurrency = (amount: number | null | undefined) => {
-    if (amount === null || amount === undefined) return '€0,00'
-    return new Intl.NumberFormat('pt-PT', {
-      style: 'currency',
-      currency: 'EUR',
-    }).format(amount)
-  }
-
-  const getTotalFileSize = (files: InvoiceFile[]) => {
-    return files?.reduce((total, file) => total + (file.file_size || 0), 0) || 0
-  }
+  }, [clients, updateClientMutation, toast])
 
   if (loading) {
     return (
       <Card className="w-full">
         <CardContent className="p-6">
-          <p className="text-center text-muted-foreground">Carregando invoices...</p>
+          <p className="text-center text-muted-foreground" role="status" aria-live="polite">
+            Carregando invoices...
+          </p>
         </CardContent>
       </Card>
     )
@@ -392,351 +326,55 @@ export default function FileList() {
     return (
       <Card className="w-full">
         <CardContent className="p-6">
-          <p className="text-center text-muted-foreground">Nenhuma invoice criada ainda.</p>
+          <p className="text-center text-muted-foreground" role="status">
+            Nenhuma invoice criada ainda.
+          </p>
         </CardContent>
       </Card>
     )
   }
 
   return (
-    <div className="w-full space-y-4">
+    <div className="w-full space-y-4" role="region" aria-label="Lista de invoices" data-tour="main-content">
       {sortedGroups.map(([groupKey, group]) => {
-        const isExpanded = expandedGroups.has(groupKey)
         const totalAmount = group.invoices.reduce((sum, inv) => sum + (inv.invoice_amount || 0), 0)
         const handleToggle = toggleHandlers[groupKey] || (() => toggleGroup(groupKey))
         
         return (
-          <Card key={groupKey}>
-            <Collapsible 
-              open={isExpanded} 
-              onOpenChange={handleToggle}
-            >
-              <CollapsibleTrigger className="w-full p-4">
-                <div className="flex items-center justify-between w-full">
-                  <div className="flex items-center gap-2">
-                    <FileText className="h-4 w-4" />
-                    <span className="font-semibold">{group.groupLabel}</span>
-                    <span className="text-sm text-muted-foreground">
-                      ({group.invoices.length} {group.invoices.length === 1 ? 'invoice' : 'invoices'})
-                    </span>
-                  </div>
-                  <span className="text-sm font-medium text-muted-foreground">
-                    {formatCurrency(totalAmount)}
-                  </span>
-                </div>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <div className="p-4 space-y-3">
-                  {group.invoices.map((invoice) => {
-                    const invoiceFiles = invoice.files?.filter((f: InvoiceFile) => f.file_type === 'invoice') || []
-                    const timesheetFiles = invoice.files?.filter((f: InvoiceFile) => f.file_type === 'timesheet') || []
-                    const totalSize = getTotalFileSize(invoice.files || [])
-
-                    return (
-                      <div
-                        key={invoice.id}
-                        className="p-4 rounded-md border bg-card hover:bg-accent/50 transition-colors"
-                      >
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-2">
-                              <FileText className="h-5 w-5 text-muted-foreground shrink-0" />
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2">
-                                  <p className="font-medium">
-                                    {formatInvoiceDate(invoice.month, invoice.year, invoice.uploaded_at) || invoice.client_name || 'Sem cliente'}
-                                  </p>
-                                  {(!invoice.client_email || invoice.client_email.trim() === '') && (
-                                    <span 
-                                      className="inline-flex items-center gap-1 text-xs bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300 px-2 py-0.5 rounded cursor-pointer hover:bg-amber-200 dark:hover:bg-amber-800 transition-colors"
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        const client = clients.find(c => c.id === invoice.client_id)
-                                        if (client) {
-                                          setEditingClientEmail({ clientId: client.id, email: client.email || '' })
-                                        }
-                                      }}
-                                      title="Clique para adicionar email"
-                                    >
-                                      <AlertCircle className="h-3 w-3" />
-                                      Email ausente
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-2 mt-1">
-                                  <p className="text-sm text-muted-foreground">
-                                    {formatCurrency(invoice.invoice_amount)}
-                                    {totalSize > 0 && ` • ${formatFileSize(totalSize)}`}
-                                  </p>
-                                  {invoice.client_email && invoice.client_email.trim() !== '' && (
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        const client = clients.find(c => c.id === invoice.client_id)
-                                        if (client) {
-                                          setEditingClientEmail({ clientId: client.id, email: client.email || '' })
-                                        }
-                                      }}
-                                      className="text-xs text-primary hover:underline flex items-center gap-1"
-                                      title="Editar email do cliente"
-                                    >
-                                      <Mail className="h-3 w-3" />
-                                      {invoice.client_email}
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Files list */}
-                            {invoice.files && invoice.files.length > 0 && (
-                              <div className="mt-2 space-y-1">
-                                {invoiceFiles.map((file: InvoiceFile) => (
-                                  <p key={file.id} className="text-xs text-muted-foreground">
-                                    📄 Invoice: {file.original_name}
-                                  </p>
-                                ))}
-                                {timesheetFiles.map((file: InvoiceFile) => (
-                                  <p key={file.id} className="text-xs text-muted-foreground">
-                                    📋 Timesheet: {file.original_name}
-                                  </p>
-                                ))}
-                              </div>
-                            )}
-
-                            {/* Workflow States */}
-                            <div className="flex items-center gap-2 mt-3 flex-wrap">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  if (!invoice.sentToClient && sendingEmail !== `${invoice.id}-client`) {
-                                    handleSendEmail(invoice.id, 'client')
-                                  }
-                                }}
-                                disabled={sendingEmail === `${invoice.id}-client` || invoice.sentToClient}
-                                className={`flex items-center gap-1 text-xs px-3 py-1.5 rounded transition-all ${
-                                  sendingEmail === `${invoice.id}-client`
-                                    ? 'bg-blue-200 text-blue-800 dark:bg-blue-800 dark:text-blue-200 cursor-wait opacity-75'
-                                    : invoice.sentToClient
-                                    ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 cursor-default opacity-75'
-                                    : 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800 cursor-pointer'
-                                } ${sendingEmail === `${invoice.id}-client` ? 'animate-pulse' : ''}`}
-                              >
-                                {sendingEmail === `${invoice.id}-client` ? (
-                                  <>
-                                    <Loader2 className="h-3 w-3 animate-spin" />
-                                    Enviando...
-                                  </>
-                                ) : invoice.sentToClient ? (
-                                  <>
-                                    <CheckCircle2 className="h-3 w-3" />
-                                    Enviado para Cliente
-                                  </>
-                                ) : (
-                                  <>
-                                    <Send className="h-3 w-3" />
-                                    Enviar para Cliente
-                                  </>
-                                )}
-                              </button>
-
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  if (!invoice.sentToAccountant && !invoice.sentToClient && sendingEmail !== `${invoice.id}-accountant`) {
-                                    toast({
-                                      title: "Ação não permitida",
-                                      description: "Você deve enviar a invoice para o cliente antes de enviar para o contador",
-                                      variant: "destructive",
-                                    })
-                                    return
-                                  }
-                                  if (!invoice.sentToAccountant && sendingEmail !== `${invoice.id}-accountant`) {
-                                    handleSendEmail(invoice.id, 'accountant')
-                                  }
-                                }}
-                                disabled={sendingEmail === `${invoice.id}-accountant` || invoice.sentToAccountant || !invoice.sentToClient}
-                                className={`flex items-center gap-1 text-xs px-3 py-1.5 rounded transition-all ${
-                                  sendingEmail === `${invoice.id}-accountant`
-                                    ? 'bg-purple-200 text-purple-800 dark:bg-purple-800 dark:text-purple-200 cursor-wait opacity-75'
-                                    : invoice.sentToAccountant
-                                    ? 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 cursor-default opacity-75'
-                                    : !invoice.sentToClient
-                                    ? 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-600 cursor-not-allowed opacity-50'
-                                    : 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-800 cursor-pointer'
-                                } ${sendingEmail === `${invoice.id}-accountant` ? 'animate-pulse' : ''}`}
-                              >
-                                {sendingEmail === `${invoice.id}-accountant` ? (
-                                  <>
-                                    <Loader2 className="h-3 w-3 animate-spin" />
-                                    Enviando...
-                                  </>
-                                ) : invoice.sentToAccountant ? (
-                                  <>
-                                    <CheckCircle2 className="h-3 w-3" />
-                                    Enviado para Contador
-                                  </>
-                                ) : !invoice.sentToClient ? (
-                                  <>
-                                    <Send className="h-3 w-3" />
-                                    Enviar para Cliente Primeiro
-                                  </>
-                                ) : (
-                                  <>
-                                    <Send className="h-3 w-3" />
-                                    Enviar para Contador
-                                  </>
-                                )}
-                              </button>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setEditingInvoiceId(invoice.id)
-                              }}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="text-destructive hover:text-destructive"
-                                  disabled={deletingInvoice === invoice.id}
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>Tem certeza?</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    Esta ação não pode ser desfeita. Isso irá deletar permanentemente a invoice
-                                    <strong className="block mt-2">&ldquo;{invoice.client_name}&rdquo;</strong>
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                  <AlertDialogAction
-                                    onClick={() => handleDelete(invoice.id, invoice.client_name || '')}
-                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                    disabled={deletingInvoice === invoice.id}
-                                  >
-                                    {deletingInvoice === invoice.id ? 'Deletando...' : 'Deletar'}
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-          </Card>
+          <InvoiceGroup
+            key={groupKey}
+            groupKey={groupKey}
+            groupLabel={group.groupLabel}
+            invoices={group.invoices}
+            totalAmount={totalAmount}
+            isExpanded={expandedGroups.has(groupKey)}
+            onToggle={handleToggle}
+            clients={clients}
+            deletingInvoice={deletingInvoice}
+            sendingEmail={sendingEmail}
+            onSendEmail={handleSendEmail}
+            onDelete={handleDelete}
+            onEdit={setEditingInvoiceId}
+            onEditClientEmail={handleEditClientEmail}
+            onShowToast={handleShowToast}
+          />
         )
       })}
 
-      <Dialog open={editingInvoiceId !== null} onOpenChange={(open) => {
-        if (!open) {
-          setEditingInvoiceId(null)
-        }
-      }}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Editar Invoice</DialogTitle>
-          </DialogHeader>
-          <FileUpload
-            editingInvoiceId={editingInvoiceId}
-            onUploadSuccess={() => {
-              setEditingInvoiceId(null)
-            }}
-            onCancel={() => {
-              setEditingInvoiceId(null)
-            }}
-          />
-        </DialogContent>
-      </Dialog>
+      <InvoiceEditDialog
+        invoiceId={editingInvoiceId}
+        onClose={() => setEditingInvoiceId(null)}
+      />
 
-      {/* Quick Edit Client Email Dialog */}
-      <Dialog open={!!editingClientEmail} onOpenChange={(open) => !open && setEditingClientEmail(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Editar Email do Cliente</DialogTitle>
-          </DialogHeader>
-          {editingClientEmail && (() => {
-            const client = clients.find(c => c.id === editingClientEmail.clientId)
-            if (!client) return null
-            
-            return (
-              <div className="space-y-4">
-                <div>
-                  <p className="text-sm font-medium mb-1">Cliente:</p>
-                  <p className="text-sm text-muted-foreground">{client.name}</p>
-                </div>
-                <div>
-                  <label htmlFor="clientEmail" className="text-sm font-medium mb-1 block">
-                    Email:
-                  </label>
-                  <input
-                    id="clientEmail"
-                    type="email"
-                    value={editingClientEmail.email}
-                    onChange={(e) => setEditingClientEmail({ ...editingClientEmail, email: e.target.value })}
-                    className="w-full p-2 border rounded-md bg-background"
-                    placeholder="email@exemplo.com"
-                  />
-                </div>
-                <div className="flex justify-end gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => setEditingClientEmail(null)}
-                  >
-                    Cancelar
-                  </Button>
-                  <Button
-                    onClick={async () => {
-                      if (!editingClientEmail) return
-                      
-                      try {
-                        await updateClientMutation.mutateAsync({
-                          clientId: editingClientEmail.clientId,
-                          data: { email: editingClientEmail.email.trim() || '' },
-                        })
-                        
-                        toast({
-                          title: "Email Atualizado",
-                          description: `Email do cliente ${client.name} foi atualizado com sucesso.`,
-                          variant: "default",
-                        })
-                        
-                        setEditingClientEmail(null)
-                      } catch (error) {
-                        toast({
-                          title: "Erro",
-                          description: error instanceof Error ? error.message : "Falha ao atualizar email",
-                          variant: "destructive",
-                        })
-                      }
-                    }}
-                  >
-                    Salvar
-                  </Button>
-                </div>
-              </div>
-            )
-          })()}
-        </DialogContent>
-      </Dialog>
+      <ClientEmailDialog
+        editingClientEmail={editingClientEmail}
+        clients={clients}
+        onClose={() => setEditingClientEmail(null)}
+        onUpdate={handleClientEmailUpdate}
+        onEmailChange={(email) => setEditingClientEmail(prev => prev ? { ...prev, email } : null)}
+      />
     </div>
   )
 }
+
+export default FileList

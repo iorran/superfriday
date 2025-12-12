@@ -4,10 +4,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getInvoice, deleteInvoice, updateInvoice } from '@/lib/db-client'
-import { deleteFile } from '@/lib/storage'
-import { getDatabase } from '@/lib/db'
-import { requireAuth } from '@/lib/auth-server'
+import { getInvoice, deleteInvoice, updateInvoice } from '@/lib/server/db-operations'
+import { deleteFile } from '@/lib/server/storage'
+import { getDatabase } from '@/lib/server/db'
+import { requireAuth } from '@/lib/server/auth'
 
 export async function GET(
   request: NextRequest,

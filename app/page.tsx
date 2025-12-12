@@ -4,7 +4,7 @@ import FileList from '@/components/FileList'
 import FloatingUploadButton from '@/components/FloatingUploadButton'
 import BuildInfo from '@/components/BuildInfo'
 
-export default function Home() {
+const Home = () => {
   return (
     <div className="flex flex-col h-full space-y-6">
       <div>
@@ -22,3 +22,5 @@ export default function Home() {
     </div>
   )
 }
+
+export default Home

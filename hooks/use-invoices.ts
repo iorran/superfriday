@@ -7,8 +7,8 @@ import {
   updateInvoiceState,
   deleteInvoice,
   deleteInvoiceFile,
-} from '@/lib/client/db-client'
-import { queryKeys } from '@/lib/query-keys'
+} from '@/lib/client/api'
+import { queryKeys } from '@/lib/shared/query-keys'
 
 interface CreateInvoiceData {
   clientId: string
@@ -46,7 +46,7 @@ interface UpdateInvoiceStateData {
 /**
  * Query hook for fetching all invoices
  */
-export function useInvoices() {
+export const useInvoices = () => {
   return useQuery({
     queryKey: queryKeys.invoices.lists(),
     queryFn: getAllInvoices,
@@ -56,7 +56,7 @@ export function useInvoices() {
 /**
  * Query hook for fetching a single invoice by ID
  */
-export function useInvoice(invoiceId: string | null | undefined) {
+export const useInvoice = (invoiceId: string | null | undefined) => {
   return useQuery({
     queryKey: queryKeys.invoices.detail(invoiceId || ''),
     queryFn: () => getInvoice(invoiceId!),
@@ -67,7 +67,7 @@ export function useInvoice(invoiceId: string | null | undefined) {
 /**
  * Mutation hook for creating a new invoice
  */
-export function useCreateInvoice() {
+export const useCreateInvoice = () => {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -85,7 +85,7 @@ export function useCreateInvoice() {
 /**
  * Mutation hook for updating invoice details
  */
-export function useUpdateInvoice() {
+export const useUpdateInvoice = () => {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -105,7 +105,7 @@ export function useUpdateInvoice() {
 /**
  * Mutation hook for updating invoice workflow state
  */
-export function useUpdateInvoiceState() {
+export const useUpdateInvoiceState = () => {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -125,7 +125,7 @@ export function useUpdateInvoiceState() {
 /**
  * Mutation hook for deleting an invoice
  */
-export function useDeleteInvoice() {
+export const useDeleteInvoice = () => {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -144,7 +144,7 @@ export function useDeleteInvoice() {
 /**
  * Mutation hook for deleting an invoice file
  */
-export function useDeleteInvoiceFile() {
+export const useDeleteInvoiceFile = () => {
   const queryClient = useQueryClient()
 
   return useMutation({

@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, ChevronRight, ChevronLeft, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/shared/utils'
 
 export interface TourStep {
   id: string
@@ -21,7 +21,7 @@ interface TourProps {
   onSkip: () => void
 }
 
-export default function Tour({ steps, onComplete, onSkip }: TourProps) {
+const Tour = ({ steps, onComplete, onSkip }: TourProps) => {
   const [currentStep, setCurrentStep] = useState(0)
   const [targetElement, setTargetElement] = useState<HTMLElement | null>(null)
   const [overlayStyle, setOverlayStyle] = useState<React.CSSProperties>({})
@@ -224,7 +224,12 @@ export default function Tour({ steps, onComplete, onSkip }: TourProps) {
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-[9999] pointer-events-none">
+      <div 
+        className="fixed inset-0 z-[9999] pointer-events-none"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Tour guiado do aplicativo"
+      >
         {/* Dark overlay with spotlight */}
         <motion.div
           initial={{ opacity: 0 }}
@@ -290,8 +295,9 @@ export default function Tour({ steps, onComplete, onSkip }: TourProps) {
               onClick={handleSkip}
               className="absolute top-2 right-2 p-1 hover:bg-accent rounded-md transition-colors"
               aria-label="Pular tour"
+              tabIndex={0}
             >
-              <X className="h-4 w-4 text-muted-foreground" />
+              <X className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
             </button>
 
             {/* Content */}
@@ -326,24 +332,28 @@ export default function Tour({ steps, onComplete, onSkip }: TourProps) {
               </div>
 
               {/* Navigation buttons */}
-              <div className="flex gap-2">
+              <div className="flex gap-2" role="group" aria-label="Navegação do tour">
                 {currentStep > 0 && (
                   <Button
                     variant="outline"
                     onClick={handlePrevious}
                     className="flex-1"
+                    aria-label="Passo anterior"
+                    tabIndex={0}
                   >
-                    <ChevronLeft className="h-4 w-4 mr-1" />
+                    <ChevronLeft className="h-4 w-4 mr-1" aria-hidden="true" />
                     Anterior
                   </Button>
                 )}
                 <Button
                   onClick={handleNext}
                   className={cn('flex-1', currentStep === 0 && 'ml-auto')}
+                  aria-label={currentStep === steps.length - 1 ? 'Finalizar tour' : 'Próximo passo'}
+                  tabIndex={0}
                 >
                   {currentStep === steps.length - 1 ? 'Finalizar' : 'Próximo'}
                   {currentStep < steps.length - 1 && (
-                    <ChevronRight className="h-4 w-4 ml-1" />
+                    <ChevronRight className="h-4 w-4 ml-1" aria-hidden="true" />
                   )}
                 </Button>
               </div>
@@ -355,3 +365,4 @@ export default function Tour({ steps, onComplete, onSkip }: TourProps) {
   )
 }
 
+export default Tour

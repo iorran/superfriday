@@ -2,12 +2,12 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { signUp } from '@/lib/auth-client'
+import { signUp } from '@/lib/client/auth'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import Link from 'next/link'
 
-export default function SignUpPage() {
+const SignUpPage = () => {
   const router = useRouter()
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -145,3 +145,5 @@ export default function SignUpPage() {
     </div>
   )
 }
+
+export default SignUpPage

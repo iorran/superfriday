@@ -4,8 +4,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createInvoice, getAllInvoices } from '@/lib/db-client'
-import { requireAuth } from '@/lib/auth-server'
+import { createInvoice, getAllInvoices } from '@/lib/server/db-operations'
+import { requireAuth } from '@/lib/server/auth'
 
 export async function GET() {
   try {

@@ -7,9 +7,9 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
 import { useToast } from '@/components/ui/use-toast'
-import { useClients } from '@/lib/hooks/use-clients'
-import { usePDFExtraction } from '@/lib/hooks/use-pdf-extraction'
-import { uploadFile } from '@/lib/client/storage-client'
+import { useClients } from '@/hooks/use-clients'
+import { usePDFExtraction } from '@/hooks/use-pdf-extraction'
+import { uploadFile } from '@/lib/client/storage'
 import { Upload, X, FileText, Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
 import { motion } from 'framer-motion'
 import type { ExtractedPDFData } from '@/types'
@@ -29,7 +29,7 @@ interface FileWithData {
   error?: string
 }
 
-export default function OldFilesImport() {
+const OldFilesImport = () => {
   const { data: clients = [] } = useClients()
   const { extractFromFile } = usePDFExtraction()
   const { toast } = useToast()
@@ -510,3 +510,4 @@ export default function OldFilesImport() {
   )
 }
 
+export default OldFilesImport

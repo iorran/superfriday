@@ -4,8 +4,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/auth-server'
-import { getDatabase } from '@/lib/db'
+import { requireAuth } from '@/lib/server/auth'
+import { getDatabase } from '@/lib/server/db'
 
 /**
  * DELETE /api/user/delete-all-data

@@ -6,10 +6,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
-import { useClients, useCreateClient, useUpdateClient, useDeleteClient } from '@/lib/hooks/use-clients'
+import { useClients, useCreateClient, useUpdateClient, useDeleteClient } from '@/hooks/use-clients'
 import { UserPlus, Mail, User, Edit, Trash2, X, Plus } from 'lucide-react'
 import type { Client } from '@/types'
-import { clientSchema, type ClientFormData } from '@/lib/validations'
+import { clientSchema, type ClientFormData } from '@/lib/shared/validations'
 import { z } from 'zod'
 import {
   Dialog,
@@ -30,7 +30,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 
-export default function ClientManagement() {
+const ClientManagement = () => {
   const { data: clients = [], isLoading: loading } = useClients()
   const createClientMutation = useCreateClient()
   const updateClientMutation = useUpdateClient()
@@ -240,32 +240,34 @@ export default function ClientManagement() {
         </CardHeader>
         <CardContent>
           {clients.length === 0 ? (
-            <p className="text-center text-muted-foreground py-4">
+            <p className="text-center text-muted-foreground py-4" role="status">
               Nenhum cliente ainda. Adicione seu primeiro cliente para começar.
             </p>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-2" role="list" aria-label="Lista de clientes">
               {clients.map((client) => (
                 <div
                   key={client.id}
                   className="flex items-center justify-between p-3 rounded-md border bg-card"
+                  role="listitem"
+                  aria-label={`Cliente: ${client.name}`}
                 >
                   <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                    <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center" aria-hidden="true">
                       <User className="h-5 w-5 text-primary" />
                     </div>
                     <div>
                       <p className="font-medium">
                         {client.name}
                         {(client.requires_timesheet === 1 || client.requires_timesheet === true) && (
-                          <span className="ml-2 text-xs bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 px-2 py-0.5 rounded">
+                          <span className="ml-2 text-xs bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 px-2 py-0.5 rounded" aria-label="Requer timesheet">
                             Requer Timesheet
                           </span>
                         )}
                       </p>
                       <p className="text-sm text-muted-foreground flex items-center gap-1">
-                        <Mail className="h-3 w-3" />
-                        {client.email}
+                        <Mail className="h-3 w-3" aria-hidden="true" />
+                        <span aria-label={`Email: ${client.email}`}>{client.email}</span>
                       </p>
                       {client.cc_emails && (() => {
                         try {
@@ -273,8 +275,8 @@ export default function ClientManagement() {
                           if (Array.isArray(ccEmails) && ccEmails.length > 0) {
                             return (
                               <p className="text-xs text-muted-foreground/70 flex items-center gap-1 mt-1">
-                                <Mail className="h-3 w-3" />
-                                CC: {ccEmails.join(', ')}
+                                <Mail className="h-3 w-3" aria-hidden="true" />
+                                <span aria-label={`Cópia para: ${ccEmails.join(', ')}`}>CC: {ccEmails.join(', ')}</span>
                               </p>
                             )
                           }
@@ -291,16 +293,20 @@ export default function ClientManagement() {
                       size="sm"
                       onClick={() => handleEditClient(client)}
                       className="h-8 w-8 p-0"
+                      aria-label={`Editar cliente ${client.name}`}
+                      tabIndex={0}
                     >
-                      <Edit className="h-4 w-4" />
+                      <Edit className="h-4 w-4" aria-hidden="true" />
                     </Button>
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => handleDeleteClick(client)}
                       className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                      aria-label={`Deletar cliente ${client.name}`}
+                      tabIndex={0}
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-4 w-4" aria-hidden="true" />
                     </Button>
                   </div>
                 </div>
@@ -347,10 +353,13 @@ export default function ClientManagement() {
                       onBlur={field.handleBlur}
                       onChange={(e) => field.handleChange(e.target.value)}
                       placeholder="Nome do Cliente"
-                      className="w-full p-2 border rounded-md"
+                      className="w-full p-2 border rounded-md bg-background"
+                      aria-required="true"
+                      aria-invalid={field.state.meta.errors && field.state.meta.errors.length > 0}
+                      aria-describedby={field.state.meta.errors?.length ? `${field.name}-error` : undefined}
                     />
                     {field.state.meta.errors && field.state.meta.errors.length > 0 && (
-                      <p className="text-sm text-destructive">
+                      <p id={`${field.name}-error`} className="text-sm text-destructive" role="alert">
                         {field.state.meta.errors[0]}
                       </p>
                     )}
@@ -381,9 +390,12 @@ export default function ClientManagement() {
                       onChange={(e) => field.handleChange(e.target.value)}
                       placeholder="cliente@exemplo.com"
                       className="w-full p-2 border rounded-md bg-background"
+                      aria-required="true"
+                      aria-invalid={field.state.meta.errors && field.state.meta.errors.length > 0}
+                      aria-describedby={field.state.meta.errors?.length ? `${field.name}-error` : undefined}
                     />
                     {field.state.meta.errors && field.state.meta.errors.length > 0 && (
-                      <p className="text-sm text-destructive">
+                      <p id={`${field.name}-error`} className="text-sm text-destructive" role="alert">
                         {field.state.meta.errors[0]}
                       </p>
                     )}
@@ -401,6 +413,7 @@ export default function ClientManagement() {
                       checked={field.state.value}
                       onChange={(e) => field.handleChange(e.target.checked)}
                       className="h-4 w-4 rounded border-gray-300"
+                      aria-describedby="requiresTimesheet-description"
                     />
                     <Label htmlFor={field.name} className="text-sm font-normal cursor-pointer">
                       Requer timesheet (ex: INDRA)
@@ -441,19 +454,22 @@ export default function ClientManagement() {
                       </Button>
                     </div>
                     {field.state.value && field.state.value.length > 0 && (
-                      <div className="flex flex-wrap gap-2 mt-2">
+                      <div className="flex flex-wrap gap-2 mt-2" role="list" aria-label="Emails CC adicionados">
                         {(field.state.value as string[]).map((email: string, index: number) => (
                           <div
                             key={index}
                             className="flex items-center gap-1 px-2 py-1 bg-muted rounded-md text-sm"
+                            role="listitem"
                           >
                             <span>{email}</span>
                             <button
                               type="button"
                               onClick={() => removeCcEmail(email)}
                               className="hover:text-destructive"
+                              aria-label={`Remover email ${email}`}
+                              tabIndex={0}
                             >
-                              <X className="h-3 w-3" />
+                              <X className="h-3 w-3" aria-hidden="true" />
                             </button>
                           </div>
                         ))}
@@ -498,3 +514,4 @@ export default function ClientManagement() {
   )
 }
 
+export default ClientManagement

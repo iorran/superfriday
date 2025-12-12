@@ -7,11 +7,11 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/components/ui/use-toast'
-import { useEmailTemplates, useCreateEmailTemplate, useUpdateEmailTemplate, useDeleteEmailTemplate } from '@/lib/hooks/use-email-templates'
-import { EMAIL_TEMPLATE_VARIABLES } from '@/lib/email-template-variables'
+import { useEmailTemplates, useCreateEmailTemplate, useUpdateEmailTemplate, useDeleteEmailTemplate } from '@/hooks/use-email-templates'
+import { EMAIL_TEMPLATE_VARIABLES } from '@/lib/shared/constants'
 import { FileText, Plus, Edit, Trash2, Info, Copy } from 'lucide-react'
 import type { EmailTemplate, WindowWithTemplateField } from '@/types'
-import { emailTemplateSchema, type EmailTemplateFormData } from '@/lib/validations'
+import { emailTemplateSchema, type EmailTemplateFormData } from '@/lib/shared/validations'
 import {
   Dialog,
   DialogContent,
@@ -31,7 +31,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 
-export default function EmailTemplateManagement() {
+const EmailTemplateManagement = () => {
   const { data: templates = [], isLoading: loading } = useEmailTemplates()
   const createTemplateMutation = useCreateEmailTemplate()
   const updateTemplateMutation = useUpdateEmailTemplate()
@@ -221,15 +221,17 @@ export default function EmailTemplateManagement() {
         </CardHeader>
         <CardContent>
           {templates.length === 0 ? (
-            <p className="text-center text-muted-foreground py-4">
+            <p className="text-center text-muted-foreground py-4" role="status">
               Nenhum template ainda. Crie seu primeiro template de email.
             </p>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-2" role="list" aria-label="Lista de templates de email">
               {templates.map((template: EmailTemplate) => (
                 <div
                   key={template.id}
                   className="p-3 rounded-md border bg-card"
+                  role="listitem"
+                  aria-label={`Template: ${template.type === 'to_client' ? 'Para Cliente' : 'Para Gerente de Conta'}`}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
@@ -247,16 +249,20 @@ export default function EmailTemplateManagement() {
                         size="sm"
                         onClick={() => handleEditTemplate(template)}
                         className="h-8 w-8 p-0"
+                        aria-label={`Editar template ${template.type === 'to_client' ? 'para cliente' : 'para gerente de conta'}`}
+                        tabIndex={0}
                       >
-                        <Edit className="h-4 w-4" />
+                        <Edit className="h-4 w-4" aria-hidden="true" />
                       </Button>
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => handleDeleteClick(template)}
                         className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                        aria-label={`Deletar template ${template.type === 'to_client' ? 'para cliente' : 'para gerente de conta'}`}
+                        tabIndex={0}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-4 w-4" aria-hidden="true" />
                       </Button>
                     </div>
                   </div>
@@ -313,9 +319,11 @@ export default function EmailTemplateManagement() {
                   }}
                   className="flex items-center gap-1 px-2 py-1 text-xs bg-background border rounded hover:bg-accent transition-colors group"
                   title={variable.description}
+                  aria-label={`Inserir variável ${variable.name}: ${variable.description}`}
+                  tabIndex={0}
                 >
                   <code className="text-primary font-mono">{variable.example}</code>
-                  <Copy className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <Copy className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" aria-hidden="true" />
                 </button>
               ))}
             </div>
@@ -474,4 +482,4 @@ export default function EmailTemplateManagement() {
   )
 }
 
-
+export default EmailTemplateManagement

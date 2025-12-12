@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/auth-server'
+import { requireAuth } from '@/lib/server/auth'
 import type { ExtractedPDFData } from '@/types'
 
 /**

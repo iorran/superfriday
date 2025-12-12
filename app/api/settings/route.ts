@@ -4,8 +4,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getSetting, setSetting, getAccountantEmail, setAccountantEmail } from '@/lib/db-client'
-import { requireAuth } from '@/lib/auth-server'
+import { getSetting, setSetting, getAccountantEmail, setAccountantEmail } from '@/lib/server/db-operations'
+import { requireAuth } from '@/lib/server/auth'
 
 export async function GET(request: NextRequest) {
   try {

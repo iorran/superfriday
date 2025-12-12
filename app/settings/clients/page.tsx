@@ -2,7 +2,7 @@
 
 import ClientManagement from '@/components/ClientManagement'
 
-export default function ClientsPage() {
+const ClientsPage = () => {
   return (
     <div className="space-y-6">
       <div>
@@ -17,3 +17,4 @@ export default function ClientsPage() {
   )
 }
 
+export default ClientsPage

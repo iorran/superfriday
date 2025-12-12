@@ -1,5 +1,5 @@
 /**
- * Database Client (Client-side)
+ * API Client (Client-side)
  * Makes API calls to Next.js API routes
  */
 
@@ -42,7 +42,7 @@ interface SendEmailData {
 /**
  * Get all clients
  */
-export async function getClients(): Promise<Client[]> {
+export const getClients = async (): Promise<Client[]> => {
   const response = await fetch('/api/clients')
   if (!response.ok) {
     const error = await response.json().catch(() => ({ message: 'Failed to fetch clients' }))
@@ -54,7 +54,7 @@ export async function getClients(): Promise<Client[]> {
 /**
  * Get client by ID
  */
-export async function getClient(clientId: string): Promise<Client | null> {
+export const getClient = async (clientId: string): Promise<Client | null> => {
   const response = await fetch(`/api/clients?id=${clientId}`)
   if (!response.ok) {
     if (response.status === 404) {
@@ -69,7 +69,7 @@ export async function getClient(clientId: string): Promise<Client | null> {
 /**
  * Create a new client
  */
-export async function createClient(data: CreateClientData) {
+export const createClient = async (data: CreateClientData) => {
   const response = await fetch('/api/clients', {
     method: 'POST',
     headers: {
@@ -90,7 +90,7 @@ export async function createClient(data: CreateClientData) {
 /**
  * Update a client
  */
-export async function updateClient(clientId: string, data: UpdateClientData) {
+export const updateClient = async (clientId: string, data: UpdateClientData) => {
   const response = await fetch('/api/clients', {
     method: 'PATCH',
     headers: {
@@ -108,7 +108,7 @@ export async function updateClient(clientId: string, data: UpdateClientData) {
 /**
  * Delete a client
  */
-export async function deleteClient(clientId: string) {
+export const deleteClient = async (clientId: string) => {
   const response = await fetch(`/api/clients?id=${clientId}`, {
     method: 'DELETE',
   })
@@ -122,7 +122,7 @@ export async function deleteClient(clientId: string) {
 /**
  * Get invoice by ID with files
  */
-export async function getInvoice(invoiceId: string): Promise<Invoice | null> {
+export const getInvoice = async (invoiceId: string): Promise<Invoice | null> => {
   const response = await fetch(`/api/invoices/${invoiceId}`)
   if (!response.ok) {
     if (response.status === 404) {
@@ -137,7 +137,7 @@ export async function getInvoice(invoiceId: string): Promise<Invoice | null> {
 /**
  * Get all invoices with client info and files
  */
-export async function getAllInvoices(): Promise<Invoice[]> {
+export const getAllInvoices = async (): Promise<Invoice[]> => {
   const response = await fetch('/api/invoices')
   if (!response.ok) {
     const error = await response.json().catch(() => ({ message: 'Failed to fetch invoices' }))
@@ -149,7 +149,7 @@ export async function getAllInvoices(): Promise<Invoice[]> {
 /**
  * Create invoice with files
  */
-export async function createInvoice(invoiceData: {
+export const createInvoice = async (invoiceData: {
   clientId: string
   clientName?: string // Optional: name for new client if it needs to be created
   invoiceAmount: number
@@ -162,7 +162,7 @@ export async function createInvoice(invoiceData: {
     fileSize: number
   }>
   isOldImport?: boolean // Optional: if true, marks invoice as already sent to client
-}) {
+}) => {
   const response = await fetch('/api/invoices', {
     method: 'POST',
     headers: {
@@ -182,11 +182,11 @@ export async function createInvoice(invoiceData: {
 /**
  * Update invoice state
  */
-export async function updateInvoiceState(invoiceId: string, updates: {
+export const updateInvoiceState = async (invoiceId: string, updates: {
   sentToClient?: boolean
   paymentReceived?: boolean
   sentToAccountant?: boolean
-}) {
+}) => {
   const response = await fetch(`/api/invoices/${invoiceId}/state`, {
     method: 'PATCH',
     headers: {
@@ -206,7 +206,7 @@ export async function updateInvoiceState(invoiceId: string, updates: {
 /**
  * Update invoice details
  */
-export async function updateInvoice(invoiceId: string, updates: {
+export const updateInvoice = async (invoiceId: string, updates: {
   clientId?: string
   invoiceAmount?: number
   month?: number
@@ -218,7 +218,7 @@ export async function updateInvoice(invoiceId: string, updates: {
     originalName: string
     fileSize: number
   }>
-}) {
+}) => {
   const response = await fetch(`/api/invoices/${invoiceId}`, {
     method: 'PATCH',
     headers: {
@@ -238,7 +238,7 @@ export async function updateInvoice(invoiceId: string, updates: {
 /**
  * Delete an invoice file
  */
-export async function deleteInvoiceFile(invoiceId: string, fileId: string) {
+export const deleteInvoiceFile = async (invoiceId: string, fileId: string) => {
   const response = await fetch(`/api/invoices/${invoiceId}/files?fileId=${fileId}`, {
     method: 'DELETE',
   })
@@ -254,7 +254,7 @@ export async function deleteInvoiceFile(invoiceId: string, fileId: string) {
 /**
  * Delete invoice and its files
  */
-export async function deleteInvoice(invoiceId: string) {
+export const deleteInvoice = async (invoiceId: string) => {
   const response = await fetch(`/api/invoices/${invoiceId}`, {
     method: 'DELETE',
   })
@@ -270,7 +270,7 @@ export async function deleteInvoice(invoiceId: string) {
 /**
  * Send email
  */
-export async function sendEmail(data: SendEmailData) {
+export const sendEmail = async (data: SendEmailData) => {
   const response = await fetch('/api/email/send', {
     method: 'POST',
     headers: {
@@ -290,7 +290,7 @@ export async function sendEmail(data: SendEmailData) {
 /**
  * Get email templates
  */
-export async function getEmailTemplates(): Promise<EmailTemplate[]> {
+export const getEmailTemplates = async (): Promise<EmailTemplate[]> => {
   const response = await fetch('/api/email-templates')
   if (!response.ok) {
     const error = await response.json().catch(() => ({ message: 'Failed to fetch email templates' }))
@@ -302,7 +302,7 @@ export async function getEmailTemplates(): Promise<EmailTemplate[]> {
 /**
  * Get email template by ID
  */
-export async function getEmailTemplate(templateId: string): Promise<EmailTemplate | null> {
+export const getEmailTemplate = async (templateId: string): Promise<EmailTemplate | null> => {
   const response = await fetch(`/api/email-templates?id=${templateId}`)
   if (!response.ok) {
     if (response.status === 404) {
@@ -317,7 +317,7 @@ export async function getEmailTemplate(templateId: string): Promise<EmailTemplat
 /**
  * Create email template
  */
-export async function createEmailTemplate(templateData: CreateEmailTemplateData) {
+export const createEmailTemplate = async (templateData: CreateEmailTemplateData) => {
   const response = await fetch('/api/email-templates', {
     method: 'POST',
     headers: {
@@ -338,7 +338,7 @@ export async function createEmailTemplate(templateData: CreateEmailTemplateData)
 /**
  * Update email template
  */
-export async function updateEmailTemplate(templateId: string, templateData: UpdateEmailTemplateData) {
+export const updateEmailTemplate = async (templateId: string, templateData: UpdateEmailTemplateData) => {
   const response = await fetch('/api/email-templates', {
     method: 'PATCH',
     headers: {
@@ -356,7 +356,7 @@ export async function updateEmailTemplate(templateId: string, templateData: Upda
 /**
  * Delete email template
  */
-export async function deleteEmailTemplate(templateId: string) {
+export const deleteEmailTemplate = async (templateId: string) => {
   const response = await fetch(`/api/email-templates?id=${templateId}`, {
     method: 'DELETE',
   })
@@ -370,7 +370,7 @@ export async function deleteEmailTemplate(templateId: string) {
 /**
  * Get email history for an invoice
  */
-export async function getEmailHistory(invoiceId: string) {
+export const getEmailHistory = async (invoiceId: string) => {
   const response = await fetch(`/api/invoices/${invoiceId}/email-history`)
   if (!response.ok) {
     const error = await response.json().catch(() => ({ message: 'Failed to fetch email history' }))
@@ -382,7 +382,7 @@ export async function getEmailHistory(invoiceId: string) {
 /**
  * Get accountant email from settings
  */
-export async function getAccountantEmail(): Promise<string | null> {
+export const getAccountantEmail = async (): Promise<string | null> => {
   const response = await fetch('/api/settings?key=accountant_email', {
     method: 'GET',
   })
@@ -398,7 +398,7 @@ export async function getAccountantEmail(): Promise<string | null> {
 /**
  * Set accountant email in settings
  */
-export async function setAccountantEmail(email: string): Promise<void> {
+export const setAccountantEmail = async (email: string): Promise<void> => {
   const response = await fetch('/api/settings', {
     method: 'POST',
     headers: {
@@ -427,7 +427,7 @@ export interface UserPreferences {
 /**
  * Get user preferences
  */
-export async function getUserPreferences(): Promise<UserPreferences> {
+export const getUserPreferences = async (): Promise<UserPreferences> => {
   const response = await fetch('/api/user-preferences')
   if (!response.ok) {
     const error = await response.json().catch(() => ({ message: 'Failed to fetch preferences' }))
@@ -440,7 +440,7 @@ export async function getUserPreferences(): Promise<UserPreferences> {
 /**
  * Get a specific user preference
  */
-export async function getUserPreference(key: string): Promise<unknown> {
+export const getUserPreference = async (key: string): Promise<unknown> => {
   const response = await fetch(`/api/user-preferences?key=${encodeURIComponent(key)}`)
   if (!response.ok) {
     const error = await response.json().catch(() => ({ message: 'Failed to fetch preference' }))
@@ -453,7 +453,7 @@ export async function getUserPreference(key: string): Promise<unknown> {
 /**
  * Set a user preference
  */
-export async function setUserPreference(key: string, value: unknown): Promise<void> {
+export const setUserPreference = async (key: string, value: unknown): Promise<void> => {
   const response = await fetch('/api/user-preferences', {
     method: 'POST',
     headers: {
@@ -471,7 +471,7 @@ export async function setUserPreference(key: string, value: unknown): Promise<vo
 /**
  * Update multiple user preferences
  */
-export async function updateUserPreferences(preferences: Partial<UserPreferences>): Promise<void> {
+export const updateUserPreferences = async (preferences: Partial<UserPreferences>): Promise<void> => {
   const response = await fetch('/api/user-preferences', {
     method: 'POST',
     headers: {
@@ -485,3 +485,4 @@ export async function updateUserPreferences(preferences: Partial<UserPreferences
     throw new Error(error.message || `Failed to update preferences: ${response.status}`)
   }
 }
+

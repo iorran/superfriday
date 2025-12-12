@@ -4,10 +4,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { sendInvoiceToClient, sendInvoiceToAccountant } from '@/lib/email-service'
-import { updateInvoiceState, recordEmail, getInvoice, getAccountantEmail, getEmailTemplate } from '@/lib/db-client'
-import { getDatabase } from '@/lib/db'
-import { requireAuth } from '@/lib/auth-server'
+import { sendInvoiceToClient, sendInvoiceToAccountant } from '@/lib/server/email'
+import { updateInvoiceState, recordEmail, getInvoice, getAccountantEmail, getEmailTemplate } from '@/lib/server/db-operations'
+import { getDatabase } from '@/lib/server/db'
+import { requireAuth } from '@/lib/server/auth'
 import type { Invoice, InvoiceFile } from '@/types'
 
 export async function POST(request: NextRequest) {

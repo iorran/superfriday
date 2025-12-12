@@ -4,8 +4,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { searchFiles, downloadFile, getFileMetadata } from '@/lib/google-drive'
-import { requireAuth } from '@/lib/auth-server'
+import { searchFiles, downloadFile, getFileMetadata } from '@/lib/server/google-drive'
+import { requireAuth } from '@/lib/server/auth'
 import { put } from '@vercel/blob'
 
 /**

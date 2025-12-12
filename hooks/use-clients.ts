@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getClients, getClient, createClient, updateClient, deleteClient } from '@/lib/client/db-client'
-import { queryKeys } from '@/lib/query-keys'
+import { getClients, getClient, createClient, updateClient, deleteClient } from '@/lib/client/api'
+import { queryKeys } from '@/lib/shared/query-keys'
 
 interface CreateClientData {
   name: string
@@ -19,7 +19,7 @@ interface UpdateClientData {
 /**
  * Query hook for fetching all clients
  */
-export function useClients() {
+export const useClients = () => {
   return useQuery({
     queryKey: queryKeys.clients.lists(),
     queryFn: getClients,
@@ -29,7 +29,7 @@ export function useClients() {
 /**
  * Query hook for fetching a single client by ID
  */
-export function useClient(clientId: string | null | undefined) {
+export const useClient = (clientId: string | null | undefined) => {
   return useQuery({
     queryKey: queryKeys.clients.detail(clientId || ''),
     queryFn: () => getClient(clientId!),
@@ -40,7 +40,7 @@ export function useClient(clientId: string | null | undefined) {
 /**
  * Mutation hook for creating a new client
  */
-export function useCreateClient() {
+export const useCreateClient = () => {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -58,7 +58,7 @@ export function useCreateClient() {
 /**
  * Mutation hook for updating a client
  */
-export function useUpdateClient() {
+export const useUpdateClient = () => {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -80,7 +80,7 @@ export function useUpdateClient() {
 /**
  * Mutation hook for deleting a client
  */
-export function useDeleteClient() {
+export const useDeleteClient = () => {
   const queryClient = useQueryClient()
 
   return useMutation({

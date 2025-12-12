@@ -12,7 +12,7 @@ interface UsePDFExtractionResult {
   error: string | null
 }
 
-export function usePDFExtraction(): UsePDFExtractionResult {
+export const usePDFExtraction = (): UsePDFExtractionResult => {
   const [isExtracting, setIsExtracting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -69,3 +69,4 @@ export function usePDFExtraction(): UsePDFExtractionResult {
     error,
   }
 }
+

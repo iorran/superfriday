@@ -2,27 +2,27 @@
 
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getUserPreference, setUserPreference } from '@/lib/client/db-client'
+import { getUserPreference, setUserPreference } from '@/lib/client/api'
 import type { TourStep } from '@/components/Tour'
 
 const TOUR_VERSION = '1.0' // Increment this to show tour again to existing users
 const TOUR_COMPLETED_KEY = 'invoice-manager-tour-completed' // Fallback localStorage key
 
 // Fallback to localStorage if API fails
-function getLocalStorageTourStatus() {
+const getLocalStorageTourStatus = () => {
   if (typeof window === 'undefined') return { completed: false, version: null }
   const completed = localStorage.getItem(TOUR_COMPLETED_KEY) === 'true'
   const version = localStorage.getItem(`${TOUR_COMPLETED_KEY}-version`)
   return { completed, version }
 }
 
-function setLocalStorageTourStatus() {
+const setLocalStorageTourStatus = () => {
   if (typeof window === 'undefined') return
   localStorage.setItem(TOUR_COMPLETED_KEY, 'true')
   localStorage.setItem(`${TOUR_COMPLETED_KEY}-version`, TOUR_VERSION)
 }
 
-export function useTour() {
+export const useTour = () => {
   const [showTour, setShowTour] = useState(false)
   const queryClient = useQueryClient()
 

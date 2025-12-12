@@ -28,7 +28,7 @@ let db: Db | null = null
  * Get MongoDB database instance
  * Uses singleton pattern for connection reuse
  */
-export async function getDatabase(): Promise<Db> {
+export const getDatabase = async (): Promise<Db> => {
   if (!databaseUrl) {
     throw new Error('MONGODB_URI or DATABASE_URL environment variable is required')
   }
@@ -104,7 +104,7 @@ export async function getDatabase(): Promise<Db> {
  * Initialize database with schema (creates indexes)
  * MongoDB doesn't have a schema file, but we can create indexes
  */
-export async function initDatabase() {
+export const initDatabase = async () => {
   if (!databaseUrl) {
     throw new Error('MONGODB_URI or DATABASE_URL environment variable is required')
   }
@@ -161,3 +161,4 @@ export async function initDatabase() {
     throw error
   }
 }
+

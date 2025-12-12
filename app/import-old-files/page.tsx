@@ -2,7 +2,7 @@
 
 import OldFilesImport from '@/components/OldFilesImport'
 
-export default function ImportOldFilesPage() {
+const ImportOldFilesPage = () => {
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -17,3 +17,4 @@ export default function ImportOldFilesPage() {
   )
 }
 
+export default ImportOldFilesPage

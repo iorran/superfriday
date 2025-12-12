@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { queryKeys } from '@/lib/query-keys'
+import { queryKeys } from '@/lib/shared/query-keys'
 
 export interface FinancesData {
   totalIncome: number
@@ -11,7 +11,7 @@ export interface FinancesData {
   byYear: Array<{ year: number; amount: number }>
 }
 
-async function getFinances(): Promise<FinancesData> {
+const getFinances = async (): Promise<FinancesData> => {
   const response = await fetch('/api/finances')
   if (!response.ok) {
     throw new Error('Failed to fetch finances')
@@ -19,7 +19,7 @@ async function getFinances(): Promise<FinancesData> {
   return response.json()
 }
 
-export function useFinances() {
+export const useFinances = () => {
   return useQuery({
     queryKey: queryKeys.finances.all(),
     queryFn: getFinances,

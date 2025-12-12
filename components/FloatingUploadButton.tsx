@@ -10,7 +10,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 
-export default function FloatingUploadButton() {
+const FloatingUploadButton = () => {
   const [isOpen, setIsOpen] = useState(false)
 
   return (
@@ -20,8 +20,15 @@ export default function FloatingUploadButton() {
         data-tour="upload-button"
         className="fixed bottom-8 right-8 z-50 h-16 w-16 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl transition-all hover:scale-110 flex items-center justify-center group"
         aria-label="Fazer upload de invoice"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            setIsOpen(true)
+          }
+        }}
       >
-        <Upload className="h-6 w-6 transition-transform group-hover:scale-110" />
+        <Upload className="h-6 w-6 transition-transform group-hover:scale-110" aria-hidden="true" />
       </button>
 
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -40,3 +47,4 @@ export default function FloatingUploadButton() {
   )
 }
 
+export default FloatingUploadButton

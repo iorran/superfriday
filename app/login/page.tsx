@@ -2,12 +2,12 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { signIn } from '@/lib/auth-client'
+import { signIn } from '@/lib/client/auth'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import Link from 'next/link'
 
-export default function LoginPage() {
+const LoginPage = () => {
   const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -103,3 +103,5 @@ export default function LoginPage() {
     </div>
   )
 }
+
+export default LoginPage

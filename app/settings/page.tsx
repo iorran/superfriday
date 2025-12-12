@@ -3,7 +3,7 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 
-export default function SettingsPage() {
+const SettingsPage = () => {
   const router = useRouter()
 
   useEffect(() => {
@@ -14,3 +14,4 @@ export default function SettingsPage() {
   return null
 }
 
+export default SettingsPage

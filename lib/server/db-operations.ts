@@ -1,5 +1,5 @@
 /**
- * Database Client
+ * Database Operations (Server-side)
  * MongoDB operations for invoice management
  */
 
@@ -56,7 +56,7 @@ interface UpdateEmailAccountData {
 /**
  * Get all clients
  */
-export async function getClients(userId: string) {
+export const getClients = async (userId: string) => {
   const db = await getDatabase()
   const clients = await db.collection('clients').find({ user_id: userId }).sort({ name: 1 }).toArray()
   return clients.map((client) => ({
@@ -69,7 +69,7 @@ export async function getClients(userId: string) {
 /**
  * Get client by ID
  */
-export async function getClient(clientId: string, userId: string): Promise<Client | null> {
+export const getClient = async (clientId: string, userId: string): Promise<Client | null> => {
   const db = await getDatabase()
   const client = await db.collection('clients').findOne({ id: clientId, user_id: userId })
   if (!client) return null
@@ -83,7 +83,7 @@ export async function getClient(clientId: string, userId: string): Promise<Clien
 /**
  * Create a new client
  */
-export async function createClient(data: CreateClientData, userId: string) {
+export const createClient = async (data: CreateClientData, userId: string) => {
   const db = await getDatabase()
   const id = `client-${Date.now()}`
   const { name, email, requiresTimesheet, ccEmails } = data
@@ -105,7 +105,7 @@ export async function createClient(data: CreateClientData, userId: string) {
 /**
  * Update a client
  */
-export async function updateClient(clientId: string, data: UpdateClientData, userId: string) {
+export const updateClient = async (clientId: string, data: UpdateClientData, userId: string) => {
   const db = await getDatabase()
   const update: Record<string, unknown> = {
     updated_at: new Date(),
@@ -122,7 +122,7 @@ export async function updateClient(clientId: string, data: UpdateClientData, use
 /**
  * Delete a client
  */
-export async function deleteClient(clientId: string, userId: string) {
+export const deleteClient = async (clientId: string, userId: string) => {
   const db = await getDatabase()
   await db.collection('clients').deleteOne({ id: clientId, user_id: userId })
 }
@@ -130,7 +130,7 @@ export async function deleteClient(clientId: string, userId: string) {
 /**
  * Get setting value
  */
-export async function getSetting(key: string, userId: string): Promise<string | null> {
+export const getSetting = async (key: string, userId: string): Promise<string | null> => {
   const db = await getDatabase()
   const setting = await db.collection('settings').findOne({ key, user_id: userId })
   return (setting?.value as string) || null
@@ -139,7 +139,7 @@ export async function getSetting(key: string, userId: string): Promise<string | 
 /**
  * Set setting value
  */
-export async function setSetting(key: string, value: string, userId: string) {
+export const setSetting = async (key: string, value: string, userId: string) => {
   const db = await getDatabase()
   await db.collection('settings').updateOne(
     { key, user_id: userId },
@@ -151,14 +151,14 @@ export async function setSetting(key: string, value: string, userId: string) {
 /**
  * Get accountant email (from settings)
  */
-export async function getAccountantEmail(userId: string): Promise<string | null> {
+export const getAccountantEmail = async (userId: string): Promise<string | null> => {
   return await getSetting('accountant_email', userId)
 }
 
 /**
  * Set accountant email (in settings)
  */
-export async function setAccountantEmail(email: string, userId: string) {
+export const setAccountantEmail = async (email: string, userId: string) => {
   await setSetting('accountant_email', email, userId)
 }
 
@@ -166,7 +166,7 @@ export async function setAccountantEmail(email: string, userId: string) {
  * Get invoice by ID with files
  * Optimized using MongoDB aggregation pipeline with $lookup for server-side joins
  */
-export async function getInvoice(invoiceId: string, userId: string): Promise<Invoice | null> {
+export const getInvoice = async (invoiceId: string, userId: string): Promise<Invoice | null> => {
   const db = await getDatabase()
   
   // Use aggregation pipeline to join client and files server-side
@@ -247,7 +247,7 @@ export async function getInvoice(invoiceId: string, userId: string): Promise<Inv
  * Get all invoices with client info and files
  * Optimized using MongoDB aggregation pipeline with $lookup for server-side joins
  */
-export async function getAllInvoices(userId: string): Promise<Invoice[]> {
+export const getAllInvoices = async (userId: string): Promise<Invoice[]> => {
   const db = await getDatabase()
   
   // Use aggregation pipeline to join clients and files server-side
@@ -325,7 +325,7 @@ export async function getAllInvoices(userId: string): Promise<Invoice[]> {
 /**
  * Create invoice with files
  */
-export async function createInvoice(invoiceData: {
+export const createInvoice = async (invoiceData: {
   clientId: string
   clientName?: string // Optional: if client doesn't exist, create with this name
   invoiceAmount: number
@@ -337,8 +337,8 @@ export async function createInvoice(invoiceData: {
     originalName: string
     fileSize: number
   }>
-  isOldImport?: boolean // If true, mark as already sent to client
-}, userId: string) {
+  isOldImport?: boolean // If true, mark as already sent to client and accountant
+}, userId: string) => {
   const db = await getDatabase()
   const {
     clientId,
@@ -401,8 +401,8 @@ export async function createInvoice(invoiceData: {
     sent_to_client_at: isOldImport ? now : null,
     payment_received: false,
     payment_received_at: null,
-    sent_to_accountant: false,
-    sent_to_accountant_at: null,
+    sent_to_accountant: isOldImport, // Also mark as sent to accountant for bulk imports
+    sent_to_accountant_at: isOldImport ? now : null,
   })
   
   // Create invoice files
@@ -427,11 +427,11 @@ export async function createInvoice(invoiceData: {
 /**
  * Update invoice state
  */
-export async function updateInvoiceState(invoiceId: string, updates: {
+export const updateInvoiceState = async (invoiceId: string, updates: {
   sentToClient?: boolean
   paymentReceived?: boolean
   sentToAccountant?: boolean
-}, userId: string) {
+}, userId: string) => {
   const db = await getDatabase()
   const update: Record<string, unknown> = {}
   
@@ -464,7 +464,7 @@ export async function updateInvoiceState(invoiceId: string, updates: {
 /**
  * Update invoice details
  */
-export async function updateInvoice(invoiceId: string, updates: {
+export const updateInvoice = async (invoiceId: string, updates: {
   clientId?: string
   invoiceAmount?: number
   month?: number
@@ -476,7 +476,7 @@ export async function updateInvoice(invoiceId: string, updates: {
     originalName: string
     fileSize: number
   }>
-}, userId: string) {
+}, userId: string) => {
   const db = await getDatabase()
   const {
     clientId,
@@ -527,7 +527,7 @@ export async function updateInvoice(invoiceId: string, updates: {
 /**
  * Delete invoice and its files
  */
-export async function deleteInvoice(invoiceId: string, userId: string) {
+export const deleteInvoice = async (invoiceId: string, userId: string) => {
   const db = await getDatabase()
   await db.collection('invoice_files').deleteMany({ invoice_id: invoiceId, user_id: userId })
   await db.collection('email_history').deleteMany({ invoice_id: invoiceId, user_id: userId })
@@ -537,7 +537,7 @@ export async function deleteInvoice(invoiceId: string, userId: string) {
 /**
  * Get email templates
  */
-export async function getEmailTemplates(userId: string) {
+export const getEmailTemplates = async (userId: string) => {
   const db = await getDatabase()
   const templates = await db.collection('email_templates')
     .find({ user_id: userId })
@@ -549,7 +549,7 @@ export async function getEmailTemplates(userId: string) {
 /**
  * Get email template by ID
  */
-export async function getEmailTemplate(templateId: string, userId: string): Promise<EmailTemplate | null> {
+export const getEmailTemplate = async (templateId: string, userId: string): Promise<EmailTemplate | null> => {
   const db = await getDatabase()
   const template = await db.collection('email_templates').findOne({ id: templateId, user_id: userId })
   return (template as EmailTemplate | null) || null
@@ -558,7 +558,7 @@ export async function getEmailTemplate(templateId: string, userId: string): Prom
 /**
  * Create email template
  */
-export async function createEmailTemplate(templateData: CreateEmailTemplateData, userId: string) {
+export const createEmailTemplate = async (templateData: CreateEmailTemplateData, userId: string) => {
   const db = await getDatabase()
   const id = `template-${Date.now()}`
   const { subject, body, type } = templateData
@@ -579,7 +579,7 @@ export async function createEmailTemplate(templateData: CreateEmailTemplateData,
 /**
  * Update email template
  */
-export async function updateEmailTemplate(templateId: string, templateData: UpdateEmailTemplateData, userId: string) {
+export const updateEmailTemplate = async (templateId: string, templateData: UpdateEmailTemplateData, userId: string) => {
   const db = await getDatabase()
   const update: Record<string, unknown> = {
     updated_at: new Date(),
@@ -595,7 +595,7 @@ export async function updateEmailTemplate(templateId: string, templateData: Upda
 /**
  * Delete email template
  */
-export async function deleteEmailTemplate(templateId: string, userId: string) {
+export const deleteEmailTemplate = async (templateId: string, userId: string) => {
   const db = await getDatabase()
   await db.collection('email_templates').deleteOne({ id: templateId, user_id: userId })
 }
@@ -603,7 +603,7 @@ export async function deleteEmailTemplate(templateId: string, userId: string) {
 /**
  * Record email in history
  */
-export async function recordEmail(emailData: {
+export const recordEmail = async (emailData: {
   invoiceId: string
   templateId?: string | null
   recipientEmail: string
@@ -613,7 +613,7 @@ export async function recordEmail(emailData: {
   body: string
   status?: string
   errorMessage?: string | null
-}, userId: string) {
+}, userId: string) => {
   const db = await getDatabase()
   const id = `email-${Date.now()}`
   const {
@@ -649,7 +649,7 @@ export async function recordEmail(emailData: {
 /**
  * Get email history for an invoice
  */
-export async function getEmailHistory(invoiceId: string, userId: string) {
+export const getEmailHistory = async (invoiceId: string, userId: string) => {
   const db = await getDatabase()
   
   // Get email history
@@ -681,7 +681,7 @@ export async function getEmailHistory(invoiceId: string, userId: string) {
 /**
  * Get all email accounts for a user
  */
-export async function getEmailAccounts(userId: string): Promise<EmailAccount[]> {
+export const getEmailAccounts = async (userId: string): Promise<EmailAccount[]> => {
   const db = await getDatabase()
   const accounts = await db.collection('email_accounts')
     .find({ user_id: userId })
@@ -705,7 +705,7 @@ export async function getEmailAccounts(userId: string): Promise<EmailAccount[]> 
 /**
  * Get email account by ID
  */
-export async function getEmailAccount(accountId: string, userId: string): Promise<EmailAccount | null> {
+export const getEmailAccount = async (accountId: string, userId: string): Promise<EmailAccount | null> => {
   const db = await getDatabase()
   const account = await db.collection('email_accounts').findOne({ id: accountId, user_id: userId })
   if (!account) return null
@@ -727,7 +727,7 @@ export async function getEmailAccount(accountId: string, userId: string): Promis
 /**
  * Get default email account for a user
  */
-export async function getDefaultEmailAccount(userId: string): Promise<EmailAccount | null> {
+export const getDefaultEmailAccount = async (userId: string): Promise<EmailAccount | null> => {
   const db = await getDatabase()
   const account = await db.collection('email_accounts').findOne({ 
     user_id: userId, 
@@ -753,7 +753,7 @@ export async function getDefaultEmailAccount(userId: string): Promise<EmailAccou
 /**
  * Create a new email account
  */
-export async function createEmailAccount(data: CreateEmailAccountData, userId: string): Promise<string> {
+export const createEmailAccount = async (data: CreateEmailAccountData, userId: string): Promise<string> => {
   const db = await getDatabase()
   const id = `email-account-${Date.now()}`
   const { name, email, smtp_host, smtp_port, smtp_user, smtp_pass, is_default } = data
@@ -786,7 +786,7 @@ export async function createEmailAccount(data: CreateEmailAccountData, userId: s
 /**
  * Update an email account
  */
-export async function updateEmailAccount(accountId: string, data: UpdateEmailAccountData, userId: string) {
+export const updateEmailAccount = async (accountId: string, data: UpdateEmailAccountData, userId: string) => {
   const db = await getDatabase()
   const update: Record<string, unknown> = {
     updated_at: new Date(),
@@ -819,7 +819,7 @@ export async function updateEmailAccount(accountId: string, data: UpdateEmailAcc
 /**
  * Delete an email account
  */
-export async function deleteEmailAccount(accountId: string, userId: string) {
+export const deleteEmailAccount = async (accountId: string, userId: string) => {
   const db = await getDatabase()
   await db.collection('email_accounts').deleteOne({ id: accountId, user_id: userId })
 }
@@ -840,12 +840,12 @@ export interface GoogleOAuthToken {
 /**
  * Store or update Google OAuth tokens for a user
  */
-export async function saveGoogleOAuthToken(
+export const saveGoogleOAuthToken = async (
   userId: string,
   accessToken: string,
   refreshToken: string,
   expiresIn: number
-): Promise<void> {
+): Promise<void> => {
   const db = await getDatabase()
   const expiresAt = new Date(Date.now() + expiresIn * 1000)
   
@@ -899,7 +899,7 @@ export async function saveGoogleOAuthToken(
 /**
  * Get Google OAuth tokens for a user
  */
-export async function getGoogleOAuthToken(userId: string): Promise<GoogleOAuthToken | null> {
+export const getGoogleOAuthToken = async (userId: string): Promise<GoogleOAuthToken | null> => {
   const db = await getDatabase()
   const token = await db.collection('google_oauth_tokens').findOne({ user_id: userId })
   
@@ -924,7 +924,7 @@ export async function getGoogleOAuthToken(userId: string): Promise<GoogleOAuthTo
 /**
  * Delete Google OAuth tokens for a user (disconnect)
  */
-export async function deleteGoogleOAuthToken(userId: string): Promise<void> {
+export const deleteGoogleOAuthToken = async (userId: string): Promise<void> => {
   const db = await getDatabase()
   await db.collection('google_oauth_tokens').deleteOne({ user_id: userId })
 }
@@ -932,7 +932,7 @@ export async function deleteGoogleOAuthToken(userId: string): Promise<void> {
 /**
  * Check if user has Google OAuth tokens
  */
-export async function hasGoogleOAuthToken(userId: string): Promise<boolean> {
+export const hasGoogleOAuthToken = async (userId: string): Promise<boolean> => {
   const db = await getDatabase()
   const token = await db.collection('google_oauth_tokens').findOne(
     { user_id: userId },
@@ -957,7 +957,7 @@ export interface UserPreferences {
 /**
  * Get user preferences
  */
-export async function getUserPreferences(userId: string): Promise<UserPreferences | null> {
+export const getUserPreferences = async (userId: string): Promise<UserPreferences | null> => {
   const db = await getDatabase()
   const preferences = await db.collection('user_preferences').findOne({ user_id: userId })
   
@@ -976,10 +976,10 @@ export async function getUserPreferences(userId: string): Promise<UserPreference
 /**
  * Update user preferences (upsert)
  */
-export async function updateUserPreferences(
+export const updateUserPreferences = async (
   userId: string,
   updates: Partial<UserPreferences>
-): Promise<void> {
+): Promise<void> => {
   const db = await getDatabase()
   const now = new Date()
   
@@ -1002,10 +1002,10 @@ export async function updateUserPreferences(
 /**
  * Get a specific preference value
  */
-export async function getUserPreference(
+export const getUserPreference = async (
   userId: string,
   key: string
-): Promise<unknown> {
+): Promise<unknown> => {
   const preferences = await getUserPreferences(userId)
   return preferences ? preferences[key] : undefined
 }
@@ -1013,11 +1013,11 @@ export async function getUserPreference(
 /**
  * Set a specific preference value
  */
-export async function setUserPreference(
+export const setUserPreference = async (
   userId: string,
   key: string,
   value: unknown
-): Promise<void> {
+): Promise<void> => {
   await updateUserPreferences(userId, { [key]: value })
 }
 
@@ -1036,7 +1036,7 @@ export interface SMTPSettings {
 /**
  * Get SMTP settings for a user
  */
-export async function getSMTPSettings(userId: string): Promise<SMTPSettings | null> {
+export const getSMTPSettings = async (userId: string): Promise<SMTPSettings | null> => {
   const db = await getDatabase()
   const settings = await db.collection('smtp_settings').findOne({ user_id: userId })
   
@@ -1056,10 +1056,10 @@ export async function getSMTPSettings(userId: string): Promise<SMTPSettings | nu
 /**
  * Set SMTP settings for a user
  */
-export async function setSMTPSettings(
+export const setSMTPSettings = async (
   settings: SMTPSettings,
   userId: string
-): Promise<void> {
+): Promise<void> => {
   const db = await getDatabase()
   const now = new Date()
   
@@ -1078,3 +1078,4 @@ export async function setSMTPSettings(
     { upsert: true }
   )
 }
+

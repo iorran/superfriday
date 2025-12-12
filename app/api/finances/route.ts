@@ -4,8 +4,8 @@
  */
 
 import { NextResponse } from 'next/server'
-import { getDatabase } from '@/lib/db'
-import { requireAuth } from '@/lib/auth-server'
+import { getDatabase } from '@/lib/server/db'
+import { requireAuth } from '@/lib/server/auth'
 
 export async function GET() {
   try {

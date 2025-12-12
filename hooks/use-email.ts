@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { sendEmail, getEmailHistory, getAccountantEmail, setAccountantEmail } from '@/lib/client/db-client'
-import { queryKeys } from '@/lib/query-keys'
+import { sendEmail, getEmailHistory, getAccountantEmail, setAccountantEmail } from '@/lib/client/api'
+import { queryKeys } from '@/lib/shared/query-keys'
 
 interface SendEmailData {
   invoiceId: string
@@ -13,7 +13,7 @@ interface SendEmailData {
 /**
  * Mutation hook for sending emails
  */
-export function useSendEmail() {
+export const useSendEmail = () => {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -34,7 +34,7 @@ export function useSendEmail() {
 /**
  * Query hook for fetching email history for an invoice
  */
-export function useEmailHistory(invoiceId: string | null | undefined) {
+export const useEmailHistory = (invoiceId: string | null | undefined) => {
   return useQuery({
     queryKey: queryKeys.emailHistory.byInvoice(invoiceId || ''),
     queryFn: () => getEmailHistory(invoiceId!),
@@ -45,7 +45,7 @@ export function useEmailHistory(invoiceId: string | null | undefined) {
 /**
  * Query hook for fetching accountant email from settings
  */
-export function useAccountantEmail() {
+export const useAccountantEmail = () => {
   return useQuery({
     queryKey: queryKeys.settings.accountantEmail(),
     queryFn: getAccountantEmail,
@@ -56,7 +56,7 @@ export function useAccountantEmail() {
 /**
  * Mutation hook for setting accountant email
  */
-export function useSetAccountantEmail() {
+export const useSetAccountantEmail = () => {
   const queryClient = useQueryClient()
 
   return useMutation({

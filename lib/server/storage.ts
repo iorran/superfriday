@@ -1,5 +1,5 @@
 /**
- * File Storage Client
+ * File Storage Server
  * Uses Vercel Blob for file storage
  */
 
@@ -8,7 +8,7 @@ import { put, del, head } from '@vercel/blob'
 /**
  * Upload a file to Vercel Blob
  */
-export async function uploadFile(fileKey: string, fileBuffer: Buffer, contentType: string): Promise<void> {
+export const uploadFile = async (fileKey: string, fileBuffer: Buffer, contentType: string): Promise<void> => {
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
     throw new Error('BLOB_READ_WRITE_TOKEN environment variable is required')
   }
@@ -24,7 +24,7 @@ export async function uploadFile(fileKey: string, fileBuffer: Buffer, contentTyp
  * Get a file from Vercel Blob
  * Uses head to get URL, then fetches the file
  */
-export async function getFile(fileKey: string): Promise<Buffer | null> {
+export const getFile = async (fileKey: string): Promise<Buffer | null> => {
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
     throw new Error('BLOB_READ_WRITE_TOKEN environment variable is required')
   }
@@ -60,7 +60,7 @@ export async function getFile(fileKey: string): Promise<Buffer | null> {
 /**
  * Delete a file from Vercel Blob
  */
-export async function deleteFile(fileKey: string): Promise<void> {
+export const deleteFile = async (fileKey: string): Promise<void> => {
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
     throw new Error('BLOB_READ_WRITE_TOKEN environment variable is required')
   }
@@ -83,7 +83,7 @@ export async function deleteFile(fileKey: string): Promise<void> {
  * Get file download URL
  * Vercel Blob provides public URLs automatically
  */
-export async function getFileUrl(fileKey: string): Promise<string> {
+export const getFileUrl = async (fileKey: string): Promise<string> => {
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
     throw new Error('BLOB_READ_WRITE_TOKEN environment variable is required')
   }
@@ -98,3 +98,4 @@ export async function getFileUrl(fileKey: string): Promise<string> {
     return `/api/files/${fileKey}`
   }
 }
+

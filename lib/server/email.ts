@@ -5,7 +5,7 @@
 
 import nodemailer from 'nodemailer'
 import { getFile } from './storage'
-import { getEmailAccount, getDefaultEmailAccount } from './db-client'
+import { getEmailAccount, getDefaultEmailAccount } from './db-operations'
 
 // Cache for transporters (keyed by account ID or 'env' for env vars)
 const transporterCache = new Map<string, nodemailer.Transporter>()
@@ -13,10 +13,10 @@ const transporterCache = new Map<string, nodemailer.Transporter>()
 /**
  * Get transporter for a specific email account
  */
-async function getTransporterForAccount(accountId?: string, userId?: string): Promise<{
+const getTransporterForAccount = async (accountId?: string, userId?: string): Promise<{
   transporter: nodemailer.Transporter
   fromEmail: string
-}> {
+}> => {
   // If accountId provided, use that account
   if (accountId && userId) {
     const cacheKey = `account-${accountId}`
@@ -118,7 +118,7 @@ async function getTransporterForAccount(accountId?: string, userId?: string): Pr
 /**
  * Send email with attachments
  */
-export async function sendEmailWithAttachments(data: {
+export const sendEmailWithAttachments = async (data: {
   to: string
   cc?: string[]
   subject: string
@@ -131,7 +131,7 @@ export async function sendEmailWithAttachments(data: {
   }>
   accountId?: string // Optional: specific email account to use
   userId?: string // Required if using accountId
-}) {
+}) => {
   const { to, cc, subject, html, attachments = [], accountId, userId } = data
 
   const { transporter, fromEmail } = await getTransporterForAccount(accountId, userId)
@@ -175,7 +175,7 @@ export async function sendEmailWithAttachments(data: {
 /**
  * Send invoice email to client
  */
-export async function sendInvoiceToClient(data: {
+export const sendInvoiceToClient = async (data: {
   invoiceId: string
   clientEmail: string
   clientName: string
@@ -185,7 +185,7 @@ export async function sendInvoiceToClient(data: {
   ccEmails?: string[] // Array of CC email addresses
   accountId?: string // Optional: specific email account to use
   userId?: string // Required if using accountId
-}) {
+}) => {
   const { clientEmail, subject, body, fileKeys, ccEmails, accountId, userId } = data
 
   // Get files from blob storage
@@ -227,7 +227,7 @@ export async function sendInvoiceToClient(data: {
 /**
  * Send invoice email to accountant
  */
-export async function sendInvoiceToAccountant(data: {
+export const sendInvoiceToAccountant = async (data: {
   invoiceId: string
   accountantEmail: string
   clientName: string
@@ -236,7 +236,7 @@ export async function sendInvoiceToAccountant(data: {
   fileKeys: string[] // Only invoice files, not timesheet
   accountId?: string // Optional: specific email account to use
   userId?: string // Required if using accountId
-}) {
+}) => {
   const { accountantEmail, subject, body, fileKeys, accountId, userId } = data
 
   // Get files from blob storage
@@ -276,7 +276,7 @@ export async function sendInvoiceToAccountant(data: {
 /**
  * Verify SMTP connection
  */
-export async function verifySMTPConnection(accountId?: string, userId?: string) {
+export const verifySMTPConnection = async (accountId?: string, userId?: string) => {
   try {
     const { transporter } = await getTransporterForAccount(accountId, userId)
     await transporter.verify()

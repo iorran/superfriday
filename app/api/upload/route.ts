@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { put } from '@vercel/blob'
-import { requireAuth } from '@/lib/auth-server'
+import { requireAuth } from '@/lib/server/auth'
 
 export async function POST(request: NextRequest) {
   try {

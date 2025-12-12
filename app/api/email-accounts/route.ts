@@ -10,8 +10,8 @@ import {
   createEmailAccount,
   updateEmailAccount,
   deleteEmailAccount,
-} from '@/lib/db-client'
-import { requireAuth } from '@/lib/auth-server'
+} from '@/lib/server/db-operations'
+import { requireAuth } from '@/lib/server/auth'
 
 export async function GET(request: NextRequest) {
   try {

@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
-import { usePDFExtraction } from '@/lib/hooks/use-pdf-extraction'
+import { usePDFExtraction } from '@/hooks/use-pdf-extraction'
 import type { ExtractedPDFData } from '@/types'
 import { 
   Loader2, 
@@ -153,7 +153,7 @@ async function disconnectGoogleDrive(): Promise<void> {
   }
 }
 
-export default function GoogleDrivePicker({ onFilesSelected }: GoogleDrivePickerProps) {
+const GoogleDrivePicker = ({ onFilesSelected }: GoogleDrivePickerProps) => {
   const { toast } = useToast()
   const { extractFromFile } = usePDFExtraction()
   const queryClient = useQueryClient()
@@ -431,7 +431,7 @@ export default function GoogleDrivePicker({ onFilesSelected }: GoogleDrivePicker
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Mode selector */}
-        <div className="flex gap-2">
+        <div className="flex gap-2" role="tablist" aria-label="Modo de seleção de arquivos">
           <Button
             variant={mode === 'folder' ? 'default' : 'outline'}
             onClick={() => {
@@ -439,8 +439,11 @@ export default function GoogleDrivePicker({ onFilesSelected }: GoogleDrivePicker
               setSelectedFileIds(new Set())
             }}
             size="sm"
+            role="tab"
+            aria-selected={mode === 'folder'}
+            aria-label="Selecionar por pasta"
           >
-            <Folder className="h-4 w-4 mr-2" />
+            <Folder className="h-4 w-4 mr-2" aria-hidden="true" />
             Por Pasta
           </Button>
           <Button
@@ -450,8 +453,11 @@ export default function GoogleDrivePicker({ onFilesSelected }: GoogleDrivePicker
               setSelectedFileIds(new Set())
             }}
             size="sm"
+            role="tab"
+            aria-selected={mode === 'file'}
+            aria-label="Buscar arquivos"
           >
-            <FileText className="h-4 w-4 mr-2" />
+            <FileText className="h-4 w-4 mr-2" aria-hidden="true" />
             Buscar Arquivos
           </Button>
         </div>
@@ -460,8 +466,9 @@ export default function GoogleDrivePicker({ onFilesSelected }: GoogleDrivePicker
         {mode === 'folder' && (
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>Selecione uma pasta</Label>
+              <Label htmlFor="folder-select">Selecione uma pasta</Label>
               <select
+                id="folder-select"
                 value={selectedFolderId}
                 onChange={(e) => {
                   setSelectedFolderId(e.target.value)
@@ -469,6 +476,7 @@ export default function GoogleDrivePicker({ onFilesSelected }: GoogleDrivePicker
                 }}
                 className="w-full p-2 border rounded-md bg-background"
                 disabled={loadingFolders}
+                aria-label="Selecionar pasta do Google Drive"
               >
                 <option value="">Selecione uma pasta...</option>
                 {folders.map((folder) => (
@@ -528,8 +536,8 @@ export default function GoogleDrivePicker({ onFilesSelected }: GoogleDrivePicker
 
         {/* Files list */}
         {filesToShow.length > 0 && (
-          <div className="space-y-2 max-h-96 overflow-y-auto">
-            <Label>Arquivos ({selectedFileIds.size} selecionado(s))</Label>
+          <div className="space-y-2 max-h-96 overflow-y-auto" role="listbox" aria-label="Lista de arquivos disponíveis">
+            <Label id="files-list-label">Arquivos ({selectedFileIds.size} selecionado(s))</Label>
             {filesToShow.map((file) => {
               const isSelected = selectedFileIds.has(file.id)
               const isDownloadingFile = downloadingFiles.has(file.id)
@@ -544,6 +552,16 @@ export default function GoogleDrivePicker({ onFilesSelected }: GoogleDrivePicker
                     isSelected ? 'bg-primary/10 border-primary' : 'hover:bg-muted'
                   }`}
                   onClick={() => !isDownloadingFile && toggleFileSelection(file.id)}
+                  onKeyDown={(e) => {
+                    if ((e.key === 'Enter' || e.key === ' ') && !isDownloadingFile) {
+                      e.preventDefault()
+                      toggleFileSelection(file.id)
+                    }
+                  }}
+                  role="option"
+                  aria-selected={isSelected}
+                  aria-label={`${file.name}${isSelected ? ', selecionado' : ''}`}
+                  tabIndex={0}
                 >
                   <input
                     type="checkbox"
@@ -552,8 +570,9 @@ export default function GoogleDrivePicker({ onFilesSelected }: GoogleDrivePicker
                     disabled={isDownloadingFile}
                     className="shrink-0"
                     onClick={(e) => e.stopPropagation()}
+                    aria-label={`Selecionar ${file.name}`}
                   />
-                  <FileText className="h-5 w-5 text-muted-foreground shrink-0" />
+                  <FileText className="h-5 w-5 text-muted-foreground shrink-0" aria-hidden="true" />
                   <div className="flex-1 min-w-0">
                     <p className="font-medium truncate">{file.name}</p>
                     <p className="text-sm text-muted-foreground">
@@ -599,3 +618,4 @@ export default function GoogleDrivePicker({ onFilesSelected }: GoogleDrivePicker
   )
 }
 
+export default GoogleDrivePicker

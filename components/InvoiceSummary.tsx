@@ -20,13 +20,13 @@ interface InvoiceSummaryProps {
   }>
 }
 
-export function InvoiceSummary({
+const InvoiceSummary = ({
   client,
   invoiceAmount,
   month,
   year,
   files,
-}: InvoiceSummaryProps) {
+}: InvoiceSummaryProps) => {
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('pt-PT', {
       style: 'currency',
@@ -65,14 +65,14 @@ export function InvoiceSummary({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" role="region" aria-label="Resumo da Invoice">
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.3 }}
         className="flex items-center gap-2 mb-6"
       >
-        <CheckCircle2 className="h-6 w-6 text-primary" />
+        <CheckCircle2 className="h-6 w-6 text-primary" aria-hidden="true" />
         <h3 className="text-xl font-semibold">Resumo da Invoice</h3>
       </motion.div>
 
@@ -87,7 +87,7 @@ export function InvoiceSummary({
           <Card className="h-full hover:shadow-md transition-shadow">
             <CardContent className="p-6">
               <div className="flex items-start gap-4">
-                <div className="p-3 bg-primary/10 rounded-lg">
+                <div className="p-3 bg-primary/10 rounded-lg" aria-hidden="true">
                   <User className="h-6 w-6 text-primary" />
                 </div>
                 <div className="flex-1">
@@ -116,7 +116,7 @@ export function InvoiceSummary({
           <Card className="h-full hover:shadow-md transition-shadow">
             <CardContent className="p-6">
               <div className="flex items-start gap-4">
-                <div className="p-3 bg-primary/10 rounded-lg">
+                <div className="p-3 bg-primary/10 rounded-lg" aria-hidden="true">
                   <Euro className="h-6 w-6 text-primary" />
                 </div>
                 <div className="flex-1">
@@ -140,7 +140,7 @@ export function InvoiceSummary({
           <Card className="h-full hover:shadow-md transition-shadow">
             <CardContent className="p-6">
               <div className="flex items-start gap-4">
-                <div className="p-3 bg-primary/10 rounded-lg">
+                <div className="p-3 bg-primary/10 rounded-lg" aria-hidden="true">
                   <Calendar className="h-6 w-6 text-primary" />
                 </div>
                 <div className="flex-1">
@@ -164,7 +164,7 @@ export function InvoiceSummary({
           <Card className="h-full hover:shadow-md transition-shadow">
             <CardContent className="p-6">
               <div className="flex items-start gap-4">
-                <div className="p-3 bg-primary/10 rounded-lg">
+                <div className="p-3 bg-primary/10 rounded-lg" aria-hidden="true">
                   <FileText className="h-6 w-6 text-primary" />
                 </div>
                 <div className="flex-1">
@@ -198,3 +198,4 @@ export function InvoiceSummary({
   )
 }
 
+export { InvoiceSummary }

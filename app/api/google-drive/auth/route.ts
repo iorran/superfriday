@@ -4,8 +4,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthUrl } from '@/lib/google-drive'
-import { requireAuth } from '@/lib/auth-server'
+import { getAuthUrl } from '@/lib/server/google-drive'
+import { requireAuth } from '@/lib/server/auth'
 
 /**
  * GET /api/google-drive/auth

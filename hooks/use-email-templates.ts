@@ -5,8 +5,8 @@ import {
   createEmailTemplate,
   updateEmailTemplate,
   deleteEmailTemplate,
-} from '@/lib/client/db-client'
-import { queryKeys } from '@/lib/query-keys'
+} from '@/lib/client/api'
+import { queryKeys } from '@/lib/shared/query-keys'
 
 interface CreateEmailTemplateData {
   subject: string
@@ -23,7 +23,7 @@ interface UpdateEmailTemplateData {
 /**
  * Query hook for fetching all email templates
  */
-export function useEmailTemplates() {
+export const useEmailTemplates = () => {
   return useQuery({
     queryKey: queryKeys.emailTemplates.lists(),
     queryFn: getEmailTemplates,
@@ -33,7 +33,7 @@ export function useEmailTemplates() {
 /**
  * Query hook for fetching a single email template by ID
  */
-export function useEmailTemplate(templateId: string | null | undefined) {
+export const useEmailTemplate = (templateId: string | null | undefined) => {
   return useQuery({
     queryKey: queryKeys.emailTemplates.detail(templateId || ''),
     queryFn: () => getEmailTemplate(templateId!),
@@ -44,7 +44,7 @@ export function useEmailTemplate(templateId: string | null | undefined) {
 /**
  * Mutation hook for creating a new email template
  */
-export function useCreateEmailTemplate() {
+export const useCreateEmailTemplate = () => {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -62,7 +62,7 @@ export function useCreateEmailTemplate() {
 /**
  * Mutation hook for updating an email template
  */
-export function useUpdateEmailTemplate() {
+export const useUpdateEmailTemplate = () => {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -82,7 +82,7 @@ export function useUpdateEmailTemplate() {
 /**
  * Mutation hook for deleting an email template
  */
-export function useDeleteEmailTemplate() {
+export const useDeleteEmailTemplate = () => {
   const queryClient = useQueryClient()
 
   return useMutation({

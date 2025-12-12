@@ -4,9 +4,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getDatabase } from '@/lib/db'
-import { deleteFile } from '@/lib/storage'
-import { requireAuth } from '@/lib/auth-server'
+import { getDatabase } from '@/lib/server/db'
+import { deleteFile } from '@/lib/server/storage'
+import { requireAuth } from '@/lib/server/auth'
 
 export async function DELETE(
   request: NextRequest,
