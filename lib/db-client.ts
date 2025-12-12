@@ -336,6 +336,7 @@ export async function createInvoice(invoiceData: {
     originalName: string
     fileSize: number
   }>
+  isOldImport?: boolean // If true, mark as already sent to client
 }, userId: string) {
   const db = await getDatabase()
   const {
@@ -381,6 +382,8 @@ export async function createInvoice(invoiceData: {
   }
 
   const invoiceId = `invoice-${Date.now()}`
+  const isOldImport = invoiceData.isOldImport || false
+  const now = new Date()
   
   // Create invoice
   await db.collection('invoices').insertOne({
@@ -392,9 +395,9 @@ export async function createInvoice(invoiceData: {
     month,
     year,
     notes: null,
-    uploaded_at: new Date(),
-    sent_to_client: false,
-    sent_to_client_at: null,
+    uploaded_at: now,
+    sent_to_client: isOldImport,
+    sent_to_client_at: isOldImport ? now : null,
     payment_received: false,
     payment_received_at: null,
     sent_to_accountant: false,

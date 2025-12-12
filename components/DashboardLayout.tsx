@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Menu, X, FileText, Settings, Users, FileCode, TrendingUp, LogOut, Mail } from 'lucide-react'
+import { Menu, X, FileText, Settings, Users, FileCode, TrendingUp, LogOut, Mail, Upload } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useSession, signOut } from '@/lib/auth-client'
 import Tour from '@/components/Tour'
@@ -67,6 +67,11 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       name: 'Invoices',
       href: '/',
       icon: FileText,
+    },
+    {
+      name: 'Importar Antigas',
+      href: '/import-old-files',
+      icon: Upload,
     },
   ]
 

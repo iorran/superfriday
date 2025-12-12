@@ -161,6 +161,7 @@ export async function createInvoice(invoiceData: {
     originalName: string
     fileSize: number
   }>
+  isOldImport?: boolean // Optional: if true, marks invoice as already sent to client
 }) {
   const response = await fetch('/api/invoices', {
     method: 'POST',
