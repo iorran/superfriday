@@ -32,7 +32,8 @@ export function getAuthUrl(state?: string): string {
   const oauth2Client = createOAuth2Client()
   
   const scopes = [
-    'https://www.googleapis.com/auth/drive.readonly', // Read-only access to Drive
+    // Read-only access to Drive - needed to import PDF invoices from user's Google Drive
+    'https://www.googleapis.com/auth/drive.readonly',
   ]
   
   return oauth2Client.generateAuthUrl({

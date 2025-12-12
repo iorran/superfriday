@@ -37,14 +37,22 @@ export async function GET(request: NextRequest) {
     await handleOAuthCallback(code, userId)
     
     // Redirect to import page with success
-    const baseUrl = process.env.BETTER_AUTH_URL || process.env.NEXT_PUBLIC_BETTER_AUTH_URL || ''
+    // Use the request URL to determine the base URL if env vars are not set
+    const baseUrl = process.env.BETTER_AUTH_URL || 
+                    process.env.NEXT_PUBLIC_BETTER_AUTH_URL || 
+                    `${request.nextUrl.protocol}//${request.nextUrl.host}`
+    
     return NextResponse.redirect(`${baseUrl}/import-old-files?connected=google-drive`)
   } catch (error: unknown) {
     console.error('Error handling OAuth callback:', error)
     const errorMessage = error instanceof Error ? error.message : 'Failed to connect Google Drive'
     
     // Redirect to import page with error
-    const baseUrl = process.env.BETTER_AUTH_URL || process.env.NEXT_PUBLIC_BETTER_AUTH_URL || ''
+    // Use the request URL to determine the base URL if env vars are not set
+    const baseUrl = process.env.BETTER_AUTH_URL || 
+                    process.env.NEXT_PUBLIC_BETTER_AUTH_URL || 
+                    `${request.nextUrl.protocol}//${request.nextUrl.host}`
+    
     return NextResponse.redirect(`${baseUrl}/import-old-files?error=${encodeURIComponent(errorMessage)}`)
   }
 }

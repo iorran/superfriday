@@ -34,7 +34,11 @@ export async function GET(request: NextRequest) {
     const errorMessage = error instanceof Error ? error.message : 'Failed to initiate OAuth'
     
     // Redirect to import page with error
-    const baseUrl = process.env.BETTER_AUTH_URL || process.env.NEXT_PUBLIC_BETTER_AUTH_URL || ''
+    // Use the request URL to determine the base URL if env vars are not set
+    const baseUrl = process.env.BETTER_AUTH_URL || 
+                    process.env.NEXT_PUBLIC_BETTER_AUTH_URL || 
+                    `${request.nextUrl.protocol}//${request.nextUrl.host}`
+    
     return NextResponse.redirect(`${baseUrl}/import-old-files?error=${encodeURIComponent(errorMessage)}`)
   }
 }
