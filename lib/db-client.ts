@@ -924,7 +924,7 @@ export interface UserPreferences {
   user_id: string
   tour_completed?: boolean
   tour_version?: string
-  [key: string]: any // Allow for additional preferences
+  [key: string]: unknown // Allow for additional preferences
   created_at?: Date
   updated_at?: Date
 }
@@ -980,7 +980,7 @@ export async function updateUserPreferences(
 export async function getUserPreference(
   userId: string,
   key: string
-): Promise<any> {
+): Promise<unknown> {
   const preferences = await getUserPreferences(userId)
   return preferences ? preferences[key] : undefined
 }
@@ -991,7 +991,65 @@ export async function getUserPreference(
 export async function setUserPreference(
   userId: string,
   key: string,
-  value: any
+  value: unknown
 ): Promise<void> {
   await updateUserPreferences(userId, { [key]: value })
+}
+
+/**
+ * SMTP Settings Management
+ */
+
+export interface SMTPSettings {
+  host: string
+  port: number
+  user: string
+  pass: string
+  from: string
+}
+
+/**
+ * Get SMTP settings for a user
+ */
+export async function getSMTPSettings(userId: string): Promise<SMTPSettings | null> {
+  const db = await getDatabase()
+  const settings = await db.collection('smtp_settings').findOne({ user_id: userId })
+  
+  if (!settings) {
+    return null
+  }
+  
+  return {
+    host: settings.host || '',
+    port: settings.port || 587,
+    user: settings.user || '',
+    pass: settings.pass || '',
+    from: settings.from || '',
+  }
+}
+
+/**
+ * Set SMTP settings for a user
+ */
+export async function setSMTPSettings(
+  settings: SMTPSettings,
+  userId: string
+): Promise<void> {
+  const db = await getDatabase()
+  const now = new Date()
+  
+  await db.collection('smtp_settings').updateOne(
+    { user_id: userId },
+    {
+      $set: {
+        ...settings,
+        updated_at: now,
+      },
+      $setOnInsert: {
+        user_id: userId,
+        created_at: now,
+      },
+    },
+    { upsert: true }
+  )
 }

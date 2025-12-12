@@ -297,7 +297,7 @@ export default function FileUpload({ onUploadSuccess, editingInvoiceId, onCancel
 
       setFiles(prev => [...prev, ...newFiles])
     }
-  }, [currentStep, clientId, toast, extractFromFile, form])
+  }, [currentStep, clientId, toast, extractFromFile, form, clients])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,

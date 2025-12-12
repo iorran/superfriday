@@ -27,14 +27,13 @@ export function useTour() {
   const queryClient = useQueryClient()
 
   // Fetch tour completion status from database
-  const { data: tourCompleted, isLoading: isLoadingCompleted, error: tourCompletedError } = useQuery({
+  const { data: tourCompleted, isLoading: isLoadingCompleted } = useQuery({
     queryKey: ['user-preference', 'tour_completed'],
     queryFn: async () => {
       try {
         return await getUserPreference('tour_completed')
-      } catch (error) {
+      } catch {
         // Fallback to localStorage if API fails
-        console.warn('Failed to fetch tour status from database, using localStorage fallback:', error)
         const local = getLocalStorageTourStatus()
         return local.completed
       }
@@ -43,12 +42,12 @@ export function useTour() {
     retry: 1,
   })
 
-  const { data: tourVersion, error: tourVersionError } = useQuery({
+  const { data: tourVersion } = useQuery({
     queryKey: ['user-preference', 'tour_version'],
     queryFn: async () => {
       try {
         return await getUserPreference('tour_version')
-      } catch (error) {
+      } catch {
         // Fallback to localStorage if API fails
         const local = getLocalStorageTourStatus()
         return local.version
@@ -66,7 +65,6 @@ export function useTour() {
         await setUserPreference('tour_version', TOUR_VERSION)
       } catch (error) {
         // Fallback to localStorage if API fails
-        console.warn('Failed to save tour status to database, using localStorage fallback:', error)
         setLocalStorageTourStatus()
         throw error // Still throw to trigger onError
       }

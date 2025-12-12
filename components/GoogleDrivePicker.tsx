@@ -5,17 +5,15 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import { Progress } from '@/components/ui/progress'
 import { useToast } from '@/components/ui/use-toast'
 import { usePDFExtraction } from '@/lib/hooks/use-pdf-extraction'
+import type { ExtractedPDFData } from '@/types'
 import { 
   Loader2, 
   CheckCircle2, 
-  AlertCircle, 
   Folder, 
   FileText, 
   Search,
-  X,
   LogOut
 } from 'lucide-react'
 import { motion } from 'framer-motion'
@@ -40,7 +38,7 @@ interface GoogleDrivePickerProps {
     fileKey: string
     progress: number
     uploaded: boolean
-    extractedData?: any
+    extractedData?: ExtractedPDFData | null
     invoiceAmount?: number
     month?: number
     year?: number
@@ -134,7 +132,16 @@ export default function GoogleDrivePicker({ onFilesSelected }: GoogleDrivePicker
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(new Set())
   const [downloadingFiles, setDownloadingFiles] = useState<Set<string>>(new Set())
-  const [downloadedFiles, setDownloadedFiles] = useState<Map<string, any>>(new Map())
+  const [downloadedFiles, setDownloadedFiles] = useState<Map<string, {
+    file: File
+    fileKey: string
+    progress: number
+    uploaded: boolean
+    extractedData?: ExtractedPDFData | null
+    invoiceAmount?: number
+    month?: number
+    year?: number
+  }>>(new Map())
 
   // Check connection status
   const { data: isConnected, refetch: refetchStatus } = useQuery({
@@ -223,7 +230,16 @@ export default function GoogleDrivePicker({ onFilesSelected }: GoogleDrivePicker
     setDownloadingFiles(new Set(filesToDownload.map(f => f.id)))
 
     try {
-      const processedFiles: any[] = []
+      const processedFiles: Array<{
+        file: File
+        fileKey: string
+        progress: number
+        uploaded: boolean
+        extractedData?: ExtractedPDFData | null
+        invoiceAmount?: number
+        month?: number
+        year?: number
+      }> = []
 
       for (const file of filesToDownload) {
         try {

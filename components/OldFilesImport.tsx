@@ -35,7 +35,6 @@ export default function OldFilesImport() {
   const { toast } = useToast()
   
   const [files, setFiles] = useState<FileWithData[]>([])
-  const [isUploading, setIsUploading] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
   const [importProgress, setImportProgress] = useState(0)
   
@@ -117,7 +116,7 @@ export default function OldFilesImport() {
         ))
       }
     }
-  }, [files.length, extractFromFile, clients, toast])
+  }, [files.length, extractFromFile, toast])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -202,7 +201,7 @@ export default function OldFilesImport() {
         try {
           // Use global client for all files
           let finalClientId = globalClientId
-          let finalClientName = globalClientName
+          const finalClientName = globalClientName
           
           if (finalClientId === '__new__') {
             // Use the clientName as the temporary ID

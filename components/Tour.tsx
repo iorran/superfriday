@@ -82,8 +82,6 @@ export default function Tour({ steps, onComplete, onSkip }: TourProps) {
       })
 
       // Calculate spotlight mask position (for clip-path)
-      const viewportWidth = window.innerWidth
-      const viewportHeight = window.innerHeight
       const rectTop = rect.top
       const rectLeft = rect.left
       const rectRight = rect.right

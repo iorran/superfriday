@@ -6,7 +6,6 @@
 import nodemailer from 'nodemailer'
 import { getFile } from './storage'
 import { getEmailAccount, getDefaultEmailAccount } from './db-client'
-import type { EmailAccount } from '@/types'
 
 // Cache for transporters (keyed by account ID or 'env' for env vars)
 const transporterCache = new Map<string, nodemailer.Transporter>()

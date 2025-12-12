@@ -11,7 +11,8 @@ import { requireAuth } from '@/lib/auth-server'
  * GET /api/google-drive/status
  * Check if user has Google Drive connected
  */
-export async function GET(request: NextRequest) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export async function GET(_request: NextRequest) {
   try {
     const session = await requireAuth()
     const userId = session.user.id
@@ -43,7 +44,8 @@ export async function GET(request: NextRequest) {
  * DELETE /api/google-drive/status
  * Disconnect Google Drive (delete tokens)
  */
-export async function DELETE(request: NextRequest) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export async function DELETE(_request: NextRequest) {
   try {
     const session = await requireAuth()
     const userId = session.user.id

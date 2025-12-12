@@ -7,7 +7,6 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'crypto'
 
 const ALGORITHM = 'aes-256-gcm'
 const IV_LENGTH = 16
-const SALT_LENGTH = 32
 const TAG_LENGTH = 16
 
 /**
@@ -26,7 +25,7 @@ function getEncryptionKey(): Buffer {
       throw new Error('Encryption key must be 32 bytes (base64 encoded)')
     }
     return decoded
-  } catch (error) {
+  } catch {
     throw new Error('Invalid encryption key format. Must be base64 encoded 32-byte key.')
   }
 }
@@ -57,8 +56,7 @@ export function encrypt(value: string): string {
     ])
     
     return combined.toString('base64')
-  } catch (error) {
-    console.error('Encryption error:', error)
+  } catch {
     throw new Error('Failed to encrypt value')
   }
 }
@@ -87,8 +85,7 @@ export function decrypt(encryptedValue: string): string {
     decrypted += decipher.final('utf8')
     
     return decrypted
-  } catch (error) {
-    console.error('Decryption error:', error)
+  } catch {
     throw new Error('Failed to decrypt value')
   }
 }

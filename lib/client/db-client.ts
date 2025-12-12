@@ -421,7 +421,7 @@ export interface UserPreferences {
   user_id?: string
   tour_completed?: boolean
   tour_version?: string
-  [key: string]: any
+  [key: string]: unknown
 }
 
 /**
@@ -440,7 +440,7 @@ export async function getUserPreferences(): Promise<UserPreferences> {
 /**
  * Get a specific user preference
  */
-export async function getUserPreference(key: string): Promise<any> {
+export async function getUserPreference(key: string): Promise<unknown> {
   const response = await fetch(`/api/user-preferences?key=${encodeURIComponent(key)}`)
   if (!response.ok) {
     const error = await response.json().catch(() => ({ message: 'Failed to fetch preference' }))
@@ -453,7 +453,7 @@ export async function getUserPreference(key: string): Promise<any> {
 /**
  * Set a user preference
  */
-export async function setUserPreference(key: string, value: any): Promise<void> {
+export async function setUserPreference(key: string, value: unknown): Promise<void> {
   const response = await fetch('/api/user-preferences', {
     method: 'POST',
     headers: {

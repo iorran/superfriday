@@ -340,14 +340,6 @@ export default function FileList() {
     return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
   }
 
-  const formatDate = (date: Date) => {
-    return date.toLocaleString('default', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    })
-  }
-
   const formatInvoiceDate = (month: number | null, year: number | null, uploadedAt?: string) => {
     if (!month || !year) return ''
     

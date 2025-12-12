@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
     const sanitizedEmail = userEmail.replace(/[@.]/g, '_')
     const fileKey = `${sanitizedEmail}/${Date.now()}-${metadata.name}`
     
-    const blob = await put(fileKey, fileBuffer, {
+    await put(fileKey, fileBuffer, {
       access: 'public',
       contentType: 'application/pdf',
       token: process.env.BLOB_READ_WRITE_TOKEN,
