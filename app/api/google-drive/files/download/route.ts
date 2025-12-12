@@ -59,18 +59,34 @@ export async function POST(request: NextRequest) {
     const sanitizedEmail = userEmail.replace(/[@.]/g, '_')
     const fileKey = `${sanitizedEmail}/${Date.now()}-${metadata.name}`
     
-    await put(fileKey, fileBuffer, {
-      access: 'public',
-      contentType: 'application/pdf',
-      token: process.env.BLOB_READ_WRITE_TOKEN,
+    console.log('Uploading file to blob:', {
+      fileKey,
+      fileSize: fileBuffer.length,
+      fileName: metadata.name,
     })
     
-    return NextResponse.json({
-      success: true,
-      fileKey,
-      fileName: metadata.name,
-      fileSize: fileBuffer.length,
-    })
+    try {
+      const blobResult = await put(fileKey, fileBuffer, {
+        access: 'public',
+        contentType: 'application/pdf',
+        token: process.env.BLOB_READ_WRITE_TOKEN,
+      })
+      
+      console.log('File uploaded successfully:', {
+        fileKey,
+        url: blobResult.url,
+      })
+      
+      return NextResponse.json({
+        success: true,
+        fileKey,
+        fileName: metadata.name,
+        fileSize: fileBuffer.length,
+      })
+    } catch (uploadError) {
+      console.error('Error uploading to blob:', uploadError)
+      throw new Error(`Failed to upload file to storage: ${uploadError instanceof Error ? uploadError.message : 'Unknown error'}`)
+    }
   } catch (error: unknown) {
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json(

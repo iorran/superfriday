@@ -23,7 +23,7 @@ export async function GET(
       )
     }
 
-    const { fileKey } = await params
+    let { fileKey } = await params
 
     if (!fileKey) {
       return NextResponse.json(
@@ -31,6 +31,9 @@ export async function GET(
         { status: 400 }
       )
     }
+
+    // Decode URL-encoded fileKey
+    fileKey = decodeURIComponent(fileKey)
 
     // Verify file belongs to user (check if fileKey starts with user's email folder)
     const sanitizedEmail = userEmail.replace(/[@.]/g, '_')

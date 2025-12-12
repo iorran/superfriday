@@ -278,8 +278,20 @@ export default function GoogleDrivePicker({ onFilesSelected }: GoogleDrivePicker
           const downloadResult = await downloadFile(file.id)
           
           // Fetch file as Blob to create File object
-          const fileResponse = await fetch(`/api/files/${downloadResult.fileKey}`)
+          // URL encode the fileKey to handle special characters
+          const encodedFileKey = encodeURIComponent(downloadResult.fileKey).replace(/%2F/g, '/')
+          const fileResponse = await fetch(`/api/files/${encodedFileKey}`)
+          
+          if (!fileResponse.ok) {
+            throw new Error(`Failed to fetch file: ${fileResponse.status} ${fileResponse.statusText}`)
+          }
+          
           const blob = await fileResponse.blob()
+          
+          if (blob.size === 0) {
+            throw new Error('Downloaded file is empty')
+          }
+          
           const fileObj = new File([blob], downloadResult.fileName, { type: 'application/pdf' })
 
           // Extract data from PDF
