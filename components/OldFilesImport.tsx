@@ -13,6 +13,7 @@ import { uploadFile } from '@/lib/client/storage-client'
 import { Upload, X, FileText, Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
 import { motion } from 'framer-motion'
 import type { ExtractedPDFData } from '@/types'
+import GoogleDrivePicker from './GoogleDrivePicker'
 
 interface FileWithData {
   file: File
@@ -127,6 +128,32 @@ export default function OldFilesImport() {
 
   const removeFile = (index: number) => {
     setFiles(prev => prev.filter((_, i) => i !== index))
+  }
+
+  // Handle files selected from Google Drive
+  const handleGoogleDriveFiles = (googleFiles: Array<{
+    file: File
+    fileKey: string
+    progress: number
+    uploaded: boolean
+    extractedData?: ExtractedPDFData | null
+    invoiceAmount?: number
+    month?: number
+    year?: number
+  }>) => {
+    // Convert Google Drive files to FileWithData format
+    const newFiles: FileWithData[] = googleFiles.map(gf => ({
+      file: gf.file,
+      fileKey: gf.fileKey,
+      progress: gf.progress,
+      uploaded: gf.uploaded,
+      extractedData: gf.extractedData || null,
+      invoiceAmount: gf.invoiceAmount,
+      month: gf.month,
+      year: gf.year,
+    }))
+    
+    setFiles(prev => [...prev, ...newFiles])
   }
 
   const updateFileData = (index: number, updates: Partial<FileWithData>) => {
@@ -478,22 +505,8 @@ export default function OldFilesImport() {
         </Card>
       )}
 
-      {/* Google Drive Section (Placeholder) */}
-      <Card className="border-dashed">
-        <CardHeader>
-          <CardTitle>Importar do Google Drive</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center py-8">
-            <p className="text-muted-foreground mb-4">
-              A integração com Google Drive estará disponível em breve.
-            </p>
-            <Button variant="outline" disabled>
-              Conectar Google Drive
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Google Drive Section */}
+      <GoogleDrivePicker onFilesSelected={handleGoogleDriveFiles} />
     </div>
   )
 }

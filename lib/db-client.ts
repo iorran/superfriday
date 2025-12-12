@@ -4,6 +4,7 @@
  */
 
 import { getDatabase } from './db'
+import { encrypt, decrypt } from './encryption'
 import type { Client, Invoice, EmailTemplate, EmailAccount } from '@/types'
 
 interface CreateClientData {
@@ -821,4 +822,176 @@ export async function updateEmailAccount(accountId: string, data: UpdateEmailAcc
 export async function deleteEmailAccount(accountId: string, userId: string) {
   const db = await getDatabase()
   await db.collection('email_accounts').deleteOne({ id: accountId, user_id: userId })
+}
+
+/**
+ * Google OAuth Token Management
+ */
+
+export interface GoogleOAuthToken {
+  user_id: string
+  access_token: string // Encrypted
+  refresh_token: string // Encrypted
+  expires_at: Date
+  created_at: Date
+  updated_at: Date
+}
+
+/**
+ * Store or update Google OAuth tokens for a user
+ */
+export async function saveGoogleOAuthToken(
+  userId: string,
+  accessToken: string,
+  refreshToken: string,
+  expiresIn: number
+): Promise<void> {
+  const db = await getDatabase()
+  const expiresAt = new Date(Date.now() + expiresIn * 1000)
+  
+  // Encrypt tokens before storing
+  const encryptedAccessToken = encrypt(accessToken)
+  const encryptedRefreshToken = encrypt(refreshToken)
+  
+  await db.collection('google_oauth_tokens').updateOne(
+    { user_id: userId },
+    {
+      $set: {
+        access_token: encryptedAccessToken,
+        refresh_token: encryptedRefreshToken,
+        expires_at: expiresAt,
+        updated_at: new Date(),
+      },
+      $setOnInsert: {
+        user_id: userId,
+        created_at: new Date(),
+      },
+    },
+    { upsert: true }
+  )
+}
+
+/**
+ * Get Google OAuth tokens for a user
+ */
+export async function getGoogleOAuthToken(userId: string): Promise<GoogleOAuthToken | null> {
+  const db = await getDatabase()
+  const token = await db.collection('google_oauth_tokens').findOne({ user_id: userId })
+  
+  if (!token) {
+    return null
+  }
+  
+  // Decrypt tokens before returning
+  const decryptedAccessToken = decrypt(token.access_token)
+  const decryptedRefreshToken = decrypt(token.refresh_token)
+  
+  return {
+    user_id: token.user_id,
+    access_token: decryptedAccessToken,
+    refresh_token: decryptedRefreshToken,
+    expires_at: token.expires_at,
+    created_at: token.created_at,
+    updated_at: token.updated_at,
+  }
+}
+
+/**
+ * Delete Google OAuth tokens for a user (disconnect)
+ */
+export async function deleteGoogleOAuthToken(userId: string): Promise<void> {
+  const db = await getDatabase()
+  await db.collection('google_oauth_tokens').deleteOne({ user_id: userId })
+}
+
+/**
+ * Check if user has Google OAuth tokens
+ */
+export async function hasGoogleOAuthToken(userId: string): Promise<boolean> {
+  const db = await getDatabase()
+  const token = await db.collection('google_oauth_tokens').findOne(
+    { user_id: userId },
+    { projection: { _id: 1 } }
+  )
+  return !!token
+}
+
+/**
+ * User Preferences Management
+ */
+
+export interface UserPreferences {
+  user_id: string
+  tour_completed?: boolean
+  tour_version?: string
+  [key: string]: any // Allow for additional preferences
+  created_at?: Date
+  updated_at?: Date
+}
+
+/**
+ * Get user preferences
+ */
+export async function getUserPreferences(userId: string): Promise<UserPreferences | null> {
+  const db = await getDatabase()
+  const preferences = await db.collection('user_preferences').findOne({ user_id: userId })
+  
+  if (!preferences) {
+    return null
+  }
+  
+  return {
+    user_id: preferences.user_id,
+    tour_completed: preferences.tour_completed || false,
+    tour_version: preferences.tour_version,
+    ...preferences,
+  }
+}
+
+/**
+ * Update user preferences (upsert)
+ */
+export async function updateUserPreferences(
+  userId: string,
+  updates: Partial<UserPreferences>
+): Promise<void> {
+  const db = await getDatabase()
+  const now = new Date()
+  
+  await db.collection('user_preferences').updateOne(
+    { user_id: userId },
+    {
+      $set: {
+        ...updates,
+        updated_at: now,
+      },
+      $setOnInsert: {
+        user_id: userId,
+        created_at: now,
+      },
+    },
+    { upsert: true }
+  )
+}
+
+/**
+ * Get a specific preference value
+ */
+export async function getUserPreference(
+  userId: string,
+  key: string
+): Promise<any> {
+  const preferences = await getUserPreferences(userId)
+  return preferences ? preferences[key] : undefined
+}
+
+/**
+ * Set a specific preference value
+ */
+export async function setUserPreference(
+  userId: string,
+  key: string,
+  value: any
+): Promise<void> {
+  await updateUserPreferences(userId, { [key]: value })
 }

@@ -122,6 +122,20 @@ MONGODB_URI=mongodb+srv://user:password@cluster.mongodb.net/dbname
 
 # Vercel Blob Storage (required)
 BLOB_READ_WRITE_TOKEN=vercel_blob_xxxxx
+
+# Better Auth (required)
+BETTER_AUTH_URL=https://yourdomain.com
+BETTER_AUTH_SECRET=your-secret-key-here
+NEXT_PUBLIC_BETTER_AUTH_URL=https://yourdomain.com
+
+# Google Drive OAuth (optional - for Google Drive import)
+GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+GOOGLE_REDIRECT_URI=https://yourdomain.com/api/google-drive/auth/callback
+
+# Encryption key for OAuth tokens (required if using Google Drive)
+# Generate with: openssl rand -base64 32
+GOOGLE_OAUTH_ENCRYPTION_KEY=your-32-character-base64-encryption-key
 ```
 
 **Getting your environment variables:**
@@ -136,6 +150,15 @@ BLOB_READ_WRITE_TOKEN=vercel_blob_xxxxx
    - Go to your Vercel project dashboard
    - Navigate to Storage → Blob
    - Copy the `BLOB_READ_WRITE_TOKEN` from the environment variables section
+
+3. **Google Drive OAuth (optional):**
+   - Create a Google Cloud project at https://console.cloud.google.com
+   - Enable Google Drive API
+   - Create OAuth 2.0 credentials (Web application)
+   - Add authorized redirect URI: `https://yourdomain.com/api/google-drive/auth/callback`
+   - Copy Client ID and Client Secret to environment variables
+   - Generate encryption key: `openssl rand -base64 32`
+   - Add `GOOGLE_OAUTH_ENCRYPTION_KEY` to environment variables
 
 ## Project Structure
 

@@ -1,0 +1,45 @@
+/**
+ * Google Drive Folders API Route
+ * Handles folder listing operations
+ */
+
+import { NextRequest, NextResponse } from 'next/server'
+import { listFolders, listFilesInFolder } from '@/lib/google-drive'
+import { requireAuth } from '@/lib/auth-server'
+
+/**
+ * GET /api/google-drive/folders
+ * List all folders in user's Google Drive
+ */
+export async function GET(request: NextRequest) {
+  try {
+    const session = await requireAuth()
+    const userId = session.user.id
+    
+    const folders = await listFolders(userId)
+    
+    return NextResponse.json({
+      success: true,
+      folders: folders.map(folder => ({
+        id: folder.id,
+        name: folder.name,
+        parents: folder.parents || [],
+      })),
+    })
+  } catch (error: unknown) {
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return NextResponse.json(
+        { error: true, message: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
+    
+    console.error('Error listing folders:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Failed to list folders'
+    return NextResponse.json(
+      { error: true, message: errorMessage },
+      { status: 500 }
+    )
+  }
+}
+

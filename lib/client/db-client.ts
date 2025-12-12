@@ -412,3 +412,76 @@ export async function setAccountantEmail(email: string): Promise<void> {
     throw new Error(error.message || `Failed to save settings: ${response.status}`)
   }
 }
+
+/**
+ * User Preferences
+ */
+
+export interface UserPreferences {
+  user_id?: string
+  tour_completed?: boolean
+  tour_version?: string
+  [key: string]: any
+}
+
+/**
+ * Get user preferences
+ */
+export async function getUserPreferences(): Promise<UserPreferences> {
+  const response = await fetch('/api/user-preferences')
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Failed to fetch preferences' }))
+    throw new Error(error.message || `Failed to fetch preferences: ${response.status}`)
+  }
+  const data = await response.json()
+  return data.preferences || {}
+}
+
+/**
+ * Get a specific user preference
+ */
+export async function getUserPreference(key: string): Promise<any> {
+  const response = await fetch(`/api/user-preferences?key=${encodeURIComponent(key)}`)
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Failed to fetch preference' }))
+    throw new Error(error.message || `Failed to fetch preference: ${response.status}`)
+  }
+  const data = await response.json()
+  return data.value
+}
+
+/**
+ * Set a user preference
+ */
+export async function setUserPreference(key: string, value: any): Promise<void> {
+  const response = await fetch('/api/user-preferences', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ key, value }),
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Failed to save preference' }))
+    throw new Error(error.message || `Failed to save preference: ${response.status}`)
+  }
+}
+
+/**
+ * Update multiple user preferences
+ */
+export async function updateUserPreferences(preferences: Partial<UserPreferences>): Promise<void> {
+  const response = await fetch('/api/user-preferences', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ preferences }),
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Failed to update preferences' }))
+    throw new Error(error.message || `Failed to update preferences: ${response.status}`)
+  }
+}

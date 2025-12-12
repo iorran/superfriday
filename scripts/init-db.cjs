@@ -74,6 +74,12 @@ async function initDatabase() {
       { upsert: true }
     )
 
+    const userPreferencesCollection = db.collection('user_preferences')
+    await userPreferencesCollection.createIndex({ user_id: 1 }, { unique: true })
+
+    const googleOAuthTokensCollection = db.collection('google_oauth_tokens')
+    await googleOAuthTokensCollection.createIndex({ user_id: 1 }, { unique: true })
+
     console.log('✅ Database initialized successfully!')
   } catch (error) {
     console.error('❌ Error initializing database:', error.message)
