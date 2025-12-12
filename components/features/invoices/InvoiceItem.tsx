@@ -20,13 +20,16 @@ interface FormattedInvoice {
   client_id?: string
   client_name?: string
   client_email?: string
-  invoice_amount: number
+  invoice_amount: number | null
   month: number | null
   year: number | null
   uploaded_at?: string
   files?: InvoiceFile[]
   sentToClient: boolean
   sentToAccountant: boolean
+  lastModified?: Date
+  groupKey?: string
+  groupLabel?: string
 }
 
 interface InvoiceItemProps {

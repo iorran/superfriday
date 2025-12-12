@@ -7,7 +7,7 @@
 import 'dotenv/config'
 
 import { list, del } from '@vercel/blob'
-import { getDatabase } from '../lib/db'
+import { getDatabase } from '../lib/server/db'
 
 async function cleanupOrphanedFiles() {
   if (!process.env.BLOB_READ_WRITE_TOKEN) {

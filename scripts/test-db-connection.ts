@@ -4,7 +4,7 @@
  */
 
 import 'dotenv/config'
-import { getDatabase } from '../lib/db'
+import { getDatabase } from '../lib/server/db'
 
 async function testConnection() {
   try {

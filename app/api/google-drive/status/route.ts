@@ -50,7 +50,7 @@ export async function DELETE(_request: NextRequest) {
     const session = await requireAuth()
     const userId = session.user.id
     
-    const { deleteGoogleOAuthToken } = await import('@/lib/db-client')
+    const { deleteGoogleOAuthToken } = await import('@/lib/server/db-operations')
     await deleteGoogleOAuthToken(userId)
     
     return NextResponse.json({

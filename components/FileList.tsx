@@ -59,17 +59,18 @@ const FileList = () => {
 
     const grouped: Record<string, { groupLabel: string; clientName: string; year: number; invoices: FormattedInvoice[] }> = {}
     formatted.forEach((inv: FormattedInvoice) => {
-      if (!grouped[inv.groupKey]) {
+      const key = inv.groupKey!
+      if (!grouped[key]) {
         const year = inv.year || new Date(inv.uploaded_at || Date.now()).getFullYear()
         const clientName = inv.client_name || 'Sem cliente'
-        grouped[inv.groupKey] = {
-          groupLabel: inv.groupLabel,
+        grouped[key] = {
+          groupLabel: inv.groupLabel!,
           clientName,
           year,
           invoices: [],
         }
       }
-      grouped[inv.groupKey].invoices.push(inv)
+      grouped[key].invoices.push(inv)
     })
 
     // Sort invoices within each group

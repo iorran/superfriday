@@ -71,8 +71,8 @@ const InvoiceGroup = ({
             </span>
           </div>
         </CollapsibleTrigger>
-        <CollapsibleContent id={`invoice-group-${groupKey}`}>
-          <div className="p-4 space-y-3" role="list" aria-label={`Invoices de ${groupLabel}`}>
+        <CollapsibleContent>
+          <div id={`invoice-group-${groupKey}`} className="p-4 space-y-3" role="list" aria-label={`Invoices de ${groupLabel}`}>
             {invoices.map((invoice) => (
               <InvoiceItem
                 key={invoice.id}
