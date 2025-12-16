@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Menu, X, FileText, Settings, Users, FileCode, TrendingUp, LogOut, Mail, Upload } from 'lucide-react'
+import { Menu, X, FileText, Settings, Users, FileCode, TrendingUp, LogOut, Mail, Upload, Plus } from 'lucide-react'
 import { cn } from '@/lib/shared/utils'
 import { useSession, signOut } from '@/lib/client/auth'
 import Tour from '@/components/Tour'
@@ -64,7 +64,12 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
 
   const mainMenuItems = [
     {
-      name: 'Invoices',
+      name: 'Criar Invoice',
+      href: '/criar-invoice',
+      icon: Plus,
+    },
+    {
+      name: 'Importar Invoice',
       href: '/',
       icon: FileText,
     },
