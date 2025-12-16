@@ -1,11 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
-import { Mail, Plus, Edit, Trash2, CheckCircle2, XCircle, Loader2 } from 'lucide-react'
+import { Mail, Plus, Edit, Trash2, CheckCircle2, XCircle, Loader2, Link2 } from 'lucide-react'
 import type { EmailAccount } from '@/types'
 import {
   Dialog,
@@ -43,6 +43,8 @@ async function createEmailAccount(data: {
   smtp_port: number
   smtp_user: string
   smtp_pass: string
+  oauth2_client_id?: string
+  oauth2_client_secret?: string
   is_default?: boolean
 }): Promise<{ id: string }> {
   const response = await fetch('/api/email-accounts', {
@@ -65,6 +67,8 @@ async function updateEmailAccount(data: {
   smtp_port?: number
   smtp_user?: string
   smtp_pass?: string
+  oauth2_client_id?: string
+  oauth2_client_secret?: string
   is_default?: boolean
 }): Promise<void> {
   const response = await fetch('/api/email-accounts', {
@@ -96,12 +100,51 @@ async function verifyEmailAccount(accountId: string): Promise<{ success: boolean
   return response.json()
 }
 
+// Helper function to detect Microsoft accounts
+const isMicrosoftAccount = (email: string): boolean => {
+  const emailLower = email.toLowerCase()
+  return (
+    emailLower.includes('@outlook.') ||
+    emailLower.includes('@hotmail.') ||
+    emailLower.includes('@live.') ||
+    emailLower.includes('@msn.')
+  )
+}
+
 const EmailAccountManagement = () => {
   const queryClient = useQueryClient()
+  const { toast } = useToast()
   const { data: accounts = [], isLoading: loading } = useQuery({
     queryKey: ['emailAccounts'],
     queryFn: getEmailAccounts,
   })
+
+  // Check for OAuth callback success/error in URL params
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const connected = params.get('connected')
+    const error = params.get('error')
+
+    if (connected === 'microsoft') {
+      toast({
+        title: "Conectado com Sucesso",
+        description: "Conta Microsoft conectada com sucesso via OAuth",
+        variant: "default",
+      })
+      // Clean up URL
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+
+    if (error) {
+      toast({
+        title: "Erro na Conexão",
+        description: decodeURIComponent(error),
+        variant: "destructive",
+      })
+      // Clean up URL
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [toast])
 
   const createAccountMutation = useMutation({
     mutationFn: createEmailAccount,
@@ -172,7 +215,6 @@ const EmailAccountManagement = () => {
   const [accountToDelete, setAccountToDelete] = useState<EmailAccount | null>(null)
   const [verifyingAccountId, setVerifyingAccountId] = useState<string | null>(null)
   const [verificationResult, setVerificationResult] = useState<{ accountId: string; success: boolean; error?: string } | null>(null)
-  const { toast } = useToast()
 
   const [formData, setFormData] = useState({
     name: '',
@@ -181,6 +223,8 @@ const EmailAccountManagement = () => {
     smtp_port: '587',
     smtp_user: '',
     smtp_pass: '',
+    oauth2_client_id: '',
+    oauth2_client_secret: '',
     is_default: false,
   })
 
@@ -192,6 +236,8 @@ const EmailAccountManagement = () => {
       smtp_port: '587',
       smtp_user: '',
       smtp_pass: '',
+      oauth2_client_id: '',
+      oauth2_client_secret: '',
       is_default: false,
     })
     setEditingAccount(null)
@@ -207,12 +253,18 @@ const EmailAccountManagement = () => {
         smtp_port: String(account.smtp_port),
         smtp_user: account.smtp_user,
         smtp_pass: '', // Don't show password
+        oauth2_client_id: account.oauth2_client_id || '',
+        oauth2_client_secret: '', // Don't show secret
         is_default: account.is_default || false,
       })
     } else {
       formReset()
     }
     setDialogOpen(true)
+  }
+
+  const handleConnectMicrosoft = (accountId: string) => {
+    window.location.href = `/api/email-accounts/oauth/auth?accountId=${accountId}`
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -227,6 +279,10 @@ const EmailAccountManagement = () => {
       return
     }
 
+    // Check if this is a Microsoft account and if OAuth should be used
+    const isMicrosoft = isMicrosoftAccount(formData.email)
+    const useOAuth = isMicrosoft && (formData.oauth2_client_id || editingAccount?.oauth2_client_id)
+
     // If editing and password is empty, don't send it (keep existing)
     if (editingAccount) {
       const updateData: {
@@ -237,6 +293,8 @@ const EmailAccountManagement = () => {
         smtp_port: number
         smtp_user: string
         smtp_pass?: string
+        oauth2_client_id?: string
+        oauth2_client_secret?: string
         is_default: boolean
       } = {
         id: editingAccount.id,
@@ -253,12 +311,21 @@ const EmailAccountManagement = () => {
         updateData.smtp_pass = formData.smtp_pass
       }
 
+      // Include OAuth credentials if provided
+      if (formData.oauth2_client_id) {
+        updateData.oauth2_client_id = formData.oauth2_client_id
+      }
+      if (formData.oauth2_client_secret) {
+        updateData.oauth2_client_secret = formData.oauth2_client_secret
+      }
+
       await updateAccountMutation.mutateAsync(updateData)
     } else {
-      if (!formData.smtp_pass) {
+      // For new accounts, require password unless using OAuth for Microsoft
+      if (!useOAuth && !formData.smtp_pass) {
         toast({
           title: "Senha Obrigatória",
-          description: "A senha SMTP é obrigatória para criar uma nova conta",
+          description: "A senha SMTP é obrigatória para criar uma nova conta (ou configure OAuth para contas Microsoft)",
           variant: "destructive",
         })
         return
@@ -270,7 +337,9 @@ const EmailAccountManagement = () => {
         smtp_host: formData.smtp_host,
         smtp_port: parseInt(formData.smtp_port),
         smtp_user: formData.smtp_user,
-        smtp_pass: formData.smtp_pass,
+        smtp_pass: formData.smtp_pass || '', // May be empty for OAuth
+        oauth2_client_id: formData.oauth2_client_id || undefined,
+        oauth2_client_secret: formData.oauth2_client_secret || undefined,
         is_default: formData.is_default,
       })
     }
@@ -369,6 +438,21 @@ const EmailAccountManagement = () => {
                       <p><strong>SMTP Host:</strong> {account.smtp_host}</p>
                       <p><strong>SMTP Port:</strong> {account.smtp_port}</p>
                       <p><strong>SMTP User:</strong> {account.smtp_user}</p>
+                      {isMicrosoftAccount(account.email) && (
+                        <div className="mt-2">
+                          {account.oauth2_refresh_token ? (
+                            <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
+                              <CheckCircle2 className="h-3 w-3" />
+                              <span className="text-xs">Conectado via OAuth2</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+                              <XCircle className="h-3 w-3" />
+                              <span className="text-xs">OAuth2 não configurado</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                     {verificationResult?.accountId === account.id && (
                       <div className="mt-3">
@@ -387,6 +471,17 @@ const EmailAccountManagement = () => {
                     )}
                   </div>
                   <div className="flex gap-2">
+                    {isMicrosoftAccount(account.email) && !account.oauth2_refresh_token && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleConnectMicrosoft(account.id)}
+                        className="bg-blue-50 hover:bg-blue-100 dark:bg-blue-950 dark:hover:bg-blue-900"
+                      >
+                        <Link2 className="h-4 w-4 mr-1" />
+                        Conectar Microsoft
+                      </Button>
+                    )}
                     <Button
                       variant="outline"
                       size="sm"
@@ -502,6 +597,11 @@ const EmailAccountManagement = () => {
             <div>
               <Label htmlFor="smtp_pass">
                 SMTP Password {editingAccount ? '(deixe em branco para manter)' : '*'}
+                {isMicrosoftAccount(formData.email) && (
+                  <span className="text-xs text-muted-foreground ml-2">
+                    (opcional para contas Microsoft com OAuth2)
+                  </span>
+                )}
               </Label>
               <input
                 id="smtp_pass"
@@ -510,9 +610,42 @@ const EmailAccountManagement = () => {
                 onChange={(e) => setFormData({ ...formData, smtp_pass: e.target.value })}
                 className="w-full p-2 border rounded-md bg-background mt-1"
                 placeholder="••••••••"
-                required={!editingAccount}
+                required={!editingAccount && !isMicrosoftAccount(formData.email)}
               />
             </div>
+            {isMicrosoftAccount(formData.email) && (
+              <div className="border-t pt-4 space-y-4">
+                <div className="text-sm font-medium">OAuth2 (Opcional - para usar seu próprio app Azure AD)</div>
+                <div>
+                  <Label htmlFor="oauth2_client_id">OAuth2 Client ID</Label>
+                  <input
+                    id="oauth2_client_id"
+                    type="text"
+                    value={formData.oauth2_client_id}
+                    onChange={(e) => setFormData({ ...formData, oauth2_client_id: e.target.value })}
+                    className="w-full p-2 border rounded-md bg-background mt-1"
+                    placeholder="Deixe em branco para usar app compartilhado"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Se não fornecido, será usado o app compartilhado (se configurado)
+                  </p>
+                </div>
+                <div>
+                  <Label htmlFor="oauth2_client_secret">OAuth2 Client Secret</Label>
+                  <input
+                    id="oauth2_client_secret"
+                    type="password"
+                    value={formData.oauth2_client_secret}
+                    onChange={(e) => setFormData({ ...formData, oauth2_client_secret: e.target.value })}
+                    className="w-full p-2 border rounded-md bg-background mt-1"
+                    placeholder={editingAccount ? 'Deixe em branco para manter' : '••••••••'}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Necessário apenas se você forneceu um Client ID personalizado
+                  </p>
+                </div>
+              </div>
+            )}
             <div className="flex items-center gap-2">
               <input
                 id="is_default"

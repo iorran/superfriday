@@ -136,6 +136,13 @@ GOOGLE_REDIRECT_URI=https://yourdomain.com/api/google-drive/auth/callback
 # Encryption key for OAuth tokens (required if using Google Drive)
 # Generate with: openssl rand -base64 32
 GOOGLE_OAUTH_ENCRYPTION_KEY=your-32-character-base64-encryption-key
+
+# Microsoft OAuth (optional - for Microsoft/Outlook email accounts)
+# Required if you want to use a shared app for all users
+# Users can also provide their own Client ID/Secret in email account settings
+MICROSOFT_CLIENT_ID=your-microsoft-client-id
+MICROSOFT_CLIENT_SECRET=your-microsoft-client-secret
+MICROSOFT_REDIRECT_URI=https://yourdomain.com/api/email-accounts/oauth/callback
 ```
 
 **Getting your environment variables:**
@@ -159,6 +166,22 @@ GOOGLE_OAUTH_ENCRYPTION_KEY=your-32-character-base64-encryption-key
    - Copy Client ID and Client Secret to environment variables
    - Generate encryption key: `openssl rand -base64 32`
    - Add `GOOGLE_OAUTH_ENCRYPTION_KEY` to environment variables
+
+4. **Microsoft OAuth (optional - for Microsoft/Outlook email accounts):**
+   - Microsoft has disabled basic authentication for Outlook/Hotmail accounts
+   - OAuth2 is required for Microsoft email accounts
+   - **Option A: Use shared app (simpler):**
+     - Register an app in Azure AD at https://portal.azure.com
+     - Go to Azure Active Directory → App registrations → New registration
+     - Set redirect URI: `https://yourdomain.com/api/email-accounts/oauth/callback`
+     - Add API permission: `SMTP.Send` (requires admin consent)
+     - Create a client secret
+     - Copy Application (client) ID and client secret to environment variables
+   - **Option B: Users provide their own (more secure):**
+     - Each user registers their own app in Azure AD
+     - Users enter Client ID and Client Secret in email account settings
+     - The app will use those credentials for OAuth flow
+   - **Note:** The redirect URI must match exactly what's configured in Azure AD
 
 ## Project Structure
 

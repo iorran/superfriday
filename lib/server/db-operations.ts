@@ -868,6 +868,20 @@ export const deleteEmailAccount = async (accountId: string, userId: string) => {
 }
 
 /**
+ * Check if email account has OAuth tokens configured
+ */
+export const hasOAuthTokens = async (accountId: string, userId: string): Promise<boolean> => {
+  const account = await getEmailAccount(accountId, userId)
+  if (!account) return false
+  
+  return !!(
+    account.oauth2_client_id &&
+    account.oauth2_client_secret &&
+    account.oauth2_refresh_token
+  )
+}
+
+/**
  * Google OAuth Token Management
  */
 
