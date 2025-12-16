@@ -364,6 +364,31 @@ export const sendInvoiceToAccountant = async (data: {
  */
 export const verifySMTPConnection = async (accountId?: string, userId?: string) => {
   try {
+    // Check if this is a Microsoft account without OAuth tokens before attempting verification
+    if (accountId && userId) {
+      const account = await getEmailAccount(accountId, userId)
+      if (account && isMicrosoftAccount(account.email, account.smtp_host)) {
+        // Microsoft accounts require OAuth2
+        if (!account.oauth2_client_id || !account.oauth2_client_secret || !account.oauth2_refresh_token) {
+          return {
+            success: false,
+            error: 'Microsoft/Outlook accounts require OAuth2 authentication. Please configure OAuth2 credentials (Client ID and Client Secret) and connect your Microsoft account before verifying.',
+          }
+        }
+      }
+    } else if (userId) {
+      const defaultAccount = await getDefaultEmailAccount(userId)
+      if (defaultAccount && isMicrosoftAccount(defaultAccount.email, defaultAccount.smtp_host)) {
+        // Microsoft accounts require OAuth2
+        if (!defaultAccount.oauth2_client_id || !defaultAccount.oauth2_client_secret || !defaultAccount.oauth2_refresh_token) {
+          return {
+            success: false,
+            error: 'Microsoft/Outlook accounts require OAuth2 authentication. Please configure OAuth2 credentials (Client ID and Client Secret) and connect your Microsoft account before verifying.',
+          }
+        }
+      }
+    }
+
     const { transporter } = await getTransporterForAccount(accountId, userId)
     await transporter.verify()
     return { success: true }

@@ -6,21 +6,6 @@ import { getUserPreference, setUserPreference } from '@/lib/client/api'
 import type { TourStep } from '@/components/Tour'
 
 const TOUR_VERSION = '1.0' // Increment this to show tour again to existing users
-const TOUR_COMPLETED_KEY = 'invoice-manager-tour-completed' // Fallback localStorage key
-
-// Fallback to localStorage if API fails
-const getLocalStorageTourStatus = () => {
-  if (typeof window === 'undefined') return { completed: false, version: null }
-  const completed = localStorage.getItem(TOUR_COMPLETED_KEY) === 'true'
-  const version = localStorage.getItem(`${TOUR_COMPLETED_KEY}-version`)
-  return { completed, version }
-}
-
-const setLocalStorageTourStatus = () => {
-  if (typeof window === 'undefined') return
-  localStorage.setItem(TOUR_COMPLETED_KEY, 'true')
-  localStorage.setItem(`${TOUR_COMPLETED_KEY}-version`, TOUR_VERSION)
-}
 
 export const useTour = () => {
   const [showTour, setShowTour] = useState(false)
@@ -31,11 +16,12 @@ export const useTour = () => {
     queryKey: ['user-preference', 'tour_completed'],
     queryFn: async () => {
       try {
-        return await getUserPreference('tour_completed')
+        const value = await getUserPreference('tour_completed')
+        // Ensure we always return a boolean, never undefined
+        return value === true || value === 'true'
       } catch {
-        // Fallback to localStorage if API fails
-        const local = getLocalStorageTourStatus()
-        return local.completed
+        // If API fails, default to false (show tour)
+        return false
       }
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
@@ -46,11 +32,12 @@ export const useTour = () => {
     queryKey: ['user-preference', 'tour_version'],
     queryFn: async () => {
       try {
-        return await getUserPreference('tour_version')
+        const value = await getUserPreference('tour_version')
+        // Ensure we always return a string or null, never undefined
+        return value ?? null
       } catch {
-        // Fallback to localStorage if API fails
-        const local = getLocalStorageTourStatus()
-        return local.version
+        // If API fails, default to null (show tour)
+        return null
       }
     },
     staleTime: 5 * 60 * 1000,
@@ -60,26 +47,18 @@ export const useTour = () => {
   // Mutation to save tour completion
   const saveTourCompletion = useMutation({
     mutationFn: async () => {
-      try {
-        await setUserPreference('tour_completed', true)
-        await setUserPreference('tour_version', TOUR_VERSION)
-      } catch (error) {
-        // Fallback to localStorage if API fails
-        setLocalStorageTourStatus()
-        throw error // Still throw to trigger onError
-      }
+      await setUserPreference('tour_completed', true)
+      await setUserPreference('tour_version', TOUR_VERSION)
     },
     onSuccess: () => {
       // Update cache
       queryClient.setQueryData(['user-preference', 'tour_completed'], true)
       queryClient.setQueryData(['user-preference', 'tour_version'], TOUR_VERSION)
-      // Also update localStorage as backup
-      setLocalStorageTourStatus()
       setShowTour(false)
     },
     onError: (error) => {
       console.error('Error saving tour completion:', error)
-      // Still hide tour even if save fails (localStorage fallback was used)
+      // Still hide tour even if save fails
       setShowTour(false)
     },
   })
@@ -88,9 +67,9 @@ export const useTour = () => {
     // Wait for preferences to load
     if (isLoadingCompleted) return
 
-    // Use database values if available, otherwise fallback to localStorage
-    const completed = tourCompleted ?? getLocalStorageTourStatus().completed
-    const version = tourVersion ?? getLocalStorageTourStatus().version
+    // Use database values
+    const completed = tourCompleted ?? false
+    const version = tourVersion ?? null
 
     // Show tour if not completed or if version changed
     const shouldShowTour = !completed || version !== TOUR_VERSION
@@ -169,6 +148,3 @@ export const tourSteps: TourStep[] = [
     highlight: false,
   },
 ]
-
-
-
