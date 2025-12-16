@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect } from 'react'
 import { useForm } from '@tanstack/react-form'
+import { useStore } from '@tanstack/react-store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
@@ -89,16 +90,16 @@ const InvoiceCreationForm = ({ onSubmit, isLoading = false }: InvoiceCreationFor
     },
   })
 
+  const clientId = useStore(form.store, (state) => state.values.clientId || '')
   const selectedClient = useMemo(() => {
-    const clientId = form.state.values.clientId
     return clients.find((c: Client) => c.id === clientId) || null
-  }, [clients, form.state.values.clientId])
+  }, [clients, clientId])
 
   const dailyRate = selectedClient?.daily_rate || 0
-  const numberOfDays = Number(form.state.values.numberOfDays) || 0
+  const numberOfDays = useStore(form.store, (state) => Number(state.values.numberOfDays) || 0)
   const clientCurrency = selectedClient?.currency || 'EUR'
   const currencySymbol = clientCurrency === 'GBP' ? '£' : '€'
-  const formVatPercentage = Number(form.state.values.vatPercentage) || vatPercentage
+  const formVatPercentage = useStore(form.store, (state) => Number(state.values.vatPercentage) || vatPercentage)
   
   // Calculate net service charge - updates when client or numberOfDays changes
   const netServiceCharge = useMemo(() => {
