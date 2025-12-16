@@ -28,9 +28,10 @@ const InvoiceSummary = ({
   files,
 }: InvoiceSummaryProps) => {
   const formatCurrency = (amount: number) => {
+    const currency = client?.currency || 'EUR'
     return new Intl.NumberFormat('pt-PT', {
       style: 'currency',
-      currency: 'EUR',
+      currency: currency === 'GBP' ? 'GBP' : 'EUR',
     }).format(amount)
   }
 

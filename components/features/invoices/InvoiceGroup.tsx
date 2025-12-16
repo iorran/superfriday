@@ -24,10 +24,10 @@ interface InvoiceGroupProps {
   onShowToast: (title: string, description: string, variant: 'default' | 'destructive') => void
 }
 
-const formatCurrency = (amount: number) => {
+const formatCurrency = (amount: number, currency: string = 'EUR') => {
   return new Intl.NumberFormat('pt-PT', {
     style: 'currency',
-    currency: 'EUR',
+    currency: currency === 'GBP' ? 'GBP' : 'EUR',
   }).format(amount)
 }
 
@@ -47,6 +47,11 @@ const InvoiceGroup = ({
   onEditClientEmail,
   onShowToast,
 }: InvoiceGroupProps) => {
+  // Get the client for this group (all invoices in a group should have the same client)
+  const groupClient = invoices.length > 0 && invoices[0].client_id
+    ? clients.find((c) => c.id === invoices[0].client_id)
+    : null
+  const groupCurrency = groupClient?.currency || 'EUR'
   return (
     <Card>
       <Collapsible 
@@ -67,7 +72,7 @@ const InvoiceGroup = ({
               </span>
             </div>
             <span className="text-sm font-medium text-muted-foreground">
-              {formatCurrency(totalAmount)}
+              {formatCurrency(totalAmount, groupCurrency)}
             </span>
           </div>
         </CollapsibleTrigger>

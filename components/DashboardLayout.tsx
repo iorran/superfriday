@@ -69,7 +69,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
       icon: Plus,
     },
     {
-      name: 'Importar Invoice',
+      name: 'Faturas',
       href: '/',
       icon: FileText,
     },
@@ -98,6 +98,11 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
       name: 'Clientes',
       href: '/settings/clients',
       icon: Users,
+    },
+    {
+      name: 'Empresa',
+      href: '/settings/user-info',
+      icon: FileText,
     },
     {
       name: 'Contador',

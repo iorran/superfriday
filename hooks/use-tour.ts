@@ -71,14 +71,20 @@ export const useTour = () => {
     const completed = tourCompleted ?? false
     const version = tourVersion ?? null
 
-    // Show tour if not completed or if version changed
-    const shouldShowTour = !completed || version !== TOUR_VERSION
+    // Show tour only if:
+    // 1. Not completed, OR
+    // 2. Version exists and is different from current TOUR_VERSION (tour was updated)
+    // Don't show if version is null and completed is true (user completed but version wasn't saved)
+    const shouldShowTour = !completed || (version !== null && version !== TOUR_VERSION)
     
     if (shouldShowTour) {
       // Small delay to ensure page is fully loaded
       setTimeout(() => {
         setShowTour(true)
       }, 1000)
+    } else {
+      // Ensure tour is hidden if it shouldn't show
+      setShowTour(false)
     }
   }, [tourCompleted, tourVersion, isLoadingCompleted])
 
@@ -131,13 +137,6 @@ export const tourSteps: TourStep[] = [
     title: 'Configurações',
     description: 'Configure templates de email, clientes e outras preferências do sistema.',
     position: 'right',
-  },
-  {
-    id: 'upload-button',
-    target: 'upload-button',
-    title: 'Criar Nova Invoice',
-    description: 'Clique aqui para fazer upload de uma nova invoice. Você pode adicionar arquivos PDF e o sistema extrairá automaticamente as informações.',
-    position: 'left',
   },
   {
     id: 'main-content',

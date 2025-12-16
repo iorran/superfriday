@@ -7,6 +7,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { put } from '@vercel/blob'
 import { requireAuth } from '@/lib/server/auth'
+import { getClient } from '@/lib/server/db-operations'
+
+/**
+ * Sanitize a name for use in file paths
+ * Removes or replaces special characters that could cause issues in file paths
+ */
+const sanitizeForPath = (name: string): string => {
+  return name
+    .replace(/[^a-zA-Z0-9-_]/g, '_') // Replace special chars with underscore
+    .replace(/_{2,}/g, '_') // Replace multiple underscores with single
+    .replace(/^_+|_+$/g, '') // Remove leading/trailing underscores
+    .toLowerCase()
+    .substring(0, 50) // Limit length
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,6 +37,7 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData()
     const file = formData.get('file') as File
+    const clientId = formData.get('clientId') as string | null
 
     if (!file) {
       return NextResponse.json(
@@ -52,7 +67,20 @@ export async function POST(request: NextRequest) {
 
     // Sanitize email for folder name (replace @ and . with safe characters)
     const sanitizedEmail = userEmail.replace(/[@.]/g, '_')
-    const fileKey = `${sanitizedEmail}/${Date.now()}-${file.name}`
+    
+    // Get client name if clientId is provided
+    let clientNamePath = ''
+    if (clientId) {
+      const client = await getClient(clientId, session.user.id)
+      if (client && client.name) {
+        const sanitizedClientName = sanitizeForPath(client.name)
+        if (sanitizedClientName) {
+          clientNamePath = `${sanitizedClientName}/`
+        }
+      }
+    }
+    
+    const fileKey = `${sanitizedEmail}/${clientNamePath}${Date.now()}-${file.name}`
     const fileBuffer = Buffer.from(await file.arrayBuffer())
 
     // Upload file to Vercel Blob

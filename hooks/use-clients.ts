@@ -7,6 +7,11 @@ interface CreateClientData {
   email: string
   requiresTimesheet: boolean
   ccEmails?: string[]
+  dailyRate?: number
+  poNumber?: string | null
+  address?: string | null
+  vat?: string | null
+  currency?: string | null
 }
 
 interface UpdateClientData {
@@ -14,6 +19,11 @@ interface UpdateClientData {
   email?: string
   requiresTimesheet?: boolean
   ccEmails?: string[]
+  dailyRate?: number
+  poNumber?: string | null
+  address?: string | null
+  vat?: string | null
+  currency?: string | null
 }
 
 /**

@@ -49,6 +49,11 @@ const ClientManagement = () => {
       email: '',
       requiresTimesheet: false,
       ccEmails: [],
+      dailyRate: undefined as number | undefined,
+      poNumber: '' as string | undefined,
+      address: '' as string | undefined,
+      vat: '' as string | undefined,
+      currency: 'EUR' as 'EUR' | 'GBP' | null | undefined,
     },
     onSubmit: async ({ value }: { value: ClientFormData }) => {
       // Validate with Zod schema
@@ -76,6 +81,11 @@ const ClientManagement = () => {
         email: value.email,
         requiresTimesheet: value.requiresTimesheet,
         ccEmails: value.ccEmails,
+        dailyRate: value.dailyRate,
+        poNumber: value.poNumber || null,
+        address: value.address || null,
+        vat: value.vat || null,
+        currency: value.currency || null,
       })
       toast({
         title: "Cliente Criado",
@@ -114,6 +124,16 @@ const ClientManagement = () => {
     form.setFieldValue('requiresTimesheet', client.requires_timesheet === 1 || client.requires_timesheet === true)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     form.setFieldValue('ccEmails' as any, ccEmails)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    form.setFieldValue('dailyRate' as any, client.daily_rate || undefined)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    form.setFieldValue('poNumber' as any, client.po_number || '')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    form.setFieldValue('address' as any, client.address || '')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    form.setFieldValue('vat' as any, client.vat || '')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    form.setFieldValue('currency' as any, client.currency || 'EUR')
     setNewCcEmail('')
     setDialogOpen(true)
   }
@@ -129,6 +149,11 @@ const ClientManagement = () => {
           email: value.email,
           requiresTimesheet: value.requiresTimesheet,
           ccEmails: value.ccEmails,
+          dailyRate: value.dailyRate,
+          poNumber: value.poNumber || null,
+          address: value.address || null,
+          vat: value.vat || null,
+          currency: value.currency || null,
         },
       })
       toast({
@@ -317,7 +342,7 @@ const ClientManagement = () => {
       </Card>
 
       <Dialog open={dialogOpen} onOpenChange={handleDialogClose}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>{editingClient ? 'Editar Cliente' : 'Adicionar Novo Cliente'}</DialogTitle>
             <DialogDescription>
@@ -330,8 +355,9 @@ const ClientManagement = () => {
               e.stopPropagation()
               form.handleSubmit()
             }}
+            className="flex-1 overflow-y-auto"
           >
-            <div className="space-y-4 py-4">
+            <div className="space-y-4 py-4 pr-2">
               <form.Field
                 name="name"
                 validators={{
@@ -478,8 +504,138 @@ const ClientManagement = () => {
                   </div>
                 )}
               </form.Field>
+
+              <form.Field
+                name="dailyRate"
+                validators={{
+                  onChange: ({ value }) => {
+                    if (value !== undefined && value !== null) {
+                      const result = clientSchema.shape.dailyRate.safeParse(value)
+                      if (!result.success) {
+                        return result.error.errors[0]?.message || 'Valor inválido'
+                      }
+                    }
+                  },
+                }}
+              >
+                {(field) => (
+                  <div className="space-y-2">
+                    <Label htmlFor={field.name}>Taxa Diária (€)</Label>
+                    <input
+                      id={field.name}
+                      name={field.name}
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={field.state.value || ''}
+                      onBlur={field.handleBlur}
+                      onChange={(e) => field.handleChange(e.target.value ? parseFloat(e.target.value) : undefined)}
+                      placeholder="552.00"
+                      className="w-full p-2 border rounded-md bg-background"
+                      aria-invalid={field.state.meta.errors && field.state.meta.errors.length > 0}
+                      aria-describedby={field.state.meta.errors?.length ? `${field.name}-error` : undefined}
+                    />
+                    {field.state.meta.errors && field.state.meta.errors.length > 0 && (
+                      <p id={`${field.name}-error`} className="text-sm text-destructive" role="alert">
+                        {field.state.meta.errors[0]}
+                      </p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      Taxa diária do cliente usada no cálculo de invoices
+                    </p>
+                  </div>
+                )}
+              </form.Field>
+
+              <form.Field name="poNumber">
+                {(field) => (
+                  <div className="space-y-2">
+                    <Label htmlFor={field.name}>PO Number</Label>
+                    <input
+                      id={field.name}
+                      name={field.name}
+                      type="text"
+                      value={field.state.value || ''}
+                      onBlur={field.handleBlur}
+                      onChange={(e) => field.handleChange(e.target.value || undefined)}
+                      placeholder="3960"
+                      className="w-full p-2 border rounded-md bg-background"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Número de ordem de compra (opcional)
+                    </p>
+                  </div>
+                )}
+              </form.Field>
+
+              <form.Field name="address">
+                {(field) => (
+                  <div className="space-y-2">
+                    <Label htmlFor={field.name}>Endereço</Label>
+                    <textarea
+                      id={field.name}
+                      name={field.name}
+                      value={field.state.value || ''}
+                      onBlur={field.handleBlur}
+                      onChange={(e) => field.handleChange(e.target.value || undefined)}
+                      placeholder="Rue Froissart 95, 4th Floor&#10;1040 Brussels&#10;Belgium"
+                      className="w-full p-2 border rounded-md bg-background min-h-[80px]"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Endereço do cliente (opcional)
+                    </p>
+                  </div>
+                )}
+              </form.Field>
+
+              <form.Field name="vat">
+                {(field) => (
+                  <div className="space-y-2">
+                    <Label htmlFor={field.name}>VAT Number</Label>
+                    <input
+                      id={field.name}
+                      name={field.name}
+                      type="text"
+                      value={field.state.value || ''}
+                      onBlur={field.handleBlur}
+                      onChange={(e) => field.handleChange(e.target.value || undefined)}
+                      placeholder="BE 0726757256"
+                      className="w-full p-2 border rounded-md bg-background"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Número de VAT do cliente (opcional)
+                    </p>
+                  </div>
+                )}
+              </form.Field>
+
+              <form.Field name="currency">
+                {(field) => (
+                  <div className="space-y-2">
+                    <Label htmlFor={field.name}>Moeda *</Label>
+                    <select
+                      id={field.name}
+                      name={field.name}
+                      value={field.state.value || 'EUR'}
+                      onBlur={field.handleBlur}
+                      onChange={(e) => {
+                        const value = e.target.value
+                        field.handleChange(value === '' ? undefined : (value as 'EUR' | 'GBP' | null | undefined))
+                      }}
+                      className="w-full p-2 border rounded-md bg-background"
+                      aria-required="true"
+                    >
+                      <option value="EUR">Euro (€)</option>
+                      <option value="GBP">Libra Esterlina (£)</option>
+                    </select>
+                    <p className="text-xs text-muted-foreground">
+                      Moeda usada para invoices deste cliente
+                    </p>
+                  </div>
+                )}
+              </form.Field>
             </div>
-            <DialogFooter>
+            <DialogFooter className="mt-4 border-t pt-4">
               <Button type="button" variant="outline" onClick={handleDialogClose}>
                 Cancelar
               </Button>

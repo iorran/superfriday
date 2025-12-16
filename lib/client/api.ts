@@ -10,6 +10,11 @@ interface CreateClientData {
   email: string
   requiresTimesheet: boolean
   ccEmails?: string[]
+  dailyRate?: number
+  poNumber?: string | null
+  address?: string | null
+  vat?: string | null
+  currency?: string | null
 }
 
 interface UpdateClientData {
@@ -17,6 +22,11 @@ interface UpdateClientData {
   email?: string
   requiresTimesheet?: boolean
   ccEmails?: string[]
+  dailyRate?: number
+  poNumber?: string | null
+  address?: string | null
+  vat?: string | null
+  currency?: string | null
 }
 
 interface CreateEmailTemplateData {
@@ -37,6 +47,7 @@ interface SendEmailData {
   templateId?: string | null
   subject?: string
   body?: string
+  invoiceAmountEur?: number // Manual EUR amount for GBP invoices
 }
 
 /**

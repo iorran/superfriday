@@ -8,6 +8,11 @@ export interface Client {
   email: string
   requires_timesheet: boolean | number
   cc_emails?: string | null
+  daily_rate?: number
+  po_number?: string | null
+  address?: string | null
+  vat?: string | null
+  currency?: string | null
   created_at?: string
   updated_at?: string
 }
@@ -17,10 +22,18 @@ export interface Invoice {
   client_id: string
   client_name?: string
   client_email?: string
+  requires_timesheet?: boolean | number
   invoice_amount: number | null
+  invoice_amount_eur?: number | null
   due_date: string | null
   month: number | null
   year: number | null
+  period_start?: string | null
+  period_end?: string | null
+  number_of_days?: number | null
+  description?: string | null
+  expenses?: Array<{ description: string; amount: number }>
+  invoice_number?: string | null
   uploaded_at: string
   lastModified: Date
   sent_to_client: boolean | number

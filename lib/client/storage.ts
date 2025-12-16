@@ -6,9 +6,12 @@
 /**
  * Upload a file
  */
-export const uploadFile = async (file: File): Promise<{ fileKey: string; fileName: string; fileSize: number }> => {
+export const uploadFile = async (file: File, clientId?: string): Promise<{ fileKey: string; fileName: string; fileSize: number }> => {
   const formData = new FormData()
   formData.append('file', file)
+  if (clientId) {
+    formData.append('clientId', clientId)
+  }
 
   const response = await fetch('/api/upload', {
     method: 'POST',
@@ -23,25 +26,6 @@ export const uploadFile = async (file: File): Promise<{ fileKey: string; fileNam
   return await response.json()
 }
 
-/**
- * Generate download link for a file
- */
-export const generateDownloadLink = (fileKey: string): string => {
-  return `/api/files/${fileKey}`
-}
-
-/**
- * Download file as blob (for client-side download)
- */
-export const downloadFileAsBlob = async (fileKey: string): Promise<Blob> => {
-  const response = await fetch(`/api/files/${fileKey}`)
-  
-  if (!response.ok) {
-    throw new Error('Failed to download file')
-  }
-  
-  return await response.blob()
-}
 
 
 

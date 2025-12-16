@@ -79,25 +79,6 @@ export const deleteFile = async (fileKey: string): Promise<void> => {
   }
 }
 
-/**
- * Get file download URL
- * Vercel Blob provides public URLs automatically
- */
-export const getFileUrl = async (fileKey: string): Promise<string> => {
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
-    throw new Error('BLOB_READ_WRITE_TOKEN environment variable is required')
-  }
-
-  try {
-    const blob = await head(fileKey, {
-      token: process.env.BLOB_READ_WRITE_TOKEN,
-    })
-    return blob.url
-  } catch {
-    // Fallback to API route if head fails
-    return `/api/files/${fileKey}`
-  }
-}
 
 
 

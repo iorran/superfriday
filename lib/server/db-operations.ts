@@ -12,6 +12,11 @@ interface CreateClientData {
   email: string
   requiresTimesheet: boolean
   ccEmails?: string[]
+  dailyRate?: number
+  poNumber?: string | null
+  address?: string | null
+  vat?: string | null
+  currency?: string | null
 }
 
 interface UpdateClientData {
@@ -19,6 +24,11 @@ interface UpdateClientData {
   email?: string
   requiresTimesheet?: boolean
   ccEmails?: string[]
+  dailyRate?: number
+  poNumber?: string | null
+  address?: string | null
+  vat?: string | null
+  currency?: string | null
 }
 
 interface CreateEmailTemplateData {
@@ -94,8 +104,8 @@ export const getClient = async (clientId: string, userId: string): Promise<Clien
 export const createClient = async (data: CreateClientData, userId: string) => {
   const db = await getDatabase()
   const id = `client-${Date.now()}`
-  const { name, email, requiresTimesheet, ccEmails } = data
-  
+  const { name, email, requiresTimesheet, ccEmails, dailyRate, poNumber, address, vat, currency } = data
+
   await db.collection('clients').insertOne({
     id,
     user_id: userId,
@@ -103,6 +113,11 @@ export const createClient = async (data: CreateClientData, userId: string) => {
     email,
     requires_timesheet: requiresTimesheet,
     cc_emails: ccEmails || null,
+    daily_rate: dailyRate || null,
+    po_number: poNumber || null,
+    address: address || null,
+    vat: vat || null,
+    currency: currency || null,
     created_at: new Date(),
     updated_at: null,
   })
@@ -123,6 +138,11 @@ export const updateClient = async (clientId: string, data: UpdateClientData, use
   if (data.email !== undefined) update.email = data.email
   if (data.requiresTimesheet !== undefined) update.requires_timesheet = data.requiresTimesheet
   if (data.ccEmails !== undefined) update.cc_emails = data.ccEmails.length > 0 ? data.ccEmails : null
+  if (data.dailyRate !== undefined) update.daily_rate = data.dailyRate
+  if (data.poNumber !== undefined) update.po_number = data.poNumber || null
+  if (data.address !== undefined) update.address = data.address || null
+  if (data.vat !== undefined) update.vat = data.vat || null
+  if (data.currency !== undefined) update.currency = data.currency || null
   
   await db.collection('clients').updateOne({ id: clientId, user_id: userId }, { $set: update })
 }
@@ -311,6 +331,12 @@ export const getAllInvoices = async (userId: string): Promise<Invoice[]> => {
         due_date: 1,
         month: 1,
         year: 1,
+        period_start: 1,
+        period_end: 1,
+        number_of_days: 1,
+        description: 1,
+        expenses: 1,
+        invoice_number: 1,
         notes: 1,
         uploaded_at: 1,
         sent_to_client: 1,
@@ -439,6 +465,7 @@ export const updateInvoiceState = async (invoiceId: string, updates: {
   sentToClient?: boolean
   paymentReceived?: boolean
   sentToAccountant?: boolean
+  invoiceAmountEur?: number | null
 }, userId: string) => {
   const db = await getDatabase()
   const update: Record<string, unknown> = {}
@@ -462,6 +489,10 @@ export const updateInvoiceState = async (invoiceId: string, updates: {
     if (updates.sentToAccountant) {
       update.sent_to_accountant_at = new Date()
     }
+  }
+  
+  if (updates.invoiceAmountEur !== undefined) {
+    update.invoice_amount_eur = updates.invoiceAmountEur
   }
   
   if (Object.keys(update).length > 0) {
@@ -865,20 +896,6 @@ export const updateEmailAccount = async (accountId: string, data: UpdateEmailAcc
 export const deleteEmailAccount = async (accountId: string, userId: string) => {
   const db = await getDatabase()
   await db.collection('email_accounts').deleteOne({ id: accountId, user_id: userId })
-}
-
-/**
- * Check if email account has OAuth tokens configured
- */
-export const hasOAuthTokens = async (accountId: string, userId: string): Promise<boolean> => {
-  const account = await getEmailAccount(accountId, userId)
-  if (!account) return false
-  
-  return !!(
-    account.oauth2_client_id &&
-    account.oauth2_client_secret &&
-    account.oauth2_refresh_token
-  )
 }
 
 /**

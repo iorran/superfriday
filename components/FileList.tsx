@@ -11,7 +11,9 @@ import {
   InvoiceGroup,
   InvoiceEditDialog,
   ClientEmailDialog,
+  EurAmountDialog,
 } from '@/components/features/invoices'
+import SignedPDFUploadDialog from '@/components/features/invoices/SignedPDFUploadDialog'
 import type { FormattedInvoice, EditingClientEmail } from '@/components/features/invoices'
 import type { Invoice, EmailTemplate } from '@/types'
 
@@ -29,6 +31,10 @@ const FileList = () => {
   const [sendingEmail, setSendingEmail] = useState<string | null>(null)
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null)
   const [editingClientEmail, setEditingClientEmail] = useState<EditingClientEmail | null>(null)
+  const [showSignedPDFDialog, setShowSignedPDFDialog] = useState(false)
+  const [pendingEmailSend, setPendingEmailSend] = useState<{ invoiceId: string; recipientType: 'client' | 'accountant' } | null>(null)
+  const [showEurAmountDialog, setShowEurAmountDialog] = useState(false)
+  const [pendingAccountantSend, setPendingAccountantSend] = useState<{ invoiceId: string; invoiceAmount: number | null; clientCurrency: string } | null>(null)
   const { toast } = useToast()
 
   // Get current year
@@ -168,13 +174,45 @@ const FileList = () => {
   }, [updateInvoiceStateMutation, toast])
 
   const handleSendEmail = useCallback(async (invoiceId: string, recipientType: 'client' | 'accountant') => {
+    const invoice = allInvoices.find((inv: FormattedInvoice) => inv.id === invoiceId)
+    if (!invoice) {
+      toast({
+        title: "Erro",
+        description: "Invoice não encontrada",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Check if invoice has files (signed PDF) - only for client emails
+    if (recipientType === 'client') {
+      const hasFiles = invoice.files && invoice.files.length > 0
+      if (!hasFiles) {
+        // Show dialog to sign/upload PDF
+        setPendingEmailSend({ invoiceId, recipientType })
+        setShowSignedPDFDialog(true)
+        return
+      }
+    }
+
+    // Check if sending to accountant and client uses GBP - show EUR amount dialog
+    if (recipientType === 'accountant') {
+      const invoiceClient = clients.find((c) => c.id === invoice.client_id)
+      const clientCurrency = invoiceClient?.currency || 'EUR'
+      if (clientCurrency === 'GBP') {
+        setPendingAccountantSend({
+          invoiceId,
+          invoiceAmount: invoice.invoice_amount,
+          clientCurrency,
+        })
+        setShowEurAmountDialog(true)
+        return
+      }
+    }
+
+    // Proceed with email sending
     try {
       setSendingEmail(`${invoiceId}-${recipientType}`)
-      
-      const invoice = allInvoices.find((inv: FormattedInvoice) => inv.id === invoiceId)
-      if (!invoice) {
-        throw new Error('Invoice not found')
-      }
 
       const templateType = recipientType === 'client' ? 'to_client' : 'to_account_manager'
       const recipientTemplates = emailTemplates.filter((t: EmailTemplate) => t.type === templateType)
@@ -194,10 +232,14 @@ const FileList = () => {
         const monthName = invoice.month ? monthNames[invoice.month - 1] || String(invoice.month) : ''
         const monthYear = invoice.month && invoice.year ? `${monthName} ${invoice.year}` : (invoice.year ? String(invoice.year) : '')
         
+        // Get client currency for formatting
+        const invoiceClient = clients.find((c) => c.id === invoice.client_id)
+        const invoiceCurrency = invoiceClient?.currency || 'EUR'
+        
         subject = template.subject
           .replace(/\{\{clientName\}\}/g, invoice.client_name || '')
           .replace(/\{\{invoiceName\}\}/g, invoice.id || '')
-          .replace(/\{\{invoiceAmount\}\}/g, invoice.invoice_amount ? new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(invoice.invoice_amount) : '')
+          .replace(/\{\{invoiceAmount\}\}/g, invoice.invoice_amount ? new Intl.NumberFormat('pt-PT', { style: 'currency', currency: invoiceCurrency === 'GBP' ? 'GBP' : 'EUR' }).format(invoice.invoice_amount) : '')
           .replace(/\{\{month\}\}/g, invoice.month ? String(invoice.month) : '')
           .replace(/\{\{year\}\}/g, invoice.year ? String(invoice.year) : '')
           .replace(/\{\{monthYear\}\}/g, monthYear)
@@ -206,7 +248,7 @@ const FileList = () => {
         body = template.body
           .replace(/\{\{clientName\}\}/g, invoice.client_name || '')
           .replace(/\{\{invoiceName\}\}/g, invoice.id || '')
-          .replace(/\{\{invoiceAmount\}\}/g, invoice.invoice_amount ? new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(invoice.invoice_amount) : '')
+          .replace(/\{\{invoiceAmount\}\}/g, invoice.invoice_amount ? new Intl.NumberFormat('pt-PT', { style: 'currency', currency: invoiceCurrency === 'GBP' ? 'GBP' : 'EUR' }).format(invoice.invoice_amount) : '')
           .replace(/\{\{month\}\}/g, invoice.month ? String(invoice.month) : '')
           .replace(/\{\{year\}\}/g, invoice.year ? String(invoice.year) : '')
           .replace(/\{\{monthYear\}\}/g, monthYear)
@@ -227,6 +269,7 @@ const FileList = () => {
         templateId,
         subject,
         body,
+        // invoiceAmountEur will be set by dialog for GBP invoices if needed
       })
 
       if (recipientType === 'client') {
@@ -251,7 +294,105 @@ const FileList = () => {
     } finally {
       setSendingEmail(null)
     }
-  }, [allInvoices, toast, handleStateChange, sendEmailMutation, emailTemplates])
+  }, [allInvoices, clients, toast, handleStateChange, sendEmailMutation, emailTemplates])
+
+  const handleSignedPDFSuccess = useCallback(() => {
+    if (pendingEmailSend) {
+      // Retry sending email after PDF is signed/uploaded
+      handleSendEmail(pendingEmailSend.invoiceId, pendingEmailSend.recipientType)
+      setPendingEmailSend(null)
+    }
+  }, [pendingEmailSend, handleSendEmail])
+
+  const handleEurAmountConfirm = useCallback(async (eurAmount: number) => {
+    if (!pendingAccountantSend) return
+
+    setShowEurAmountDialog(false)
+    const { invoiceId } = pendingAccountantSend
+    setPendingAccountantSend(null)
+
+    // Proceed with email sending using the manually entered EUR amount
+    try {
+      setSendingEmail(`${invoiceId}-accountant`)
+
+      const invoice = allInvoices.find((inv: FormattedInvoice) => inv.id === invoiceId)
+      if (!invoice) {
+        toast({
+          title: "Erro",
+          description: "Invoice não encontrada",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const templateType = 'to_account_manager'
+      const recipientTemplates = emailTemplates.filter((t: EmailTemplate) => t.type === templateType)
+      
+      const template = recipientTemplates.length > 0 ? recipientTemplates[0] : null
+      let templateId: string | null = null
+      let subject = ''
+      let body = ''
+
+      if (template) {
+        templateId = template.id
+        
+        const monthNames = [
+          'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+          'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+        ]
+        const monthName = invoice.month ? monthNames[invoice.month - 1] || String(invoice.month) : ''
+        const monthYear = invoice.month && invoice.year ? `${monthName} ${invoice.year}` : (invoice.year ? String(invoice.year) : '')
+        
+        subject = template.subject
+          .replace(/\{\{clientName\}\}/g, invoice.client_name || '')
+          .replace(/\{\{invoiceName\}\}/g, invoice.id || '')
+          .replace(/\{\{invoiceAmount\}\}/g, new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(eurAmount))
+          .replace(/\{\{month\}\}/g, invoice.month ? String(invoice.month) : '')
+          .replace(/\{\{year\}\}/g, invoice.year ? String(invoice.year) : '')
+          .replace(/\{\{monthYear\}\}/g, monthYear)
+          .replace(/\{\{downloadLink\}\}/g, '')
+        
+        body = template.body
+          .replace(/\{\{clientName\}\}/g, invoice.client_name || '')
+          .replace(/\{\{invoiceName\}\}/g, invoice.id || '')
+          .replace(/\{\{invoiceAmount\}\}/g, new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(eurAmount))
+          .replace(/\{\{month\}\}/g, invoice.month ? String(invoice.month) : '')
+          .replace(/\{\{year\}\}/g, invoice.year ? String(invoice.year) : '')
+          .replace(/\{\{monthYear\}\}/g, monthYear)
+          .replace(/\{\{downloadLink\}\}/g, '')
+      } else {
+        subject = `Invoice para ${invoice.client_name}`
+        body = `Olá,\n\nSegue em anexo a invoice de ${invoice.client_name}.\n\nAtenciosamente`
+      }
+
+      await sendEmailMutation.mutateAsync({
+        invoiceId,
+        recipientType: 'accountant',
+        templateId,
+        subject,
+        body,
+        invoiceAmountEur: eurAmount,
+      })
+
+      await handleStateChange(invoiceId, { sentToAccountant: true })
+
+      toast({
+        title: "Email Enviado",
+        description: "Email enviado para contador com sucesso",
+        variant: "default",
+      })
+    } catch (error: unknown) {
+      console.error('Error sending email:', error)
+      const errorMessage = error instanceof Error ? error.message : "Falha ao enviar email"
+      toast({
+        title: "Erro ao Enviar Email",
+        description: errorMessage,
+        variant: "destructive",
+      })
+    } finally {
+      setSendingEmail(null)
+    }
+  }, [pendingAccountantSend, allInvoices, emailTemplates, sendEmailMutation, handleStateChange, toast])
 
   const handleDelete = useCallback(async (invoiceId: string, clientName: string) => {
     try {
@@ -374,6 +515,33 @@ const FileList = () => {
         onUpdate={handleClientEmailUpdate}
         onEmailChange={(email) => setEditingClientEmail(prev => prev ? { ...prev, email } : null)}
       />
+
+      {pendingEmailSend && (() => {
+        const invoice = allInvoices.find((inv: FormattedInvoice) => inv.id === pendingEmailSend.invoiceId)
+        const invoiceClient = invoice ? clients.find((c) => c.id === invoice.client_id) : null
+        const requiresTimesheet = invoiceClient?.requires_timesheet === true || invoiceClient?.requires_timesheet === 1
+        
+        return (
+          <SignedPDFUploadDialog
+            open={showSignedPDFDialog}
+            onOpenChange={setShowSignedPDFDialog}
+            invoiceId={pendingEmailSend.invoiceId}
+            requiresTimesheet={requiresTimesheet}
+            onSuccess={handleSignedPDFSuccess}
+          />
+        )
+      })()}
+
+      {pendingAccountantSend && (
+        <EurAmountDialog
+          open={showEurAmountDialog}
+          onOpenChange={setShowEurAmountDialog}
+          invoiceAmount={pendingAccountantSend.invoiceAmount}
+          clientCurrency={pendingAccountantSend.clientCurrency}
+          onConfirm={handleEurAmountConfirm}
+          isLoading={sendingEmail === `${pendingAccountantSend.invoiceId}-accountant`}
+        />
+      )}
     </div>
   )
 }

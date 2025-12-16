@@ -10,6 +10,11 @@ export const clientSchema = z.object({
   email: z.string().email('Email inválido').min(1, 'Email é obrigatório'),
   requiresTimesheet: z.boolean().default(false),
   ccEmails: z.array(z.string().email('Email inválido')).default([]),
+  dailyRate: z.coerce.number().positive('Taxa diária deve ser positiva').optional(),
+  poNumber: z.string().optional().nullable(),
+  address: z.string().optional().nullable(),
+  vat: z.string().optional().nullable(),
+  currency: z.enum(['EUR', 'GBP'], { errorMap: () => ({ message: 'Moeda inválida' }) }).optional().nullable(),
 })
 
 export type ClientFormData = z.infer<typeof clientSchema>
@@ -34,6 +39,25 @@ export const emailTemplateSchema = z.object({
 })
 
 export type EmailTemplateFormData = z.infer<typeof emailTemplateSchema>
+
+// Invoice creation schema (for new invoice generation)
+export const invoiceCreationSchema = z.object({
+  clientId: z.string().min(1, 'Cliente é obrigatório'),
+  periodStart: z.string().min(1, 'Data de início é obrigatória'),
+  periodEnd: z.string().min(1, 'Data de fim é obrigatória'),
+  numberOfDays: z.coerce.number().positive('Número de dias deve ser positivo'),
+  description: z.string().optional(),
+  expenses: z.array(z.object({
+    description: z.string().min(1, 'Descrição é obrigatória'),
+    amount: z.coerce.number().min(0, 'Valor deve ser positivo ou zero'),
+  })).default([]),
+  orderNumber: z.string().min(1, 'Número de pedido é obrigatório'),
+  invoiceNumber: z.coerce.number().int().positive('Número da invoice deve ser um número positivo'),
+  invoiceDate: z.string().min(1, 'Data da invoice é obrigatória'),
+  vatPercentage: z.coerce.number().min(0, 'VAT deve ser zero ou positivo').max(100, 'VAT não pode ser maior que 100%').optional(),
+})
+
+export type InvoiceCreationFormData = z.infer<typeof invoiceCreationSchema>
 
 
 

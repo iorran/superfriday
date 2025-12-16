@@ -77,11 +77,14 @@ const formatInvoiceDate = (month: number | null, year: number | null, uploadedAt
   return `${day} ${monthName} ${year}`
 }
 
-const formatCurrency = (amount: number | null | undefined) => {
-  if (amount === null || amount === undefined) return '€0,00'
+const formatCurrency = (amount: number | null | undefined, currency: string = 'EUR') => {
+  if (amount === null || amount === undefined) {
+    const symbol = currency === 'GBP' ? '£' : '€'
+    return `${symbol}0,00`
+  }
   return new Intl.NumberFormat('pt-PT', {
     style: 'currency',
-    currency: 'EUR',
+    currency: currency === 'GBP' ? 'GBP' : 'EUR',
   }).format(amount)
 }
 
@@ -100,6 +103,9 @@ const InvoiceItem = ({
   onEditClientEmail,
   onShowToast,
 }: InvoiceItemProps) => {
+  // Get client currency
+  const client = clients.find((c) => c.id === invoice.client_id)
+  const clientCurrency = client?.currency || 'EUR'
   const invoiceFiles = invoice.files?.filter((f: InvoiceFile) => f.file_type === 'invoice') || []
   const timesheetFiles = invoice.files?.filter((f: InvoiceFile) => f.file_type === 'timesheet') || []
   const totalSize = getTotalFileSize(invoice.files || [])
@@ -138,7 +144,7 @@ const InvoiceItem = ({
     <div
       className="p-4 rounded-md border bg-card hover:bg-accent/50 transition-colors"
       role="listitem"
-      aria-label={`Invoice de ${invoice.client_name || 'cliente desconhecido'} - ${formatCurrency(invoice.invoice_amount)}`}
+      aria-label={`Invoice de ${invoice.client_name || 'cliente desconhecido'} - ${formatCurrency(invoice.invoice_amount, clientCurrency)}`}
     >
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
@@ -169,7 +175,7 @@ const InvoiceItem = ({
               </div>
               <div className="flex items-center gap-2 mt-1">
                 <p className="text-sm text-muted-foreground">
-                  {formatCurrency(invoice.invoice_amount)}
+                  {formatCurrency(invoice.invoice_amount, clientCurrency)}
                   {totalSize > 0 && ` • ${formatFileSize(totalSize)}`}
                 </p>
                 {invoice.client_email && invoice.client_email.trim() !== '' && (

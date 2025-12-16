@@ -1,7 +1,6 @@
 'use client'
 
 import FileList from '@/components/FileList'
-import FloatingUploadButton from '@/components/FloatingUploadButton'
 import BuildInfo from '@/components/BuildInfo'
 
 const Home = () => {
@@ -17,7 +16,6 @@ const Home = () => {
       <div className="flex-1 min-h-0">
         <FileList />
       </div>
-      <FloatingUploadButton />
       <BuildInfo />
     </div>
   )

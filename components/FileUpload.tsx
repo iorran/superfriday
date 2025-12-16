@@ -205,7 +205,13 @@ const FileUpload = ({ onUploadSuccess, editingInvoiceId, onCancel }: FileUploadP
     
     setIsUploading(true)
     try {
-      const result = await uploadFile(pdfFile)
+      // Get current clientId from form (might be set before or after extraction)
+      const currentClientId = form.state.values.clientId
+      const clientIdToUse = currentClientId && !currentClientId.startsWith('__new__') 
+        ? currentClientId 
+        : undefined
+      
+      const result = await uploadFile(pdfFile, clientIdToUse)
       setFiles([{
         file: pdfFile,
         fileKey: result.fileKey,
@@ -374,6 +380,8 @@ const FileUpload = ({ onUploadSuccess, editingInvoiceId, onCancel }: FileUploadP
 
         if (files.length > 0) {
           setIsUploading(true)
+          // Get clientId from invoice data when editing
+          const invoiceClientId = invoiceData?.client_id
           uploadedNewFiles = await Promise.all(
             files.map(async (fileData, index) => {
               if (fileData.fileKey) {
@@ -389,7 +397,7 @@ const FileUpload = ({ onUploadSuccess, editingInvoiceId, onCancel }: FileUploadP
                 i === index ? { ...f, progress: 50 } : f
               ))
 
-              const result = await uploadFile(fileData.file)
+              const result = await uploadFile(fileData.file, invoiceClientId)
 
               setFiles(prev => prev.map((f, i) => 
                 i === index ? { ...f, progress: 100, uploaded: true, fileKey: result.fileKey } : f
@@ -475,6 +483,10 @@ const FileUpload = ({ onUploadSuccess, editingInvoiceId, onCancel }: FileUploadP
       setIsUploading(true)
 
       try {
+        // Get clientId from form values
+        const clientId = form.state.values.clientId
+        const clientIdToUse = clientId && !clientId.startsWith('__new__') ? clientId : undefined
+        
         const uploadedFiles = await Promise.all(
           files.map(async (fileData) => {
             if (fileData.fileKey) {
@@ -486,7 +498,7 @@ const FileUpload = ({ onUploadSuccess, editingInvoiceId, onCancel }: FileUploadP
               }
             }
 
-            const result = await uploadFile(fileData.file)
+            const result = await uploadFile(fileData.file, clientIdToUse)
 
             return {
               fileKey: result.fileKey,

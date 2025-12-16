@@ -8,6 +8,7 @@ interface SendEmailData {
   templateId?: string | null
   subject?: string
   body?: string
+  invoiceAmountEur?: number // Manual EUR amount for GBP invoices
 }
 
 /**

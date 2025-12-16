@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { sendInvoiceToClient, sendInvoiceToAccountant } from '@/lib/server/email'
-import { updateInvoiceState, recordEmail, getInvoice, getAccountantEmail, getEmailTemplate } from '@/lib/server/db-operations'
+import { updateInvoiceState, recordEmail, getInvoice, getAccountantEmail, getEmailTemplate, getClient, getSetting } from '@/lib/server/db-operations'
 import { getDatabase } from '@/lib/server/db'
 import { requireAuth } from '@/lib/server/auth'
 import type { Invoice, InvoiceFile } from '@/types'
@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     const userId = session.user.id
 
     const body = await request.json()
-    const { invoiceId, recipientType, templateId, subject, body: emailBody } = body
+    const { invoiceId, recipientType, templateId, subject, body: emailBody, invoiceAmountEur } = body
 
     if (!invoiceId || !recipientType) {
       return NextResponse.json(
@@ -104,8 +104,18 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      // Get all files for this invoice
-      const fileKeys = (invoice.files || []).map((f: InvoiceFile) => f.file_key)
+      // Get files for this invoice
+      // Include invoice files always, and timesheet files only if client requires it
+      const requiresTimesheet = invoice.requires_timesheet === true || invoice.requires_timesheet === 1
+      const fileKeys = (invoice.files || [])
+        .filter((f: InvoiceFile) => {
+          // Always include invoice files
+          if (f.file_type === 'invoice') return true
+          // Include timesheet files only if client requires it
+          if (f.file_type === 'timesheet') return requiresTimesheet
+          return false
+        })
+        .map((f: InvoiceFile) => f.file_key)
 
       // Get CC emails from client
       let ccEmails: string[] = []
@@ -186,8 +196,28 @@ export async function POST(request: NextRequest) {
         userId,
       })
 
-      // Update invoice state
-      await updateInvoiceState(invoiceId, { sentToAccountant: true }, userId)
+      // If client uses GBP, use manual EUR amount if provided, otherwise convert automatically
+      let finalInvoiceAmountEur = null
+      if (invoice.client_id) {
+        const client = await getClient(invoice.client_id, userId)
+        if (client && client.currency === 'GBP' && invoice.invoice_amount) {
+          // Use manually entered EUR amount if provided, otherwise calculate using conversion rate
+          if (invoiceAmountEur !== undefined && invoiceAmountEur !== null) {
+            finalInvoiceAmountEur = invoiceAmountEur
+          } else {
+            // Fallback to automatic conversion (for backwards compatibility)
+            const gbpToEurRateStr = await getSetting('gbp_to_eur_rate', userId)
+            const gbpToEurRate = gbpToEurRateStr ? parseFloat(gbpToEurRateStr) : 1.15
+            finalInvoiceAmountEur = invoice.invoice_amount * gbpToEurRate
+          }
+        }
+      }
+
+      // Update invoice state with EUR amount if converted
+      await updateInvoiceState(invoiceId, { 
+        sentToAccountant: true,
+        invoiceAmountEur: finalInvoiceAmountEur,
+      }, userId)
     } else {
       return NextResponse.json(
         { error: true, message: 'Invalid recipientType. Must be "client" or "accountant"' },

@@ -100,67 +100,6 @@ export const getDatabase = async (): Promise<Db> => {
   return db
 }
 
-/**
- * Initialize database with schema (creates indexes)
- * MongoDB doesn't have a schema file, but we can create indexes
- */
-export const initDatabase = async () => {
-  if (!databaseUrl) {
-    throw new Error('MONGODB_URI or DATABASE_URL environment variable is required')
-  }
-
-  const database = await getDatabase()
-
-  try {
-    // Create indexes for better performance
-    const clientsCollection = database.collection('clients')
-    await clientsCollection.createIndex({ id: 1 }, { unique: true })
-    await clientsCollection.createIndex({ user_id: 1 })
-    await clientsCollection.createIndex({ name: 1 })
-    await clientsCollection.createIndex({ email: 1 })
-
-    const invoicesCollection = database.collection('invoices')
-    await invoicesCollection.createIndex({ id: 1 }, { unique: true })
-    await invoicesCollection.createIndex({ user_id: 1 })
-    await invoicesCollection.createIndex({ client_id: 1 })
-    await invoicesCollection.createIndex({ year: -1, month: -1 })
-    await invoicesCollection.createIndex({ sent_to_client: 1 })
-    await invoicesCollection.createIndex({ sent_to_accountant: 1 })
-    await invoicesCollection.createIndex({ payment_received: 1 })
-
-    const invoiceFilesCollection = database.collection('invoice_files')
-    await invoiceFilesCollection.createIndex({ id: 1 }, { unique: true })
-    await invoiceFilesCollection.createIndex({ user_id: 1 })
-    await invoiceFilesCollection.createIndex({ invoice_id: 1 })
-    await invoiceFilesCollection.createIndex({ file_key: 1 })
-
-    const emailHistoryCollection = database.collection('email_history')
-    await emailHistoryCollection.createIndex({ id: 1 }, { unique: true })
-    await emailHistoryCollection.createIndex({ user_id: 1 })
-    await emailHistoryCollection.createIndex({ invoice_id: 1 })
-    await emailHistoryCollection.createIndex({ sent_at: -1 })
-
-    const emailTemplatesCollection = database.collection('email_templates')
-    await emailTemplatesCollection.createIndex({ id: 1 }, { unique: true })
-    await emailTemplatesCollection.createIndex({ user_id: 1 })
-    await emailTemplatesCollection.createIndex({ type: 1 })
-
-    const settingsCollection = database.collection('settings')
-    await settingsCollection.createIndex({ user_id: 1, key: 1 }, { unique: true })
-
-    // Insert default settings if they don't exist
-    await settingsCollection.updateOne(
-      { key: 'accountant_email' },
-      { $setOnInsert: { key: 'accountant_email', value: '', updated_at: new Date() } },
-      { upsert: true }
-    )
-
-    console.log('Database initialized successfully')
-  } catch (error: unknown) {
-    console.error('Error initializing database:', error)
-    throw error
-  }
-}
 
 
 

@@ -195,7 +195,7 @@ const getTransporterForAccount = async (accountId?: string, userId?: string): Pr
 /**
  * Send email with attachments
  */
-export const sendEmailWithAttachments = async (data: {
+const sendEmailWithAttachments = async (data: {
   to: string
   cc?: string[]
   subject: string
@@ -285,10 +285,11 @@ export const sendInvoiceToClient = async (data: {
         throw new Error(`File not found: ${fileKey}`)
       }
       
-      // Extract filename from fileKey (format: timestamp-filename.ext)
+      // Extract filename from fileKey (format: path/to/filename.ext)
+      // Get the last part after the last slash
       const fileKeyStr = String(fileKey || '')
-      const filename = fileKeyStr.includes('-') 
-        ? fileKeyStr.substring(fileKeyStr.indexOf('-') + 1)
+      const filename = fileKeyStr.includes('/')
+        ? fileKeyStr.substring(fileKeyStr.lastIndexOf('/') + 1)
         : fileKeyStr
 
       return {
@@ -336,9 +337,11 @@ export const sendInvoiceToAccountant = async (data: {
         throw new Error(`File not found: ${fileKey}`)
       }
       
+      // Extract filename from fileKey (format: path/to/filename.ext)
+      // Get the last part after the last slash
       const fileKeyStr = String(fileKey || '')
-      const filename = fileKeyStr.includes('-') 
-        ? fileKeyStr.substring(fileKeyStr.indexOf('-') + 1)
+      const filename = fileKeyStr.includes('/')
+        ? fileKeyStr.substring(fileKeyStr.lastIndexOf('/') + 1)
         : fileKeyStr
 
       return {
