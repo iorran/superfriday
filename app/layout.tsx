@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import Script from 'next/script'
+import { Analytics } from '@vercel/analytics/next'
 import './globals.css'
 import DashboardLayout from '@/components/DashboardLayout'
 import { Toaster } from '@/components/ui/toaster'
@@ -35,6 +36,7 @@ export default function RootLayout({
             {children}
           </DashboardLayout>
           <Toaster />
+          <Analytics />
         </QueryProvider>
       </body>
     </html>
