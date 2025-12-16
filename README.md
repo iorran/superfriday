@@ -137,11 +137,9 @@ GOOGLE_REDIRECT_URI=https://yourdomain.com/api/google-drive/auth/callback
 # Generate with: openssl rand -base64 32
 GOOGLE_OAUTH_ENCRYPTION_KEY=your-32-character-base64-encryption-key
 
-# Microsoft OAuth (optional - for Microsoft/Outlook email accounts)
-# Required if you want to use a shared app for all users
-# Users can also provide their own Client ID/Secret in email account settings
-MICROSOFT_CLIENT_ID=your-microsoft-client-id
-MICROSOFT_CLIENT_SECRET=your-microsoft-client-secret
+# Microsoft OAuth (required for Microsoft/Outlook email accounts)
+# Each user must provide their own Client ID/Secret in email account settings
+# This is only the redirect URI - users configure their own OAuth credentials
 MICROSOFT_REDIRECT_URI=https://yourdomain.com/api/email-accounts/oauth/callback
 ```
 
@@ -167,21 +165,19 @@ MICROSOFT_REDIRECT_URI=https://yourdomain.com/api/email-accounts/oauth/callback
    - Generate encryption key: `openssl rand -base64 32`
    - Add `GOOGLE_OAUTH_ENCRYPTION_KEY` to environment variables
 
-4. **Microsoft OAuth (optional - for Microsoft/Outlook email accounts):**
+4. **Microsoft OAuth (required for Microsoft/Outlook email accounts):**
    - Microsoft has disabled basic authentication for Outlook/Hotmail accounts
    - OAuth2 is required for Microsoft email accounts
-   - **Option A: Use shared app (simpler):**
-     - Register an app in Azure AD at https://portal.azure.com
+   - **Each user must provide their own OAuth credentials:**
+     - Each user registers their own app in Azure AD at https://portal.azure.com
      - Go to Azure Active Directory → App registrations → New registration
      - Set redirect URI: `https://yourdomain.com/api/email-accounts/oauth/callback`
      - Add API permission: `SMTP.Send` (requires admin consent)
      - Create a client secret
-     - Copy Application (client) ID and client secret to environment variables
-   - **Option B: Users provide their own (more secure):**
-     - Each user registers their own app in Azure AD
-     - Users enter Client ID and Client Secret in email account settings
+     - Users enter Application (client) ID and client secret in email account settings
      - The app will use those credentials for OAuth flow
    - **Note:** The redirect URI must match exactly what's configured in Azure AD
+   - **Environment variable:** Only `MICROSOFT_REDIRECT_URI` is required (users provide their own Client ID/Secret)
 
 ## Project Structure
 

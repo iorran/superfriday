@@ -279,9 +279,27 @@ const EmailAccountManagement = () => {
       return
     }
 
-    // Check if this is a Microsoft account and if OAuth should be used
+    // Check if this is a Microsoft account - OAuth is required
     const isMicrosoft = isMicrosoftAccount(formData.email)
-    const useOAuth = isMicrosoft && (formData.oauth2_client_id || editingAccount?.oauth2_client_id)
+
+    // For Microsoft accounts, OAuth credentials are required
+    if (isMicrosoft && !formData.oauth2_client_id) {
+      toast({
+        title: "OAuth Obrigatório",
+        description: "Contas Microsoft requerem OAuth2. Por favor, forneça o Client ID e Client Secret.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (isMicrosoft && !formData.oauth2_client_secret && !editingAccount) {
+      toast({
+        title: "OAuth Obrigatório",
+        description: "Client Secret é obrigatório para contas Microsoft.",
+        variant: "destructive",
+      })
+      return
+    }
 
     // If editing and password is empty, don't send it (keep existing)
     if (editingAccount) {
@@ -311,21 +329,24 @@ const EmailAccountManagement = () => {
         updateData.smtp_pass = formData.smtp_pass
       }
 
-      // Include OAuth credentials if provided
-      if (formData.oauth2_client_id) {
-        updateData.oauth2_client_id = formData.oauth2_client_id
-      }
-      if (formData.oauth2_client_secret) {
-        updateData.oauth2_client_secret = formData.oauth2_client_secret
+      // Include OAuth credentials (required for Microsoft accounts)
+      if (isMicrosoft) {
+        if (formData.oauth2_client_id) {
+          updateData.oauth2_client_id = formData.oauth2_client_id
+        }
+        // Only update secret if provided (to allow keeping existing)
+        if (formData.oauth2_client_secret) {
+          updateData.oauth2_client_secret = formData.oauth2_client_secret
+        }
       }
 
       await updateAccountMutation.mutateAsync(updateData)
     } else {
-      // For new accounts, require password unless using OAuth for Microsoft
-      if (!useOAuth && !formData.smtp_pass) {
+      // For new accounts, require password for non-Microsoft accounts (Gmail, etc. use basic auth)
+      if (!isMicrosoft && !formData.smtp_pass) {
         toast({
           title: "Senha Obrigatória",
-          description: "A senha SMTP é obrigatória para criar uma nova conta (ou configure OAuth para contas Microsoft)",
+          description: "A senha SMTP é obrigatória para contas não-Microsoft (ex: Gmail)",
           variant: "destructive",
         })
         return
@@ -337,9 +358,9 @@ const EmailAccountManagement = () => {
         smtp_host: formData.smtp_host,
         smtp_port: parseInt(formData.smtp_port),
         smtp_user: formData.smtp_user,
-        smtp_pass: formData.smtp_pass || '', // May be empty for OAuth
-        oauth2_client_id: formData.oauth2_client_id || undefined,
-        oauth2_client_secret: formData.oauth2_client_secret || undefined,
+        smtp_pass: formData.smtp_pass || '', // Required for Gmail/basic auth, optional for Microsoft OAuth
+        oauth2_client_id: isMicrosoft ? formData.oauth2_client_id : undefined,
+        oauth2_client_secret: isMicrosoft ? formData.oauth2_client_secret : undefined,
         is_default: formData.is_default,
       })
     }
@@ -599,7 +620,12 @@ const EmailAccountManagement = () => {
                 SMTP Password {editingAccount ? '(deixe em branco para manter)' : '*'}
                 {isMicrosoftAccount(formData.email) && (
                   <span className="text-xs text-muted-foreground ml-2">
-                    (opcional para contas Microsoft com OAuth2)
+                    (opcional - Microsoft usa OAuth2)
+                  </span>
+                )}
+                {!isMicrosoftAccount(formData.email) && (
+                  <span className="text-xs text-muted-foreground ml-2">
+                    (obrigatório para Gmail e outras contas)
                   </span>
                 )}
               </Label>
@@ -615,23 +641,31 @@ const EmailAccountManagement = () => {
             </div>
             {isMicrosoftAccount(formData.email) && (
               <div className="border-t pt-4 space-y-4">
-                <div className="text-sm font-medium">OAuth2 (Opcional - para usar seu próprio app Azure AD)</div>
+                <div className="text-sm font-medium text-amber-600 dark:text-amber-400">
+                  OAuth2 (Obrigatório para contas Microsoft)
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Contas Microsoft requerem OAuth2. Você precisa registrar um app no Azure AD e fornecer suas credenciais.
+                </p>
                 <div>
-                  <Label htmlFor="oauth2_client_id">OAuth2 Client ID</Label>
+                  <Label htmlFor="oauth2_client_id">OAuth2 Client ID *</Label>
                   <input
                     id="oauth2_client_id"
                     type="text"
                     value={formData.oauth2_client_id}
                     onChange={(e) => setFormData({ ...formData, oauth2_client_id: e.target.value })}
                     className="w-full p-2 border rounded-md bg-background mt-1"
-                    placeholder="Deixe em branco para usar app compartilhado"
+                    placeholder="Seu Client ID do Azure AD"
+                    required
                   />
                   <p className="text-xs text-muted-foreground mt-1">
-                    Se não fornecido, será usado o app compartilhado (se configurado)
+                    Obtenha em: Azure Portal → Azure Active Directory → App registrations
                   </p>
                 </div>
                 <div>
-                  <Label htmlFor="oauth2_client_secret">OAuth2 Client Secret</Label>
+                  <Label htmlFor="oauth2_client_secret">
+                    OAuth2 Client Secret {editingAccount ? '(deixe em branco para manter)' : '*'}
+                  </Label>
                   <input
                     id="oauth2_client_secret"
                     type="password"
@@ -639,9 +673,10 @@ const EmailAccountManagement = () => {
                     onChange={(e) => setFormData({ ...formData, oauth2_client_secret: e.target.value })}
                     className="w-full p-2 border rounded-md bg-background mt-1"
                     placeholder={editingAccount ? 'Deixe em branco para manter' : '••••••••'}
+                    required={!editingAccount}
                   />
                   <p className="text-xs text-muted-foreground mt-1">
-                    Necessário apenas se você forneceu um Client ID personalizado
+                    Crie um Client Secret no Azure Portal → Certificates & secrets
                   </p>
                 </div>
               </div>

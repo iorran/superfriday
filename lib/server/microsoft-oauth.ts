@@ -5,8 +5,6 @@
 
 import { getEmailAccount, updateEmailAccount } from './db-operations'
 
-const CLIENT_ID = process.env.MICROSOFT_CLIENT_ID
-const CLIENT_SECRET = process.env.MICROSOFT_CLIENT_SECRET
 const REDIRECT_URI = process.env.MICROSOFT_REDIRECT_URI
 
 if (!REDIRECT_URI) {
@@ -29,20 +27,19 @@ const SCOPES = [
 export const getAuthUrl = (
   accountId: string,
   userId: string,
-  clientId?: string
+  clientId: string
 ): string => {
-  const clientIdToUse = clientId || CLIENT_ID
   const redirectUri = REDIRECT_URI
 
-  if (!clientIdToUse || !redirectUri) {
-    throw new Error('Microsoft OAuth credentials not configured. Please provide Client ID and set MICROSOFT_REDIRECT_URI environment variable.')
+  if (!clientId || !redirectUri) {
+    throw new Error('Microsoft OAuth credentials not configured. Please provide Client ID in email account settings and set MICROSOFT_REDIRECT_URI environment variable.')
   }
 
   // Encode state as JSON with accountId and userId for security
   const state = encodeURIComponent(JSON.stringify({ accountId, userId }))
 
   const params = new URLSearchParams({
-    client_id: clientIdToUse,
+    client_id: clientId,
     response_type: 'code',
     redirect_uri: redirectUri,
     response_mode: 'query',
@@ -121,13 +118,17 @@ export const handleOAuthCallback = async (
     throw new Error(`Email account ${accountId} not found`)
   }
 
-  // Use account's Client ID/Secret if provided, otherwise use shared app
-  const clientId = account.oauth2_client_id || CLIENT_ID
-  const clientSecret = account.oauth2_client_secret || CLIENT_SECRET
+  // Require account's Client ID/Secret - each user must provide their own
+  const clientId = account.oauth2_client_id
+  const clientSecret = account.oauth2_client_secret
   const redirectUri = REDIRECT_URI
 
-  if (!clientId || !clientSecret || !redirectUri) {
-    throw new Error('Microsoft OAuth credentials not configured. Please provide Client ID and Client Secret in email account settings or set MICROSOFT_CLIENT_ID and MICROSOFT_CLIENT_SECRET environment variables.')
+  if (!clientId || !clientSecret) {
+    throw new Error('Microsoft OAuth credentials not configured. Please provide Client ID and Client Secret in email account settings before connecting.')
+  }
+
+  if (!redirectUri) {
+    throw new Error('MICROSOFT_REDIRECT_URI environment variable is not configured.')
   }
 
   // Exchange code for tokens
@@ -168,11 +169,11 @@ export const refreshAccessToken = async (
     throw new Error('No refresh token found. Please reconnect your Microsoft account.')
   }
 
-  const clientId = account.oauth2_client_id || CLIENT_ID
-  const clientSecret = account.oauth2_client_secret || CLIENT_SECRET
+  const clientId = account.oauth2_client_id
+  const clientSecret = account.oauth2_client_secret
 
   if (!clientId || !clientSecret) {
-    throw new Error('Microsoft OAuth credentials not configured')
+    throw new Error('Microsoft OAuth credentials not configured. Please provide Client ID and Client Secret in email account settings.')
   }
 
   const response = await fetch(TOKEN_ENDPOINT, {

@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Get email account to retrieve Client ID/Secret if provided
+    // Get email account to retrieve Client ID/Secret
     const account = await getEmailAccount(accountId, userId)
     if (!account) {
       return NextResponse.json(
@@ -36,11 +36,19 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Generate authorization URL with account's Client ID or shared app
+    // Require OAuth credentials - each user must provide their own
+    if (!account.oauth2_client_id || !account.oauth2_client_secret) {
+      return NextResponse.json(
+        { error: true, message: 'OAuth credentials not configured. Please provide Client ID and Client Secret in email account settings before connecting.' },
+        { status: 400 }
+      )
+    }
+
+    // Generate authorization URL with account's Client ID
     const authUrl = getAuthUrl(
       accountId,
       userId,
-      account.oauth2_client_id || undefined
+      account.oauth2_client_id
     )
 
     return NextResponse.redirect(authUrl)
