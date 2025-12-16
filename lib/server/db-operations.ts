@@ -34,13 +34,13 @@ interface UpdateClientData {
 interface CreateEmailTemplateData {
   subject: string
   body: string
-  type: string
+  client_id: string | null // null for accountant template
 }
 
 interface UpdateEmailTemplateData {
   subject?: string
   body?: string
-  type?: string
+  client_id?: string | null
 }
 
 interface CreateEmailAccountData {
@@ -580,9 +580,27 @@ export const getEmailTemplates = async (userId: string) => {
   const db = await getDatabase()
   const templates = await db.collection('email_templates')
     .find({ user_id: userId })
-    .sort({ type: 1, created_at: 1 })
+    .sort({ client_id: 1, created_at: 1 })
     .toArray()
   return templates as unknown as EmailTemplate[]
+}
+
+/**
+ * Get email template by client ID
+ */
+export const getEmailTemplateByClient = async (clientId: string, userId: string): Promise<EmailTemplate | null> => {
+  const db = await getDatabase()
+  const template = await db.collection('email_templates').findOne({ client_id: clientId, user_id: userId })
+  return (template as EmailTemplate | null) || null
+}
+
+/**
+ * Get accountant email template (client_id = null)
+ */
+export const getAccountantEmailTemplate = async (userId: string): Promise<EmailTemplate | null> => {
+  const db = await getDatabase()
+  const template = await db.collection('email_templates').findOne({ client_id: null, user_id: userId })
+  return (template as EmailTemplate | null) || null
 }
 
 /**
@@ -600,14 +618,28 @@ export const getEmailTemplate = async (templateId: string, userId: string): Prom
 export const createEmailTemplate = async (templateData: CreateEmailTemplateData, userId: string) => {
   const db = await getDatabase()
   const id = `template-${Date.now()}`
-  const { subject, body, type } = templateData
+  const { subject, body, client_id } = templateData
+  
+  // Check if template already exists for this client (or accountant if client_id is null)
+  const existingTemplate = await db.collection('email_templates').findOne({ 
+    client_id: client_id === null ? null : client_id, 
+    user_id: userId 
+  })
+  
+  if (existingTemplate) {
+    if (client_id === null) {
+      throw new Error('Template for accountant already exists')
+    } else {
+      throw new Error('Template already exists for this client')
+    }
+  }
   
   await db.collection('email_templates').insertOne({
     id,
     user_id: userId,
     subject,
     body,
-    type,
+    client_id,
     created_at: new Date(),
     updated_at: null,
   })
@@ -626,7 +658,24 @@ export const updateEmailTemplate = async (templateId: string, templateData: Upda
   
   if (templateData.subject !== undefined) update.subject = templateData.subject
   if (templateData.body !== undefined) update.body = templateData.body
-  if (templateData.type !== undefined) update.type = templateData.type
+  if (templateData.client_id !== undefined) {
+    // Check if template already exists for the new client (or accountant if null)
+    const existingTemplate = await db.collection('email_templates').findOne({ 
+      client_id: templateData.client_id === null ? null : templateData.client_id, 
+      user_id: userId,
+      id: { $ne: templateId }
+    })
+    
+    if (existingTemplate) {
+      if (templateData.client_id === null) {
+        throw new Error('Template for accountant already exists')
+      } else {
+        throw new Error('Template already exists for this client')
+      }
+    }
+    
+    update.client_id = templateData.client_id === null ? null : templateData.client_id
+  }
   
   await db.collection('email_templates').updateOne({ id: templateId, user_id: userId }, { $set: update })
 }

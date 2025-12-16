@@ -210,63 +210,68 @@ const FileList = () => {
       }
     }
 
+    // Get template based on recipient type
+    let template: EmailTemplate | undefined
+    if (recipientType === 'client') {
+      // For client emails, require template for the specific client
+      template = emailTemplates.find((t: EmailTemplate) => t.client_id === invoice.client_id)
+      if (!template) {
+        toast({
+          title: "Template Não Encontrado",
+          description: `Nenhum template de email encontrado para ${invoice.client_name}. Por favor, crie um template para este cliente antes de enviar emails.`,
+          variant: "destructive",
+        })
+        return
+      }
+    } else {
+      // For accountant emails, require accountant template - NO FALLBACK
+      template = emailTemplates.find((t: EmailTemplate) => t.client_id === null)
+      if (!template) {
+        toast({
+          title: "Template Não Encontrado",
+          description: `Nenhum template de email encontrado para o contador. Por favor, crie um template para o contador antes de enviar emails.`,
+          variant: "destructive",
+        })
+        return
+      }
+    }
+
     // Proceed with email sending
     try {
       setSendingEmail(`${invoiceId}-${recipientType}`)
 
-      const templateType = recipientType === 'client' ? 'to_client' : 'to_account_manager'
-      const recipientTemplates = emailTemplates.filter((t: EmailTemplate) => t.type === templateType)
+      const monthNames = [
+        'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+        'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+      ]
+      const monthName = invoice.month ? monthNames[invoice.month - 1] || String(invoice.month) : ''
+      const monthYear = invoice.month && invoice.year ? `${monthName} ${invoice.year}` : (invoice.year ? String(invoice.year) : '')
       
-      const template = recipientTemplates.length > 0 ? recipientTemplates[0] : null
-      let templateId: string | null = null
-      let subject = ''
-      let body = ''
-
-      if (template) {
-        templateId = template.id
-        
-        const monthNames = [
-          'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-          'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
-        ]
-        const monthName = invoice.month ? monthNames[invoice.month - 1] || String(invoice.month) : ''
-        const monthYear = invoice.month && invoice.year ? `${monthName} ${invoice.year}` : (invoice.year ? String(invoice.year) : '')
-        
-        // Get client currency for formatting
-        const invoiceClient = clients.find((c) => c.id === invoice.client_id)
-        const invoiceCurrency = invoiceClient?.currency || 'EUR'
-        
-        subject = template.subject
-          .replace(/\{\{clientName\}\}/g, invoice.client_name || '')
-          .replace(/\{\{invoiceName\}\}/g, invoice.id || '')
-          .replace(/\{\{invoiceAmount\}\}/g, invoice.invoice_amount ? new Intl.NumberFormat('pt-PT', { style: 'currency', currency: invoiceCurrency === 'GBP' ? 'GBP' : 'EUR' }).format(invoice.invoice_amount) : '')
-          .replace(/\{\{month\}\}/g, invoice.month ? String(invoice.month) : '')
-          .replace(/\{\{year\}\}/g, invoice.year ? String(invoice.year) : '')
-          .replace(/\{\{monthYear\}\}/g, monthYear)
-          .replace(/\{\{downloadLink\}\}/g, '')
-        
-        body = template.body
-          .replace(/\{\{clientName\}\}/g, invoice.client_name || '')
-          .replace(/\{\{invoiceName\}\}/g, invoice.id || '')
-          .replace(/\{\{invoiceAmount\}\}/g, invoice.invoice_amount ? new Intl.NumberFormat('pt-PT', { style: 'currency', currency: invoiceCurrency === 'GBP' ? 'GBP' : 'EUR' }).format(invoice.invoice_amount) : '')
-          .replace(/\{\{month\}\}/g, invoice.month ? String(invoice.month) : '')
-          .replace(/\{\{year\}\}/g, invoice.year ? String(invoice.year) : '')
-          .replace(/\{\{monthYear\}\}/g, monthYear)
-          .replace(/\{\{downloadLink\}\}/g, '')
-      } else {
-        subject = recipientType === 'client' 
-          ? `Invoice - ${invoice.client_name}`
-          : `Invoice para ${invoice.client_name}`
-
-        body = recipientType === 'client'
-          ? `Olá,\n\nSegue em anexo a invoice solicitada.\n\nAtenciosamente`
-          : `Olá,\n\nSegue em anexo a invoice de ${invoice.client_name}.\n\nAtenciosamente`
-      }
+      // Get client currency for formatting
+      const invoiceClient = clients.find((c) => c.id === invoice.client_id)
+      const invoiceCurrency = invoiceClient?.currency || 'EUR'
+      
+      const subject = template.subject
+        .replace(/\{\{clientName\}\}/g, invoice.client_name || '')
+        .replace(/\{\{invoiceName\}\}/g, invoice.id || '')
+        .replace(/\{\{invoiceAmount\}\}/g, invoice.invoice_amount ? new Intl.NumberFormat('pt-PT', { style: 'currency', currency: invoiceCurrency === 'GBP' ? 'GBP' : 'EUR' }).format(invoice.invoice_amount) : '')
+        .replace(/\{\{month\}\}/g, invoice.month ? String(invoice.month) : '')
+        .replace(/\{\{year\}\}/g, invoice.year ? String(invoice.year) : '')
+        .replace(/\{\{monthYear\}\}/g, monthYear)
+        .replace(/\{\{downloadLink\}\}/g, '')
+      
+      const body = template.body
+        .replace(/\{\{clientName\}\}/g, invoice.client_name || '')
+        .replace(/\{\{invoiceName\}\}/g, invoice.id || '')
+        .replace(/\{\{invoiceAmount\}\}/g, invoice.invoice_amount ? new Intl.NumberFormat('pt-PT', { style: 'currency', currency: invoiceCurrency === 'GBP' ? 'GBP' : 'EUR' }).format(invoice.invoice_amount) : '')
+        .replace(/\{\{month\}\}/g, invoice.month ? String(invoice.month) : '')
+        .replace(/\{\{year\}\}/g, invoice.year ? String(invoice.year) : '')
+        .replace(/\{\{monthYear\}\}/g, monthYear)
+        .replace(/\{\{downloadLink\}\}/g, '')
 
       await sendEmailMutation.mutateAsync({
         invoiceId,
         recipientType,
-        templateId,
         subject,
         body,
         // invoiceAmountEur will be set by dialog for GBP invoices if needed
@@ -325,50 +330,45 @@ const FileList = () => {
         return
       }
 
-      const templateType = 'to_account_manager'
-      const recipientTemplates = emailTemplates.filter((t: EmailTemplate) => t.type === templateType)
-      
-      const template = recipientTemplates.length > 0 ? recipientTemplates[0] : null
-      let templateId: string | null = null
-      let subject = ''
-      let body = ''
-
-      if (template) {
-        templateId = template.id
-        
-        const monthNames = [
-          'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-          'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
-        ]
-        const monthName = invoice.month ? monthNames[invoice.month - 1] || String(invoice.month) : ''
-        const monthYear = invoice.month && invoice.year ? `${monthName} ${invoice.year}` : (invoice.year ? String(invoice.year) : '')
-        
-        subject = template.subject
-          .replace(/\{\{clientName\}\}/g, invoice.client_name || '')
-          .replace(/\{\{invoiceName\}\}/g, invoice.id || '')
-          .replace(/\{\{invoiceAmount\}\}/g, new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(eurAmount))
-          .replace(/\{\{month\}\}/g, invoice.month ? String(invoice.month) : '')
-          .replace(/\{\{year\}\}/g, invoice.year ? String(invoice.year) : '')
-          .replace(/\{\{monthYear\}\}/g, monthYear)
-          .replace(/\{\{downloadLink\}\}/g, '')
-        
-        body = template.body
-          .replace(/\{\{clientName\}\}/g, invoice.client_name || '')
-          .replace(/\{\{invoiceName\}\}/g, invoice.id || '')
-          .replace(/\{\{invoiceAmount\}\}/g, new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(eurAmount))
-          .replace(/\{\{month\}\}/g, invoice.month ? String(invoice.month) : '')
-          .replace(/\{\{year\}\}/g, invoice.year ? String(invoice.year) : '')
-          .replace(/\{\{monthYear\}\}/g, monthYear)
-          .replace(/\{\{downloadLink\}\}/g, '')
-      } else {
-        subject = `Invoice para ${invoice.client_name}`
-        body = `Olá,\n\nSegue em anexo a invoice de ${invoice.client_name}.\n\nAtenciosamente`
+      // For accountant emails, require accountant template - NO FALLBACK
+      const template = emailTemplates.find((t: EmailTemplate) => t.client_id === null)
+      if (!template) {
+        toast({
+          title: "Template Não Encontrado",
+          description: `Nenhum template de email encontrado para o contador. Por favor, crie um template para o contador antes de enviar emails.`,
+          variant: "destructive",
+        })
+        return
       }
+
+      const monthNames = [
+        'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+        'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+      ]
+      const monthName = invoice.month ? monthNames[invoice.month - 1] || String(invoice.month) : ''
+      const monthYear = invoice.month && invoice.year ? `${monthName} ${invoice.year}` : (invoice.year ? String(invoice.year) : '')
+      
+      const subject = template.subject
+        .replace(/\{\{clientName\}\}/g, invoice.client_name || '')
+        .replace(/\{\{invoiceName\}\}/g, invoice.id || '')
+        .replace(/\{\{invoiceAmount\}\}/g, new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(eurAmount))
+        .replace(/\{\{month\}\}/g, invoice.month ? String(invoice.month) : '')
+        .replace(/\{\{year\}\}/g, invoice.year ? String(invoice.year) : '')
+        .replace(/\{\{monthYear\}\}/g, monthYear)
+        .replace(/\{\{downloadLink\}\}/g, '')
+      
+      const body = template.body
+        .replace(/\{\{clientName\}\}/g, invoice.client_name || '')
+        .replace(/\{\{invoiceName\}\}/g, invoice.id || '')
+        .replace(/\{\{invoiceAmount\}\}/g, new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(eurAmount))
+        .replace(/\{\{month\}\}/g, invoice.month ? String(invoice.month) : '')
+        .replace(/\{\{year\}\}/g, invoice.year ? String(invoice.year) : '')
+        .replace(/\{\{monthYear\}\}/g, monthYear)
+        .replace(/\{\{downloadLink\}\}/g, '')
 
       await sendEmailMutation.mutateAsync({
         invoiceId,
         recipientType: 'accountant',
-        templateId,
         subject,
         body,
         invoiceAmountEur: eurAmount,

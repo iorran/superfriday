@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import {
   getEmailTemplates,
   getEmailTemplate,
+  getEmailTemplateByClient,
   createEmailTemplate,
   updateEmailTemplate,
   deleteEmailTemplate,
@@ -20,12 +21,24 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const templateId = searchParams.get('id')
+    const clientId = searchParams.get('clientId')
 
     if (templateId) {
       const template = await getEmailTemplate(templateId, userId)
       if (!template) {
         return NextResponse.json(
           { error: true, message: 'Template not found' },
+          { status: 404 }
+        )
+      }
+      return NextResponse.json(template)
+    }
+
+    if (clientId) {
+      const template = await getEmailTemplateByClient(clientId, userId)
+      if (!template) {
+        return NextResponse.json(
+          { error: true, message: 'Template not found for this client' },
           { status: 404 }
         )
       }

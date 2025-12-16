@@ -59,7 +59,7 @@ export interface EmailTemplate {
   id: string
   subject: string
   body: string
-  type: 'to_client' | 'to_account_manager'
+  client_id: string | null // null for accountant template
   created_at?: string
   updated_at?: string
 }

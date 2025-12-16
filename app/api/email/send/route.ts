@@ -5,10 +5,10 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { sendInvoiceToClient, sendInvoiceToAccountant } from '@/lib/server/email'
-import { updateInvoiceState, recordEmail, getInvoice, getAccountantEmail, getEmailTemplate, getClient, getSetting } from '@/lib/server/db-operations'
+import { updateInvoiceState, recordEmail, getInvoice, getAccountantEmail, getEmailTemplateByClient, getAccountantEmailTemplate, getClient, getSetting } from '@/lib/server/db-operations'
 import { getDatabase } from '@/lib/server/db'
 import { requireAuth } from '@/lib/server/auth'
-import type { Invoice, InvoiceFile } from '@/types'
+import type { Invoice, InvoiceFile, EmailTemplate } from '@/types'
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     const userId = session.user.id
 
     const body = await request.json()
-    const { invoiceId, recipientType, templateId, subject, body: emailBody, invoiceAmountEur } = body
+    const { invoiceId, recipientType, invoiceAmountEur } = body
 
     if (!invoiceId || !recipientType) {
       return NextResponse.json(
@@ -35,59 +35,74 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate client selection (critical security check)
+    const clientId = invoice.client_id
+    if (!clientId) {
+      return NextResponse.json(
+        { error: true, message: 'Invoice has no associated client' },
+        { status: 400 }
+      )
+    }
+
+    // Get template based on recipient type
+    let template: EmailTemplate | null = null
     if (recipientType === 'client') {
-      // Double-check we're sending to the correct client
-      const clientId = invoice.client_id
-      if (!clientId) {
+      // For client emails, require template for the specific client
+      template = await getEmailTemplateByClient(clientId, userId)
+      if (!template) {
         return NextResponse.json(
-          { error: true, message: 'Invoice has no associated client' },
+          { error: true, message: `No email template found for client. Please create a template for this client before sending emails.` },
           { status: 400 }
         )
       }
-    }
-
-    // Process template: if templateId provided, use template; otherwise use subject/body from request
-    let finalSubject = subject
-    let finalBody = emailBody
-    
-    if (templateId) {
-      const template = await getEmailTemplate(templateId, userId)
-      if (template) {
-        console.log('Using template:', { templateId, templateSubject: template.subject, templateBody: String(template.body || '').substring(0, 50) })
-        
-        // Replace template variables
-        const replaceVariables = (text: string) => {
-          if (!text) return ''
-          
-          // Format month name in Portuguese
-          const monthNames = [
-            'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-            'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
-          ]
-          const monthName = invoice.month ? monthNames[invoice.month - 1] || String(invoice.month) : ''
-          const monthYear = invoice.month && invoice.year ? `${monthName} ${invoice.year}` : (invoice.year ? String(invoice.year) : '')
-          
-          return text
-            .replace(/\{\{clientName\}\}/g, invoice.client_name || '')
-            .replace(/\{\{invoiceName\}\}/g, invoice.id || '')
-            .replace(/\{\{invoiceAmount\}\}/g, invoice.invoice_amount ? new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(invoice.invoice_amount) : '')
-            .replace(/\{\{month\}\}/g, invoice.month ? String(invoice.month) : '')
-            .replace(/\{\{year\}\}/g, invoice.year ? String(invoice.year) : '')
-            .replace(/\{\{monthYear\}\}/g, monthYear)
-            .replace(/\{\{downloadLink\}\}/g, '') // Not applicable for attachments
-        }
-        
-        // Use template subject and body, replacing variables (override frontend values)
-        finalSubject = replaceVariables(template.subject || '') || subject || ''
-        finalBody = replaceVariables(template.body || '') || emailBody || ''
-        
-        console.log('After template processing:', { finalSubject, finalBody: String(finalBody || '').substring(0, 50) })
-      } else {
-        console.warn('Template not found:', templateId)
+    } else if (recipientType === 'accountant') {
+      // For accountant emails, require accountant template - NO FALLBACK
+      template = await getAccountantEmailTemplate(userId)
+      if (!template) {
+        return NextResponse.json(
+          { error: true, message: `No email template found for accountant. Please create a template for the accountant before sending emails.` },
+          { status: 400 }
+        )
       }
     } else {
-      console.log('No templateId, using subject/body from request:', { subject, body: String(emailBody || '').substring(0, 50) })
+      return NextResponse.json(
+        { error: true, message: 'Invalid recipientType. Must be "client" or "accountant"' },
+        { status: 400 }
+      )
     }
+
+    // At this point, template is guaranteed to be non-null
+    if (!template) {
+      return NextResponse.json(
+        { error: true, message: 'Template not found' },
+        { status: 500 }
+      )
+    }
+
+    // Replace template variables
+    const replaceVariables = (text: string) => {
+      if (!text) return ''
+      
+      // Format month name in Portuguese
+      const monthNames = [
+        'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+        'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+      ]
+      const monthName = invoice.month ? monthNames[invoice.month - 1] || String(invoice.month) : ''
+      const monthYear = invoice.month && invoice.year ? `${monthName} ${invoice.year}` : (invoice.year ? String(invoice.year) : '')
+      
+      return text
+        .replace(/\{\{clientName\}\}/g, invoice.client_name || '')
+        .replace(/\{\{invoiceName\}\}/g, invoice.id || '')
+        .replace(/\{\{invoiceAmount\}\}/g, invoice.invoice_amount ? new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(invoice.invoice_amount) : '')
+        .replace(/\{\{month\}\}/g, invoice.month ? String(invoice.month) : '')
+        .replace(/\{\{year\}\}/g, invoice.year ? String(invoice.year) : '')
+        .replace(/\{\{monthYear\}\}/g, monthYear)
+        .replace(/\{\{downloadLink\}\}/g, '') // Not applicable for attachments
+    }
+    
+    // Use template subject and body, replacing variables
+    const finalSubject = replaceVariables(template.subject || '')
+    const finalBody = replaceVariables(template.body || '')
 
     let emailResult
     let recipientEmail: string
@@ -137,15 +152,15 @@ export async function POST(request: NextRequest) {
         clientEmail: recipientEmail, 
         ccEmails, 
         subject: finalSubject,
-        hasTemplate: !!templateId 
+        hasTemplate: !!template 
       })
 
       emailResult = await sendInvoiceToClient({
         invoiceId,
         clientEmail: recipientEmail,
         clientName: recipientName,
-        subject: finalSubject || `Invoice - ${invoice.client_name}`,
-        body: finalBody || `Please find attached invoice.`,
+        subject: finalSubject,
+        body: finalBody,
         fileKeys,
         ccEmails: ccEmails.length > 0 ? ccEmails : undefined,
         userId,
@@ -190,8 +205,8 @@ export async function POST(request: NextRequest) {
         invoiceId,
         accountantEmail: recipientEmail,
         clientName: invoice.client_name || '',
-        subject: finalSubject || `Invoice for ${invoice.client_name || ''}`,
-        body: finalBody || `Please find attached invoice for ${invoice.client_name || ''}.`,
+        subject: finalSubject,
+        body: finalBody,
         fileKeys: invoiceFileKeys,
         userId,
       })
@@ -228,12 +243,12 @@ export async function POST(request: NextRequest) {
     // Record email in history
     await recordEmail({
       invoiceId,
-      templateId: templateId || null,
+      templateId: template.id,
       recipientEmail,
       recipientName,
       recipientType: recipientType as 'client' | 'accountant',
-      subject: finalSubject || 'Invoice',
-      body: finalBody || '',
+      subject: finalSubject,
+      body: finalBody,
       status: 'sent',
     }, userId)
 

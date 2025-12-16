@@ -32,13 +32,13 @@ interface UpdateClientData {
 interface CreateEmailTemplateData {
   subject: string
   body: string
-  type: string
+  client_id: string | null // null for accountant template
 }
 
 interface UpdateEmailTemplateData {
   subject?: string
   body?: string
-  type?: string
+  client_id?: string | null
 }
 
 interface SendEmailData {
@@ -315,6 +315,21 @@ export const getEmailTemplates = async (): Promise<EmailTemplate[]> => {
  */
 export const getEmailTemplate = async (templateId: string): Promise<EmailTemplate | null> => {
   const response = await fetch(`/api/email-templates?id=${templateId}`)
+  if (!response.ok) {
+    if (response.status === 404) {
+      return null
+    }
+    const error = await response.json().catch(() => ({ message: 'Failed to fetch email template' }))
+    throw new Error(error.message || `Failed to fetch email template: ${response.status}`)
+  }
+  return await response.json()
+}
+
+/**
+ * Get email template by client ID
+ */
+export const getEmailTemplateByClient = async (clientId: string): Promise<EmailTemplate | null> => {
+  const response = await fetch(`/api/email-templates?clientId=${clientId}`)
   if (!response.ok) {
     if (response.status === 404) {
       return null

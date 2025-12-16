@@ -11,13 +11,13 @@ import { queryKeys } from '@/lib/shared/query-keys'
 interface CreateEmailTemplateData {
   subject: string
   body: string
-  type: string
+  client_id: string | null // null for accountant template
 }
 
 interface UpdateEmailTemplateData {
   subject?: string
   body?: string
-  type?: string
+  client_id?: string | null
 }
 
 /**

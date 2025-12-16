@@ -33,9 +33,7 @@ export type InvoiceFormData = z.infer<typeof invoiceSchema>
 export const emailTemplateSchema = z.object({
   subject: z.string().min(1, 'Assunto é obrigatório').trim(),
   body: z.string().min(1, 'Corpo do email é obrigatório').trim(),
-  type: z.enum(['to_client', 'to_account_manager'], {
-    errorMap: () => ({ message: 'Tipo de template inválido' }),
-  }),
+  client_id: z.union([z.string().min(1, 'Cliente é obrigatório'), z.null()]), // null for accountant template, string for client template
 })
 
 export type EmailTemplateFormData = z.infer<typeof emailTemplateSchema>
