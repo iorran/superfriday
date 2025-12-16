@@ -147,7 +147,12 @@ const FinancesPage = () => {
                   tickFormatter={(value) => `€${(value / 1000).toFixed(0)}k`}
                 />
                 <Tooltip
-                  formatter={(value: number) => formatCurrency(value)}
+                  formatter={(value: unknown) => {
+                    if (typeof value === 'number') {
+                      return formatCurrency(value)
+                    }
+                    return formatCurrency(0)
+                  }}
                 />
                 <Bar dataKey="amount" fill="#3b82f6" radius={[4, 4, 0, 0]} />
               </BarChart>
@@ -175,7 +180,12 @@ const FinancesPage = () => {
                   tickFormatter={(value) => `€${(value / 1000).toFixed(0)}k`}
                 />
                 <Tooltip
-                  formatter={(value: number) => formatCurrency(value)}
+                  formatter={(value: unknown) => {
+                    if (typeof value === 'number') {
+                      return formatCurrency(value)
+                    }
+                    return formatCurrency(0)
+                  }}
                 />
                 <Line
                   type="monotone"
@@ -204,7 +214,12 @@ const FinancesPage = () => {
                   tickFormatter={(value) => `€${(value / 1000).toFixed(0)}k`}
                 />
                 <Tooltip
-                  formatter={(value: number) => formatCurrency(value)}
+                  formatter={(value: unknown) => {
+                    if (typeof value === 'number') {
+                      return formatCurrency(value)
+                    }
+                    return formatCurrency(0)
+                  }}
                 />
                 <Bar dataKey="amount" fill="#10b981" radius={[4, 4, 0, 0]} />
               </BarChart>
@@ -251,7 +266,14 @@ const FinancesPage = () => {
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
-                <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                <Tooltip
+                  formatter={(value: unknown) => {
+                    if (typeof value === 'number') {
+                      return formatCurrency(value)
+                    }
+                    return formatCurrency(0)
+                  }}
+                />
                 <Legend />
               </PieChart>
             </ResponsiveContainer>
