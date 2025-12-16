@@ -73,6 +73,11 @@ export interface EmailAccount {
   smtp_port: number
   smtp_user: string
   smtp_pass: string // Encrypted or plain (will be encrypted in production)
+  // OAuth2 fields for Microsoft/Outlook (optional)
+  oauth2_client_id?: string
+  oauth2_client_secret?: string
+  oauth2_refresh_token?: string
+  oauth2_access_token?: string
   is_default?: boolean
   created_at?: string
   updated_at?: string

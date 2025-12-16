@@ -11,6 +11,92 @@ import { getEmailAccount, getDefaultEmailAccount } from './db-operations'
 const transporterCache = new Map<string, nodemailer.Transporter>()
 
 /**
+ * Check if an email is a Microsoft/Outlook account
+ */
+const isMicrosoftAccount = (email: string, smtpHost?: string): boolean => {
+  const emailLower = email.toLowerCase()
+  const hostLower = smtpHost?.toLowerCase() || ''
+  
+  return (
+    emailLower.includes('@outlook.') ||
+    emailLower.includes('@hotmail.') ||
+    emailLower.includes('@live.') ||
+    emailLower.includes('@msn.') ||
+    hostLower.includes('outlook.') ||
+    hostLower.includes('office365')
+  )
+}
+
+/**
+ * Create transporter configuration for an account
+ */
+const createTransporterConfig = (account: {
+  smtp_host: string
+  smtp_port: number
+  smtp_user: string
+  smtp_pass: string
+  email: string
+  oauth2_client_id?: string
+  oauth2_client_secret?: string
+  oauth2_refresh_token?: string
+  oauth2_access_token?: string
+}) => {
+  const isMicrosoft = isMicrosoftAccount(account.email, account.smtp_host)
+  
+  // For Microsoft accounts, use smtp.office365.com if not already set
+  const host = isMicrosoft && !account.smtp_host.includes('office365') && !account.smtp_host.includes('outlook')
+    ? 'smtp.office365.com'
+    : account.smtp_host
+  
+  // For Microsoft accounts on port 587, require TLS
+  const port = account.smtp_port
+  const secure = port === 465
+  const requireTLS = isMicrosoft && port === 587 && !secure
+  
+  // Configure authentication
+  let auth: {
+    type?: string
+    user: string
+    pass?: string
+    clientId?: string
+    clientSecret?: string
+    refreshToken?: string
+    accessToken?: string
+  }
+  
+  // Use OAuth2 if credentials are provided
+  if (account.oauth2_client_id && account.oauth2_client_secret && account.oauth2_refresh_token) {
+    auth = {
+      type: 'OAuth2',
+      user: account.smtp_user,
+      clientId: account.oauth2_client_id,
+      clientSecret: account.oauth2_client_secret,
+      refreshToken: account.oauth2_refresh_token,
+      ...(account.oauth2_access_token ? { accessToken: account.oauth2_access_token } : {}),
+    }
+  } else {
+    // Fall back to basic auth
+    auth = {
+      user: account.smtp_user,
+      pass: account.smtp_pass,
+    }
+  }
+  
+  const config: Record<string, unknown> = {
+    host,
+    port,
+    secure,
+    auth,
+  }
+  
+  if (requireTLS) {
+    config.requireTLS = true
+  }
+  
+  return config
+}
+
+/**
  * Get transporter for a specific email account
  */
 const getTransporterForAccount = async (accountId?: string, userId?: string): Promise<{
@@ -36,15 +122,8 @@ const getTransporterForAccount = async (accountId?: string, userId?: string): Pr
       throw new Error(`Email account ${accountId} not found`)
     }
     
-    const transporter = nodemailer.createTransport({
-      host: account.smtp_host,
-      port: account.smtp_port,
-      secure: account.smtp_port === 465,
-      auth: {
-        user: account.smtp_user,
-        pass: account.smtp_pass,
-      },
-    })
+    const config = createTransporterConfig(account)
+    const transporter = nodemailer.createTransport(config)
     
     transporterCache.set(cacheKey, transporter)
     return {
@@ -66,15 +145,8 @@ const getTransporterForAccount = async (accountId?: string, userId?: string): Pr
         }
       }
       
-      const transporter = nodemailer.createTransport({
-        host: defaultAccount.smtp_host,
-        port: defaultAccount.smtp_port,
-        secure: defaultAccount.smtp_port === 465,
-        auth: {
-          user: defaultAccount.smtp_user,
-          pass: defaultAccount.smtp_pass,
-        },
-      })
+      const config = createTransporterConfig(defaultAccount)
+      const transporter = nodemailer.createTransport(config)
       
       transporterCache.set(cacheKey, transporter)
       return {
@@ -98,15 +170,20 @@ const getTransporterForAccount = async (accountId?: string, userId?: string): Pr
     throw new Error('SMTP configuration missing. Please set SMTP_HOST, SMTP_PORT, SMTP_USER, and SMTP_PASS environment variables, or configure an email account in settings.')
   }
 
-  const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: parseInt(process.env.SMTP_PORT),
-    secure: process.env.SMTP_PORT === '465',
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-  })
+  const envAccount = {
+    smtp_host: process.env.SMTP_HOST,
+    smtp_port: parseInt(process.env.SMTP_PORT),
+    smtp_user: process.env.SMTP_USER,
+    smtp_pass: process.env.SMTP_PASS,
+    email: process.env.SMTP_FROM || process.env.SMTP_USER || '',
+    oauth2_client_id: process.env.SMTP_OAUTH2_CLIENT_ID,
+    oauth2_client_secret: process.env.SMTP_OAUTH2_CLIENT_SECRET,
+    oauth2_refresh_token: process.env.SMTP_OAUTH2_REFRESH_TOKEN,
+    oauth2_access_token: process.env.SMTP_OAUTH2_ACCESS_TOKEN,
+  }
+  
+  const config = createTransporterConfig(envAccount)
+  const transporter = nodemailer.createTransport(config)
   
   transporterCache.set(cacheKey, transporter)
   return {
@@ -167,9 +244,18 @@ export const sendEmailWithAttachments = async (data: {
     mailOptions.cc = Array.isArray(cc) ? cc : [cc]
   }
 
-  const info = await transporter.sendMail(mailOptions)
-  
-  return info
+  try {
+    const info = await transporter.sendMail(mailOptions)
+    return info
+  } catch (error: unknown) {
+    // Provide helpful error messages for Microsoft accounts
+    if (error instanceof Error && isMicrosoftAccount(fromEmail)) {
+      if (error.message.includes('EAUTH') || error.message.includes('Authentication unsuccessful') || error.message.includes('basic authentication is disabled')) {
+        throw new Error(`Microsoft/Outlook accounts require OAuth2 authentication. Basic authentication has been disabled by Microsoft. Please configure OAuth2 credentials (Client ID, Client Secret, and Refresh Token) in your email account settings. Original error: ${error.message}`)
+      }
+    }
+    throw error
+  }
 }
 
 /**
@@ -282,7 +368,32 @@ export const verifySMTPConnection = async (accountId?: string, userId?: string) 
     await transporter.verify()
     return { success: true }
   } catch (error: unknown) {
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    let errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    
+    // Get account info to check if it's Microsoft
+    let accountEmail = ''
+    try {
+      if (accountId && userId) {
+        const account = await getEmailAccount(accountId, userId)
+        if (account) accountEmail = account.email
+      } else if (userId) {
+        const defaultAccount = await getDefaultEmailAccount(userId)
+        if (defaultAccount) accountEmail = defaultAccount.email
+      }
+    } catch {
+      // Ignore errors when fetching account info
+    }
+    
+    // Provide helpful error messages for Microsoft accounts
+    if (error instanceof Error && (isMicrosoftAccount(accountEmail) || isMicrosoftAccount(process.env.SMTP_USER || ''))) {
+      if (errorMessage.includes('EAUTH') || errorMessage.includes('Authentication unsuccessful') || errorMessage.includes('basic authentication is disabled')) {
+        errorMessage = `Microsoft/Outlook accounts require OAuth2 authentication. Basic authentication has been disabled by Microsoft. Please configure OAuth2 credentials (Client ID, Client Secret, and Refresh Token) in your email account settings. For more information, visit: https://support.microsoft.com/en-us/office/outlook-and-other-apps-are-unable-to-connect-to-outlook-com-when-using-basic-authentication-f4202ebf-89c6-4a8a-bec3-3d60cf7deaef`
+      }
+    }
+    
+    return { success: false, error: errorMessage }
   }
 }
+
+
 

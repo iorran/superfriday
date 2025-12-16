@@ -35,3 +35,5 @@ export const emailTemplateSchema = z.object({
 
 export type EmailTemplateFormData = z.infer<typeof emailTemplateSchema>
 
+
+

@@ -40,6 +40,10 @@ interface CreateEmailAccountData {
   smtp_port: number
   smtp_user: string
   smtp_pass: string
+  oauth2_client_id?: string
+  oauth2_client_secret?: string
+  oauth2_refresh_token?: string
+  oauth2_access_token?: string
   is_default?: boolean
 }
 
@@ -50,6 +54,10 @@ interface UpdateEmailAccountData {
   smtp_port?: number
   smtp_user?: string
   smtp_pass?: string
+  oauth2_client_id?: string
+  oauth2_client_secret?: string
+  oauth2_refresh_token?: string
+  oauth2_access_token?: string
   is_default?: boolean
 }
 
@@ -696,6 +704,10 @@ export const getEmailAccounts = async (userId: string): Promise<EmailAccount[]> 
     smtp_port: account.smtp_port || 587,
     smtp_user: account.smtp_user || '',
     smtp_pass: account.smtp_pass || '',
+    oauth2_client_id: account.oauth2_client_id,
+    oauth2_client_secret: account.oauth2_client_secret,
+    oauth2_refresh_token: account.oauth2_refresh_token,
+    oauth2_access_token: account.oauth2_access_token,
     is_default: account.is_default || false,
     created_at: account.created_at?.toISOString(),
     updated_at: account.updated_at?.toISOString(),
@@ -718,6 +730,10 @@ export const getEmailAccount = async (accountId: string, userId: string): Promis
     smtp_port: account.smtp_port || 587,
     smtp_user: account.smtp_user || '',
     smtp_pass: account.smtp_pass || '',
+    oauth2_client_id: account.oauth2_client_id,
+    oauth2_client_secret: account.oauth2_client_secret,
+    oauth2_refresh_token: account.oauth2_refresh_token,
+    oauth2_access_token: account.oauth2_access_token,
     is_default: account.is_default || false,
     created_at: account.created_at?.toISOString(),
     updated_at: account.updated_at?.toISOString(),
@@ -744,6 +760,10 @@ export const getDefaultEmailAccount = async (userId: string): Promise<EmailAccou
     smtp_port: account.smtp_port || 587,
     smtp_user: account.smtp_user || '',
     smtp_pass: account.smtp_pass || '',
+    oauth2_client_id: account.oauth2_client_id,
+    oauth2_client_secret: account.oauth2_client_secret,
+    oauth2_refresh_token: account.oauth2_refresh_token,
+    oauth2_access_token: account.oauth2_access_token,
     is_default: account.is_default || false,
     created_at: account.created_at?.toISOString(),
     updated_at: account.updated_at?.toISOString(),
@@ -756,7 +776,19 @@ export const getDefaultEmailAccount = async (userId: string): Promise<EmailAccou
 export const createEmailAccount = async (data: CreateEmailAccountData, userId: string): Promise<string> => {
   const db = await getDatabase()
   const id = `email-account-${Date.now()}`
-  const { name, email, smtp_host, smtp_port, smtp_user, smtp_pass, is_default } = data
+  const { 
+    name, 
+    email, 
+    smtp_host, 
+    smtp_port, 
+    smtp_user, 
+    smtp_pass, 
+    oauth2_client_id,
+    oauth2_client_secret,
+    oauth2_refresh_token,
+    oauth2_access_token,
+    is_default 
+  } = data
   
   // If this is set as default, unset all other defaults
   if (is_default) {
@@ -766,7 +798,7 @@ export const createEmailAccount = async (data: CreateEmailAccountData, userId: s
     )
   }
   
-  await db.collection('email_accounts').insertOne({
+  const accountData: Record<string, unknown> = {
     id,
     user_id: userId,
     name,
@@ -778,7 +810,14 @@ export const createEmailAccount = async (data: CreateEmailAccountData, userId: s
     is_default: is_default || false,
     created_at: new Date(),
     updated_at: null,
-  })
+  }
+  
+  if (oauth2_client_id) accountData.oauth2_client_id = oauth2_client_id
+  if (oauth2_client_secret) accountData.oauth2_client_secret = oauth2_client_secret
+  if (oauth2_refresh_token) accountData.oauth2_refresh_token = oauth2_refresh_token
+  if (oauth2_access_token) accountData.oauth2_access_token = oauth2_access_token
+  
+  await db.collection('email_accounts').insertOne(accountData)
   
   return id
 }
@@ -798,6 +837,10 @@ export const updateEmailAccount = async (accountId: string, data: UpdateEmailAcc
   if (data.smtp_port !== undefined) update.smtp_port = data.smtp_port
   if (data.smtp_user !== undefined) update.smtp_user = data.smtp_user
   if (data.smtp_pass !== undefined) update.smtp_pass = data.smtp_pass
+  if (data.oauth2_client_id !== undefined) update.oauth2_client_id = data.oauth2_client_id
+  if (data.oauth2_client_secret !== undefined) update.oauth2_client_secret = data.oauth2_client_secret
+  if (data.oauth2_refresh_token !== undefined) update.oauth2_refresh_token = data.oauth2_refresh_token
+  if (data.oauth2_access_token !== undefined) update.oauth2_access_token = data.oauth2_access_token
   
   // If setting as default, unset all other defaults
   if (data.is_default === true) {
@@ -1078,4 +1121,6 @@ export const setSMTPSettings = async (
     { upsert: true }
   )
 }
+
+
 

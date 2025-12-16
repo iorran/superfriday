@@ -56,11 +56,33 @@ export async function POST(request: NextRequest) {
     const userId = session.user.id
 
     const body = await request.json()
-    const { name, email, smtp_host, smtp_port, smtp_user, smtp_pass, is_default } = body
+    const { 
+      name, 
+      email, 
+      smtp_host, 
+      smtp_port, 
+      smtp_user, 
+      smtp_pass, 
+      oauth2_client_id,
+      oauth2_client_secret,
+      oauth2_refresh_token,
+      oauth2_access_token,
+      is_default 
+    } = body
 
-    if (!name || !email || !smtp_host || !smtp_port || !smtp_user || !smtp_pass) {
+    // For OAuth2, we don't need smtp_pass, but for basic auth we do
+    const useOAuth2 = oauth2_client_id && oauth2_client_secret && oauth2_refresh_token
+    
+    if (!name || !email || !smtp_host || !smtp_port || !smtp_user) {
       return NextResponse.json(
-        { error: true, message: 'All fields are required' },
+        { error: true, message: 'Name, email, SMTP host, port, and user are required' },
+        { status: 400 }
+      )
+    }
+    
+    if (!useOAuth2 && !smtp_pass) {
+      return NextResponse.json(
+        { error: true, message: 'SMTP password is required when not using OAuth2' },
         { status: 400 }
       )
     }
@@ -72,7 +94,11 @@ export async function POST(request: NextRequest) {
         smtp_host,
         smtp_port: parseInt(String(smtp_port)),
         smtp_user,
-        smtp_pass,
+        smtp_pass: smtp_pass || '', // Required field but may be empty for OAuth2
+        oauth2_client_id,
+        oauth2_client_secret,
+        oauth2_refresh_token,
+        oauth2_access_token,
         is_default: is_default || false,
       },
       userId
@@ -101,7 +127,20 @@ export async function PUT(request: NextRequest) {
     const userId = session.user.id
 
     const body = await request.json()
-    const { id, name, email, smtp_host, smtp_port, smtp_user, smtp_pass, is_default } = body
+    const { 
+      id, 
+      name, 
+      email, 
+      smtp_host, 
+      smtp_port, 
+      smtp_user, 
+      smtp_pass, 
+      oauth2_client_id,
+      oauth2_client_secret,
+      oauth2_refresh_token,
+      oauth2_access_token,
+      is_default 
+    } = body
 
     if (!id) {
       return NextResponse.json(
@@ -117,6 +156,10 @@ export async function PUT(request: NextRequest) {
       smtp_port?: number
       smtp_user?: string
       smtp_pass?: string
+      oauth2_client_id?: string
+      oauth2_client_secret?: string
+      oauth2_refresh_token?: string
+      oauth2_access_token?: string
       is_default?: boolean
     } = {}
 
@@ -126,6 +169,10 @@ export async function PUT(request: NextRequest) {
     if (smtp_port !== undefined) updateData.smtp_port = parseInt(String(smtp_port))
     if (smtp_user !== undefined) updateData.smtp_user = smtp_user
     if (smtp_pass !== undefined) updateData.smtp_pass = smtp_pass
+    if (oauth2_client_id !== undefined) updateData.oauth2_client_id = oauth2_client_id
+    if (oauth2_client_secret !== undefined) updateData.oauth2_client_secret = oauth2_client_secret
+    if (oauth2_refresh_token !== undefined) updateData.oauth2_refresh_token = oauth2_refresh_token
+    if (oauth2_access_token !== undefined) updateData.oauth2_access_token = oauth2_access_token
     if (is_default !== undefined) updateData.is_default = is_default
 
     await updateEmailAccount(id, updateData, userId)
