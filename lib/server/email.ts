@@ -28,6 +28,21 @@ const isMicrosoftAccount = (email: string, smtpHost?: string): boolean => {
 }
 
 /**
+ * Check if an email is a Gmail account
+ */
+const isGmailAccount = (email: string, smtpHost?: string): boolean => {
+  const emailLower = email.toLowerCase()
+  const hostLower = smtpHost?.toLowerCase() || ''
+  
+  return (
+    emailLower.includes('@gmail.') ||
+    emailLower.includes('@googlemail.') ||
+    hostLower.includes('gmail.') ||
+    hostLower === 'smtp.gmail.com'
+  )
+}
+
+/**
  * Create transporter configuration for an account
  */
 const createTransporterConfig = (account: {
@@ -254,6 +269,14 @@ const sendEmailWithAttachments = async (data: {
         throw new Error(`Microsoft/Outlook accounts require OAuth2 authentication. Basic authentication has been disabled by Microsoft. Please configure OAuth2 credentials (Client ID, Client Secret, and Refresh Token) in your email account settings. Original error: ${error.message}`)
       }
     }
+    
+    // Provide helpful error messages for Gmail accounts
+    if (error instanceof Error && isGmailAccount(fromEmail)) {
+      if (error.message.includes('535') || error.message.includes('BadCredentials') || error.message.includes('Username and Password not accepted') || error.message.includes('EAUTH')) {
+        throw new Error(`Gmail authentication failed. If you have 2-Step Verification enabled, you must use an App Password instead of your regular Gmail password. To create an App Password: 1) Go to your Google Account settings, 2) Enable 2-Step Verification if not already enabled, 3) Go to App Passwords, 4) Generate a new App Password for "Mail", 5) Use that 16-character password in your SMTP settings. For more information, visit: https://support.google.com/mail/answer/185833. Original error: ${error.message}`)
+      }
+    }
+    
     throw error
   }
 }
@@ -416,6 +439,13 @@ export const verifySMTPConnection = async (accountId?: string, userId?: string) 
     if (error instanceof Error && (isMicrosoftAccount(accountEmail) || isMicrosoftAccount(process.env.SMTP_USER || ''))) {
       if (errorMessage.includes('EAUTH') || errorMessage.includes('Authentication unsuccessful') || errorMessage.includes('basic authentication is disabled')) {
         errorMessage = `Microsoft/Outlook accounts require OAuth2 authentication. Basic authentication has been disabled by Microsoft. Please configure OAuth2 credentials (Client ID, Client Secret, and Refresh Token) in your email account settings. For more information, visit: https://support.microsoft.com/en-us/office/outlook-and-other-apps-are-unable-to-connect-to-outlook-com-when-using-basic-authentication-f4202ebf-89c6-4a8a-bec3-3d60cf7deaef`
+      }
+    }
+    
+    // Provide helpful error messages for Gmail accounts
+    if (error instanceof Error && (isGmailAccount(accountEmail) || isGmailAccount(process.env.SMTP_USER || ''))) {
+      if (errorMessage.includes('535') || errorMessage.includes('BadCredentials') || errorMessage.includes('Username and Password not accepted') || errorMessage.includes('EAUTH')) {
+        errorMessage = `Gmail authentication failed. If you have 2-Step Verification enabled, you must use an App Password instead of your regular Gmail password. To create an App Password: 1) Go to your Google Account settings, 2) Enable 2-Step Verification if not already enabled, 3) Go to App Passwords, 4) Generate a new App Password for "Mail", 5) Use that 16-character password in your SMTP settings. For more information, visit: https://support.google.com/mail/answer/185833`
       }
     }
     
