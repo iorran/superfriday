@@ -12,6 +12,7 @@ import {
   deleteEmailAccount,
 } from '@/lib/server/db-operations'
 import { requireAuth } from '@/lib/server/auth'
+import { clearTransporterCache } from '@/lib/server/email'
 
 export async function GET(request: NextRequest) {
   try {
@@ -177,6 +178,15 @@ export async function PUT(request: NextRequest) {
 
     await updateEmailAccount(id, updateData, userId)
 
+    // Clear transporter cache when credentials are updated
+    // This ensures the new credentials are used instead of cached ones
+    if (updateData.smtp_pass !== undefined || updateData.smtp_user !== undefined || 
+        updateData.smtp_host !== undefined || updateData.smtp_port !== undefined ||
+        updateData.oauth2_client_id !== undefined || updateData.oauth2_client_secret !== undefined ||
+        updateData.oauth2_refresh_token !== undefined) {
+      clearTransporterCache(id)
+    }
+
     return NextResponse.json({ success: true })
   } catch (error: unknown) {
     if (error instanceof Error && error.message === 'Unauthorized') {
@@ -210,6 +220,9 @@ export async function DELETE(request: NextRequest) {
     }
 
     await deleteEmailAccount(accountId, userId)
+
+    // Clear transporter cache when account is deleted
+    clearTransporterCache(accountId)
 
     return NextResponse.json({ success: true })
   } catch (error: unknown) {

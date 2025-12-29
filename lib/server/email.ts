@@ -11,6 +11,18 @@ import { getEmailAccount, getDefaultEmailAccount } from './db-operations'
 const transporterCache = new Map<string, nodemailer.Transporter>()
 
 /**
+ * Clear transporter cache for a specific account or all accounts
+ * Call this when email account credentials are updated
+ */
+export const clearTransporterCache = (accountId?: string) => {
+  if (accountId) {
+    transporterCache.delete(`account-${accountId}`)
+  } else {
+    transporterCache.clear()
+  }
+}
+
+/**
  * Check if an email is a Microsoft/Outlook account
  */
 const isMicrosoftAccount = (email: string, smtpHost?: string): boolean => {
@@ -57,16 +69,22 @@ const createTransporterConfig = (account: {
   oauth2_access_token?: string
 }) => {
   const isMicrosoft = isMicrosoftAccount(account.email, account.smtp_host)
+  const isGmail = isGmailAccount(account.email, account.smtp_host)
   
   // For Microsoft accounts, use smtp.office365.com if not already set
   const host = isMicrosoft && !account.smtp_host.includes('office365') && !account.smtp_host.includes('outlook')
     ? 'smtp.office365.com'
     : account.smtp_host
   
-  // For Microsoft accounts on port 587, require TLS
+  // For Gmail, ensure smtp.gmail.com is used
+  const finalHost = isGmail && !host.includes('gmail.com')
+    ? 'smtp.gmail.com'
+    : host
+  
+  // For Microsoft and Gmail accounts on port 587, require TLS
   const port = account.smtp_port
   const secure = port === 465
-  const requireTLS = isMicrosoft && port === 587 && !secure
+  const requireTLS = (isMicrosoft || isGmail) && port === 587 && !secure
   
   // Configure authentication
   let auth: {
@@ -98,7 +116,7 @@ const createTransporterConfig = (account: {
   }
   
   const config: Record<string, unknown> = {
-    host,
+    host: finalHost,
     port,
     secure,
     auth,
@@ -106,6 +124,19 @@ const createTransporterConfig = (account: {
   
   if (requireTLS) {
     config.requireTLS = true
+  }
+  
+  // Gmail-specific configuration
+  if (isGmail) {
+    // Gmail requires TLS for port 587
+    if (port === 587) {
+      config.requireTLS = true
+      config.secure = false
+    }
+    // Gmail on port 465 uses SSL
+    if (port === 465) {
+      config.secure = true
+    }
   }
   
   return config
@@ -263,6 +294,14 @@ const sendEmailWithAttachments = async (data: {
     const info = await transporter.sendMail(mailOptions)
     return info
   } catch (error: unknown) {
+    // Clear cache on authentication errors so user can retry with updated credentials
+    if (error instanceof Error && (error.message.includes('EAUTH') || error.message.includes('535') || error.message.includes('BadCredentials') || error.message.includes('Authentication unsuccessful'))) {
+      // Try to clear cache for the account if we have accountId
+      // Note: We don't have accountId here, so we'll clear all caches on auth errors
+      // This is safe as it will force recreation of transporters with fresh credentials
+      transporterCache.clear()
+    }
+    
     // Provide helpful error messages for Microsoft accounts
     if (error instanceof Error && isMicrosoftAccount(fromEmail)) {
       if (error.message.includes('EAUTH') || error.message.includes('Authentication unsuccessful') || error.message.includes('basic authentication is disabled')) {
@@ -273,7 +312,25 @@ const sendEmailWithAttachments = async (data: {
     // Provide helpful error messages for Gmail accounts
     if (error instanceof Error && isGmailAccount(fromEmail)) {
       if (error.message.includes('535') || error.message.includes('BadCredentials') || error.message.includes('Username and Password not accepted') || error.message.includes('EAUTH')) {
-        throw new Error(`Gmail authentication failed. If you have 2-Step Verification enabled, you must use an App Password instead of your regular Gmail password. To create an App Password: 1) Go to your Google Account settings, 2) Enable 2-Step Verification if not already enabled, 3) Go to App Passwords, 4) Generate a new App Password for "Mail", 5) Use that 16-character password in your SMTP settings. For more information, visit: https://support.google.com/mail/answer/185833. Original error: ${error.message}`)
+        const detailedMessage = `Gmail authentication failed. Common issues:
+1. App Password: If you have 2-Step Verification enabled, you MUST use an App Password (not your regular Gmail password). The App Password is a 16-character code without spaces.
+2. Username: Make sure you're using your FULL Gmail address (e.g., yourname@gmail.com) as the SMTP username.
+3. Settings: Verify your SMTP settings:
+   - Host: smtp.gmail.com
+   - Port: 587 (TLS) or 465 (SSL)
+   - Username: your full Gmail address
+   - Password: 16-character App Password (no spaces)
+
+To create an App Password:
+1. Go to https://myaccount.google.com/
+2. Security → 2-Step Verification (enable if not already)
+3. App Passwords → Generate new password for "Mail"
+4. Copy the 16-character password (no spaces) and use it in SMTP settings
+
+For more information: https://support.google.com/mail/answer/185833
+
+Original error: ${error.message}`
+        throw new Error(detailedMessage)
       }
     }
     
@@ -445,7 +502,22 @@ export const verifySMTPConnection = async (accountId?: string, userId?: string) 
     // Provide helpful error messages for Gmail accounts
     if (error instanceof Error && (isGmailAccount(accountEmail) || isGmailAccount(process.env.SMTP_USER || ''))) {
       if (errorMessage.includes('535') || errorMessage.includes('BadCredentials') || errorMessage.includes('Username and Password not accepted') || errorMessage.includes('EAUTH')) {
-        errorMessage = `Gmail authentication failed. If you have 2-Step Verification enabled, you must use an App Password instead of your regular Gmail password. To create an App Password: 1) Go to your Google Account settings, 2) Enable 2-Step Verification if not already enabled, 3) Go to App Passwords, 4) Generate a new App Password for "Mail", 5) Use that 16-character password in your SMTP settings. For more information, visit: https://support.google.com/mail/answer/185833`
+        errorMessage = `Gmail authentication failed. Common issues:
+1. App Password: If you have 2-Step Verification enabled, you MUST use an App Password (not your regular Gmail password). The App Password is a 16-character code without spaces.
+2. Username: Make sure you're using your FULL Gmail address (e.g., yourname@gmail.com) as the SMTP username.
+3. Settings: Verify your SMTP settings:
+   - Host: smtp.gmail.com
+   - Port: 587 (TLS) or 465 (SSL)
+   - Username: your full Gmail address
+   - Password: 16-character App Password (no spaces)
+
+To create an App Password:
+1. Go to https://myaccount.google.com/
+2. Security → 2-Step Verification (enable if not already)
+3. App Passwords → Generate new password for "Mail"
+4. Copy the 16-character password (no spaces) and use it in SMTP settings
+
+For more information: https://support.google.com/mail/answer/185833`
       }
     }
     
