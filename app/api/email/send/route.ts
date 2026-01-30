@@ -82,10 +82,10 @@ export async function POST(request: NextRequest) {
     const replaceVariables = (text: string) => {
       if (!text) return ''
       
-      // Format month name in Portuguese
+      // Format month name in English
       const monthNames = [
-        'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-        'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'
       ]
       const monthName = invoice.month ? monthNames[invoice.month - 1] || String(invoice.month) : ''
       const monthYear = invoice.month && invoice.year ? `${monthName} ${invoice.year}` : (invoice.year ? String(invoice.year) : '')

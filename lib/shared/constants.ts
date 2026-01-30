@@ -13,16 +13,16 @@ export const EMAIL_TEMPLATE_VARIABLES = [
   { name: 'invoiceAmount', description: 'Valor da invoice', example: '{{invoiceAmount}}' },
   { name: 'month', description: 'Mês da invoice (número)', example: '{{month}}' },
   { name: 'year', description: 'Ano da invoice', example: '{{year}}' },
-  { name: 'monthYear', description: 'Mês e ano formatado (ex: Janeiro 2024)', example: '{{monthYear}}' },
+  { name: 'monthYear', description: 'Month and year formatted (e.g., January 2024)', example: '{{monthYear}}' },
   { name: 'downloadLink', description: 'Link para download do arquivo', example: '{{downloadLink}}' },
 ] as const
 
 /**
- * Month names in Portuguese
+ * Month names in English
  */
-export const MONTH_NAMES_PT = [
-  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+export const MONTH_NAMES_EN = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
 ] as const
 
 /**
