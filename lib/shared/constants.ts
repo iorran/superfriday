@@ -15,6 +15,9 @@ export const EMAIL_TEMPLATE_VARIABLES = [
   { name: 'year', description: 'Ano da invoice', example: '{{year}}' },
   { name: 'monthYear', description: 'Month and year formatted (e.g., January 2024)', example: '{{monthYear}}' },
   { name: 'downloadLink', description: 'Link para download do arquivo', example: '{{downloadLink}}' },
+  { name: 'currentDate', description: 'Data atual (ex: 30/01/2026)', example: '{{currentDate}}' },
+  { name: 'clientVat', description: 'Número de registro/VAT do cliente', example: '{{clientVat}}' },
+  { name: 'clientAddress', description: 'Endereço completo do cliente', example: '{{clientAddress}}' },
 ] as const
 
 /**

@@ -6,7 +6,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sendInvoiceToClient, sendInvoiceToAccountant } from '@/lib/server/email'
 import { updateInvoiceState, recordEmail, getInvoice, getAccountantEmail, getEmailTemplateByClient, getAccountantEmailTemplate, getClient, getSetting } from '@/lib/server/db-operations'
-import { getDatabase } from '@/lib/server/db'
 import { requireAuth } from '@/lib/server/auth'
 import type { Invoice, InvoiceFile, EmailTemplate } from '@/types'
 
@@ -78,10 +77,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Get client data for template variables
+    const client = await getClient(clientId, userId)
+
     // Replace template variables
     const replaceVariables = (text: string) => {
       if (!text) return ''
-      
+
       // Format month name in English
       const monthNames = [
         'January', 'February', 'March', 'April', 'May', 'June',
@@ -89,7 +91,15 @@ export async function POST(request: NextRequest) {
       ]
       const monthName = invoice.month ? monthNames[invoice.month - 1] || String(invoice.month) : ''
       const monthYear = invoice.month && invoice.year ? `${monthName} ${invoice.year}` : (invoice.year ? String(invoice.year) : '')
-      
+
+      // Format current date in Portuguese format (dd/mm/yyyy)
+      const now = new Date()
+      const currentDate = now.toLocaleDateString('pt-PT', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      })
+
       return text
         .replace(/\{\{clientName\}\}/g, invoice.client_name || '')
         .replace(/\{\{invoiceName\}\}/g, invoice.id || '')
@@ -98,8 +108,11 @@ export async function POST(request: NextRequest) {
         .replace(/\{\{year\}\}/g, invoice.year ? String(invoice.year) : '')
         .replace(/\{\{monthYear\}\}/g, monthYear)
         .replace(/\{\{downloadLink\}\}/g, '') // Not applicable for attachments
+        .replace(/\{\{currentDate\}\}/g, currentDate)
+        .replace(/\{\{clientVat\}\}/g, client?.vat || '')
+        .replace(/\{\{clientAddress\}\}/g, client?.address || '')
     }
-    
+
     // Use template subject and body, replacing variables
     const finalSubject = replaceVariables(template.subject || '')
     const finalBody = replaceVariables(template.body || '')
@@ -132,20 +145,16 @@ export async function POST(request: NextRequest) {
         })
         .map((f: InvoiceFile) => f.file_key)
 
-      // Get CC emails from client
+      // Get CC emails from client (using client data already fetched above)
       let ccEmails: string[] = []
-      if (invoice.client_id) {
-        const db = await getDatabase()
-        const client = await db.collection('clients').findOne({ id: invoice.client_id, user_id: userId })
-        if (client && client.cc_emails) {
-          // MongoDB stores arrays directly, no need to parse JSON
-          ccEmails = Array.isArray(client.cc_emails)
-            ? client.cc_emails.filter((email: unknown) => {
-                const emailStr = typeof email === 'string' ? email : String(email || '')
-                return emailStr.trim().length > 0
-              })
-            : []
-        }
+      if (client && client.cc_emails) {
+        // MongoDB stores arrays directly, no need to parse JSON
+        ccEmails = Array.isArray(client.cc_emails)
+          ? client.cc_emails.filter((email: unknown) => {
+              const emailStr = typeof email === 'string' ? email : String(email || '')
+              return emailStr.trim().length > 0
+            })
+          : []
       }
 
       console.log('Sending email to client:', { 
@@ -212,19 +221,17 @@ export async function POST(request: NextRequest) {
       })
 
       // If client uses GBP, use manual EUR amount if provided, otherwise convert automatically
+      // (using client data already fetched above)
       let finalInvoiceAmountEur = null
-      if (invoice.client_id) {
-        const client = await getClient(invoice.client_id, userId)
-        if (client && client.currency === 'GBP' && invoice.invoice_amount) {
-          // Use manually entered EUR amount if provided, otherwise calculate using conversion rate
-          if (invoiceAmountEur !== undefined && invoiceAmountEur !== null) {
-            finalInvoiceAmountEur = invoiceAmountEur
-          } else {
-            // Fallback to automatic conversion (for backwards compatibility)
-            const gbpToEurRateStr = await getSetting('gbp_to_eur_rate', userId)
-            const gbpToEurRate = gbpToEurRateStr ? parseFloat(gbpToEurRateStr) : 1.15
-            finalInvoiceAmountEur = invoice.invoice_amount * gbpToEurRate
-          }
+      if (client && client.currency === 'GBP' && invoice.invoice_amount) {
+        // Use manually entered EUR amount if provided, otherwise calculate using conversion rate
+        if (invoiceAmountEur !== undefined && invoiceAmountEur !== null) {
+          finalInvoiceAmountEur = invoiceAmountEur
+        } else {
+          // Fallback to automatic conversion (for backwards compatibility)
+          const gbpToEurRateStr = await getSetting('gbp_to_eur_rate', userId)
+          const gbpToEurRate = gbpToEurRateStr ? parseFloat(gbpToEurRateStr) : 1.15
+          finalInvoiceAmountEur = invoice.invoice_amount * gbpToEurRate
         }
       }
 
