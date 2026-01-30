@@ -495,6 +495,7 @@ const FileList = () => {
             deletingInvoice={deletingInvoice}
             sendingEmail={sendingEmail}
             onSendEmail={handleSendEmail}
+            onStateChange={handleStateChange}
             onDelete={handleDelete}
             onEdit={setEditingInvoiceId}
             onEditClientEmail={handleEditClientEmail}

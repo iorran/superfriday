@@ -18,6 +18,7 @@ interface InvoiceGroupProps {
   deletingInvoice: string | null
   sendingEmail: string | null
   onSendEmail: (invoiceId: string, recipientType: 'client' | 'accountant') => void
+  onStateChange: (invoiceId: string, updates: { sentToClient?: boolean; sentToAccountant?: boolean }) => void
   onDelete: (invoiceId: string, clientName: string) => void
   onEdit: (invoiceId: string) => void
   onEditClientEmail: (clientId: string, email: string) => void
@@ -42,6 +43,7 @@ const InvoiceGroup = ({
   deletingInvoice,
   sendingEmail,
   onSendEmail,
+  onStateChange,
   onDelete,
   onEdit,
   onEditClientEmail,
@@ -86,6 +88,7 @@ const InvoiceGroup = ({
                 deletingInvoice={deletingInvoice}
                 sendingEmail={sendingEmail}
                 onSendEmail={onSendEmail}
+                onStateChange={onStateChange}
                 onDelete={onDelete}
                 onEdit={onEdit}
                 onEditClientEmail={onEditClientEmail}

@@ -12,7 +12,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
-import { FileText, Trash2, CheckCircle2, Send, Edit, Loader2, Mail, AlertCircle } from 'lucide-react'
+import { FileText, Trash2, CheckCircle2, Send, Edit, Loader2, Mail, AlertCircle, Download } from 'lucide-react'
 import type { InvoiceFile, Client } from '@/types'
 
 interface FormattedInvoice {
@@ -38,6 +38,7 @@ interface InvoiceItemProps {
   deletingInvoice: string | null
   sendingEmail: string | null
   onSendEmail: (invoiceId: string, recipientType: 'client' | 'accountant') => void
+  onStateChange: (invoiceId: string, updates: { sentToClient?: boolean; sentToAccountant?: boolean }) => void
   onDelete: (invoiceId: string, clientName: string) => void
   onEdit: (invoiceId: string) => void
   onEditClientEmail: (clientId: string, email: string) => void
@@ -98,6 +99,7 @@ const InvoiceItem = ({
   deletingInvoice,
   sendingEmail,
   onSendEmail,
+  onStateChange,
   onDelete,
   onEdit,
   onEditClientEmail,
@@ -138,6 +140,61 @@ const InvoiceItem = ({
     if (!invoice.sentToAccountant && sendingEmail !== `${invoice.id}-accountant`) {
       onSendEmail(invoice.id, 'accountant')
     }
+  }
+
+  const handleDownloadFile = async (fileKey: string, originalName: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    try {
+      const encodedFileKey = encodeURIComponent(fileKey)
+      const response = await fetch(`/api/files/${encodedFileKey}`)
+
+      if (!response.ok) {
+        throw new Error('Falha ao baixar arquivo')
+      }
+
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = originalName
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+
+      onShowToast(
+        "Download Concluído",
+        `Arquivo ${originalName} baixado com sucesso`,
+        "default"
+      )
+    } catch (error) {
+      console.error('Error downloading file:', error)
+      onShowToast(
+        "Erro no Download",
+        error instanceof Error ? error.message : "Falha ao baixar arquivo",
+        "destructive"
+      )
+    }
+  }
+
+  const handleToggleClientStatus = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    const newStatus = !invoice.sentToClient
+    onStateChange(invoice.id, { sentToClient: newStatus })
+  }
+
+  const handleToggleAccountantStatus = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!invoice.sentToClient) {
+      onShowToast(
+        "Ação não permitida",
+        "Você deve marcar como enviado para o cliente antes de marcar como enviado para o contador",
+        "destructive"
+      )
+      return
+    }
+    const newStatus = !invoice.sentToAccountant
+    onStateChange(invoice.id, { sentToAccountant: newStatus })
   }
 
   return (
@@ -286,9 +343,61 @@ const InvoiceItem = ({
               )}
             </button>
           </div>
+
+          {/* Manual Status Toggle */}
+          <div className="flex items-center gap-2 mt-3 pt-3 border-t flex-wrap" role="group" aria-label="Status manual">
+            <p className="text-xs text-muted-foreground mr-2">Status Manual:</p>
+            <button
+              type="button"
+              onClick={handleToggleClientStatus}
+              aria-label={invoice.sentToClient ? 'Marcar como não enviado para cliente' : 'Marcar como enviado para cliente'}
+              tabIndex={0}
+              className={`flex items-center gap-1 text-xs px-3 py-1.5 rounded transition-all ${
+                invoice.sentToClient
+                  ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-800 cursor-pointer'
+                  : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 cursor-pointer'
+              }`}
+            >
+              <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+              {invoice.sentToClient ? 'Cliente ✓' : 'Cliente'}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleToggleAccountantStatus}
+              disabled={!invoice.sentToClient}
+              aria-label={invoice.sentToAccountant ? 'Marcar como não enviado para contador' : 'Marcar como enviado para contador'}
+              aria-disabled={!invoice.sentToClient}
+              tabIndex={0}
+              className={`flex items-center gap-1 text-xs px-3 py-1.5 rounded transition-all ${
+                invoice.sentToAccountant
+                  ? 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-800 cursor-pointer'
+                  : !invoice.sentToClient
+                  ? 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-600 cursor-not-allowed opacity-50'
+                  : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 cursor-pointer'
+              }`}
+            >
+              <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+              {invoice.sentToAccountant ? 'Contador ✓' : 'Contador'}
+            </button>
+          </div>
         </div>
 
         <div className="flex items-center gap-2" role="group" aria-label="Ações da invoice">
+          {invoiceFiles.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation()
+                handleDownloadFile(invoiceFiles[0].file_key, invoiceFiles[0].original_name, e)
+              }}
+              aria-label="Baixar invoice"
+              tabIndex={0}
+            >
+              <Download className="h-4 w-4" aria-hidden="true" />
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
