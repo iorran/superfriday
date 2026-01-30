@@ -7,6 +7,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { sendInvoiceToClient, sendInvoiceToAccountant } from '@/lib/server/email'
 import { updateInvoiceState, recordEmail, getInvoice, getAccountantEmail, getEmailTemplateByClient, getAccountantEmailTemplate, getClient, getSetting } from '@/lib/server/db-operations'
 import { requireAuth } from '@/lib/server/auth'
+import { MONTH_NAMES_EN } from '@/lib/shared/constants'
+import { formatCurrency, formatCurrentDate } from '@/lib/shared/utils'
 import type { Invoice, InvoiceFile, EmailTemplate } from '@/types'
 
 export async function POST(request: NextRequest) {
@@ -84,31 +86,18 @@ export async function POST(request: NextRequest) {
     const replaceVariables = (text: string) => {
       if (!text) return ''
 
-      // Format month name in English
-      const monthNames = [
-        'January', 'February', 'March', 'April', 'May', 'June',
-        'July', 'August', 'September', 'October', 'November', 'December'
-      ]
-      const monthName = invoice.month ? monthNames[invoice.month - 1] || String(invoice.month) : ''
+      const monthName = invoice.month ? MONTH_NAMES_EN[invoice.month - 1] || String(invoice.month) : ''
       const monthYear = invoice.month && invoice.year ? `${monthName} ${invoice.year}` : (invoice.year ? String(invoice.year) : '')
-
-      // Format current date in Portuguese format (dd/mm/yyyy)
-      const now = new Date()
-      const currentDate = now.toLocaleDateString('pt-PT', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric'
-      })
 
       return text
         .replace(/\{\{clientName\}\}/g, invoice.client_name || '')
         .replace(/\{\{invoiceName\}\}/g, invoice.id || '')
-        .replace(/\{\{invoiceAmount\}\}/g, invoice.invoice_amount ? new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(invoice.invoice_amount) : '')
+        .replace(/\{\{invoiceAmount\}\}/g, invoice.invoice_amount ? formatCurrency(invoice.invoice_amount) : '')
         .replace(/\{\{month\}\}/g, invoice.month ? String(invoice.month) : '')
         .replace(/\{\{year\}\}/g, invoice.year ? String(invoice.year) : '')
         .replace(/\{\{monthYear\}\}/g, monthYear)
         .replace(/\{\{downloadLink\}\}/g, '') // Not applicable for attachments
-        .replace(/\{\{currentDate\}\}/g, currentDate)
+        .replace(/\{\{currentDate\}\}/g, formatCurrentDate())
         .replace(/\{\{clientVat\}\}/g, client?.vat || '')
         .replace(/\{\{clientAddress\}\}/g, client?.address || '')
     }

@@ -13,6 +13,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import { FileText, Trash2, CheckCircle2, Send, Edit, Loader2, Mail, AlertCircle, Download } from 'lucide-react'
+import { formatCurrency, formatFileSize, formatInvoiceDate } from '@/lib/shared/utils'
 import type { InvoiceFile, Client } from '@/types'
 
 interface FormattedInvoice {
@@ -43,50 +44,6 @@ interface InvoiceItemProps {
   onEdit: (invoiceId: string) => void
   onEditClientEmail: (clientId: string, email: string) => void
   onShowToast: (title: string, description: string, variant: 'default' | 'destructive') => void
-}
-
-const formatFileSize = (bytes: number) => {
-  if (!bytes) return '0 Bytes'
-  const k = 1024
-  const sizes = ['Bytes', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
-}
-
-const formatInvoiceDate = (month: number | null, year: number | null, uploadedAt?: string) => {
-  if (!month || !year) return ''
-  
-  const monthNames = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-  ]
-  
-  const monthName = monthNames[month - 1] || String(month)
-  
-  let day = 1
-  if (uploadedAt) {
-    try {
-      const date = new Date(uploadedAt)
-      if (!isNaN(date.getTime())) {
-        day = date.getDate()
-      }
-    } catch {
-      // Use default day 1
-    }
-  }
-  
-  return `${day} ${monthName} ${year}`
-}
-
-const formatCurrency = (amount: number | null | undefined, currency: string = 'EUR') => {
-  if (amount === null || amount === undefined) {
-    const symbol = currency === 'GBP' ? '£' : '€'
-    return `${symbol}0,00`
-  }
-  return new Intl.NumberFormat('pt-PT', {
-    style: 'currency',
-    currency: currency === 'GBP' ? 'GBP' : 'EUR',
-  }).format(amount)
 }
 
 const getTotalFileSize = (files: InvoiceFile[]) => {

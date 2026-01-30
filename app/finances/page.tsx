@@ -3,6 +3,7 @@
 import { useFinances } from '@/hooks/use-finances'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2, TrendingUp, DollarSign, Clock, Send } from 'lucide-react'
+import { formatCurrency } from '@/lib/shared/utils'
 import {
   BarChart,
   Bar,
@@ -23,13 +24,6 @@ const COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#ef4444'
 
 const FinancesPage = () => {
   const { data: finances, isLoading } = useFinances()
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('pt-PT', {
-      style: 'currency',
-      currency: 'EUR',
-    }).format(amount)
-  }
 
   if (isLoading) {
     return (

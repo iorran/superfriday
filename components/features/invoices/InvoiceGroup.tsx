@@ -4,6 +4,7 @@ import { Card } from '@/components/ui/card'
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible'
 import { FileText } from 'lucide-react'
 import { InvoiceItem } from './InvoiceItem'
+import { formatCurrency } from '@/lib/shared/utils'
 import type { FormattedInvoice } from './InvoiceItem'
 import type { Client } from '@/types'
 
@@ -23,13 +24,6 @@ interface InvoiceGroupProps {
   onEdit: (invoiceId: string) => void
   onEditClientEmail: (clientId: string, email: string) => void
   onShowToast: (title: string, description: string, variant: 'default' | 'destructive') => void
-}
-
-const formatCurrency = (amount: number, currency: string = 'EUR') => {
-  return new Intl.NumberFormat('pt-PT', {
-    style: 'currency',
-    currency: currency === 'GBP' ? 'GBP' : 'EUR',
-  }).format(amount)
 }
 
 const InvoiceGroup = ({

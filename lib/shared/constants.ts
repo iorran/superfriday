@@ -36,6 +36,14 @@ export const MONTH_NAMES_SHORT = [
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
 ] as const
 
+/**
+ * Month names in Portuguese
+ */
+export const MONTH_NAMES_PT = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+] as const
+
 
 
 

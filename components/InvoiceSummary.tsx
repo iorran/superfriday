@@ -5,6 +5,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { FileText, Euro, Calendar, User, CheckCircle2 } from 'lucide-react'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale/pt-BR'
+import { formatCurrency, formatFileSize } from '@/lib/shared/utils'
 import type { Client } from '@/types'
 
 interface InvoiceSummaryProps {
@@ -27,21 +28,7 @@ const InvoiceSummary = ({
   year,
   files,
 }: InvoiceSummaryProps) => {
-  const formatCurrency = (amount: number) => {
-    const currency = client?.currency || 'EUR'
-    return new Intl.NumberFormat('pt-PT', {
-      style: 'currency',
-      currency: currency === 'GBP' ? 'GBP' : 'EUR',
-    }).format(amount)
-  }
-
-  const formatFileSize = (bytes: number) => {
-    if (!bytes) return '0 Bytes'
-    const k = 1024
-    const sizes = ['Bytes', 'KB', 'MB', 'GB']
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
-  }
+  const clientCurrency = client?.currency || 'EUR'
 
   const getMonthName = (month: number, year: number) => {
     try {
@@ -123,7 +110,7 @@ const InvoiceSummary = ({
                 <div className="flex-1">
                   <p className="text-sm text-muted-foreground mb-1">Valor</p>
                   <p className="text-2xl font-bold text-primary">
-                    {formatCurrency(invoiceAmount)}
+                    {formatCurrency(invoiceAmount, clientCurrency)}
                   </p>
                 </div>
               </div>

@@ -236,52 +236,14 @@ const FileList = () => {
       }
     }
 
-    // Proceed with email sending
+    // Proceed with email sending - template replacement is handled by the API
     try {
       setSendingEmail(`${invoiceId}-${recipientType}`)
-
-      const monthNames = [
-        'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-        'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
-      ]
-      const monthName = invoice.month ? monthNames[invoice.month - 1] || String(invoice.month) : ''
-      const monthYear = invoice.month && invoice.year ? `${monthName} ${invoice.year}` : (invoice.year ? String(invoice.year) : '')
-      
-      // Get client currency for formatting
-      const invoiceClient = clients.find((c) => c.id === invoice.client_id)
-      const invoiceCurrency = invoiceClient?.currency || 'EUR'
-      
-      const subject = template.subject
-        .replace(/\{\{clientName\}\}/g, invoice.client_name || '')
-        .replace(/\{\{invoiceName\}\}/g, invoice.id || '')
-        .replace(/\{\{invoiceAmount\}\}/g, invoice.invoice_amount ? new Intl.NumberFormat('pt-PT', { style: 'currency', currency: invoiceCurrency === 'GBP' ? 'GBP' : 'EUR' }).format(invoice.invoice_amount) : '')
-        .replace(/\{\{month\}\}/g, invoice.month ? String(invoice.month) : '')
-        .replace(/\{\{year\}\}/g, invoice.year ? String(invoice.year) : '')
-        .replace(/\{\{monthYear\}\}/g, monthYear)
-        .replace(/\{\{downloadLink\}\}/g, '')
-      
-      const body = template.body
-        .replace(/\{\{clientName\}\}/g, invoice.client_name || '')
-        .replace(/\{\{invoiceName\}\}/g, invoice.id || '')
-        .replace(/\{\{invoiceAmount\}\}/g, invoice.invoice_amount ? new Intl.NumberFormat('pt-PT', { style: 'currency', currency: invoiceCurrency === 'GBP' ? 'GBP' : 'EUR' }).format(invoice.invoice_amount) : '')
-        .replace(/\{\{month\}\}/g, invoice.month ? String(invoice.month) : '')
-        .replace(/\{\{year\}\}/g, invoice.year ? String(invoice.year) : '')
-        .replace(/\{\{monthYear\}\}/g, monthYear)
-        .replace(/\{\{downloadLink\}\}/g, '')
 
       await sendEmailMutation.mutateAsync({
         invoiceId,
         recipientType,
-        subject,
-        body,
-        // invoiceAmountEur will be set by dialog for GBP invoices if needed
       })
-
-      if (recipientType === 'client') {
-        await handleStateChange(invoiceId, { sentToClient: true })
-      } else {
-        await handleStateChange(invoiceId, { sentToAccountant: true })
-      }
 
       toast({
         title: "Email Enviado",
@@ -299,7 +261,7 @@ const FileList = () => {
     } finally {
       setSendingEmail(null)
     }
-  }, [allInvoices, clients, toast, handleStateChange, sendEmailMutation, emailTemplates])
+  }, [allInvoices, clients, toast, sendEmailMutation, emailTemplates])
 
   const handleSignedPDFSuccess = useCallback(() => {
     if (pendingEmailSend) {
@@ -316,65 +278,15 @@ const FileList = () => {
     const { invoiceId } = pendingAccountantSend
     setPendingAccountantSend(null)
 
-    // Proceed with email sending using the manually entered EUR amount
+    // Proceed with email sending - template replacement is handled by the API
     try {
       setSendingEmail(`${invoiceId}-accountant`)
-
-      const invoice = allInvoices.find((inv: FormattedInvoice) => inv.id === invoiceId)
-      if (!invoice) {
-        toast({
-          title: "Erro",
-          description: "Invoice não encontrada",
-          variant: "destructive",
-        })
-        return
-      }
-
-      // For accountant emails, require accountant template - NO FALLBACK
-      const template = emailTemplates.find((t: EmailTemplate) => t.client_id === null)
-      if (!template) {
-        toast({
-          title: "Template Não Encontrado",
-          description: `Nenhum template de email encontrado para o contador. Por favor, crie um template para o contador antes de enviar emails.`,
-          variant: "destructive",
-        })
-        return
-      }
-
-      const monthNames = [
-        'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-        'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
-      ]
-      const monthName = invoice.month ? monthNames[invoice.month - 1] || String(invoice.month) : ''
-      const monthYear = invoice.month && invoice.year ? `${monthName} ${invoice.year}` : (invoice.year ? String(invoice.year) : '')
-      
-      const subject = template.subject
-        .replace(/\{\{clientName\}\}/g, invoice.client_name || '')
-        .replace(/\{\{invoiceName\}\}/g, invoice.id || '')
-        .replace(/\{\{invoiceAmount\}\}/g, new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(eurAmount))
-        .replace(/\{\{month\}\}/g, invoice.month ? String(invoice.month) : '')
-        .replace(/\{\{year\}\}/g, invoice.year ? String(invoice.year) : '')
-        .replace(/\{\{monthYear\}\}/g, monthYear)
-        .replace(/\{\{downloadLink\}\}/g, '')
-      
-      const body = template.body
-        .replace(/\{\{clientName\}\}/g, invoice.client_name || '')
-        .replace(/\{\{invoiceName\}\}/g, invoice.id || '')
-        .replace(/\{\{invoiceAmount\}\}/g, new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(eurAmount))
-        .replace(/\{\{month\}\}/g, invoice.month ? String(invoice.month) : '')
-        .replace(/\{\{year\}\}/g, invoice.year ? String(invoice.year) : '')
-        .replace(/\{\{monthYear\}\}/g, monthYear)
-        .replace(/\{\{downloadLink\}\}/g, '')
 
       await sendEmailMutation.mutateAsync({
         invoiceId,
         recipientType: 'accountant',
-        subject,
-        body,
         invoiceAmountEur: eurAmount,
       })
-
-      await handleStateChange(invoiceId, { sentToAccountant: true })
 
       toast({
         title: "Email Enviado",
@@ -392,7 +304,7 @@ const FileList = () => {
     } finally {
       setSendingEmail(null)
     }
-  }, [pendingAccountantSend, allInvoices, emailTemplates, sendEmailMutation, handleStateChange, toast])
+  }, [pendingAccountantSend, sendEmailMutation, toast])
 
   const handleDelete = useCallback(async (invoiceId: string, clientName: string) => {
     try {
