@@ -210,7 +210,14 @@ const InvoiceItem = ({
             <div className="flex-1">
               <div className="flex items-center gap-2">
                 <p className="font-medium">
-                  {formatInvoiceDate(invoice.month, invoice.year, invoice.uploaded_at) || invoice.client_name || 'Sem cliente'}
+                  {formatInvoiceDate(invoice.month, invoice.year, invoice.uploaded_at) ? (
+                    <>
+                      {formatInvoiceDate(invoice.month, invoice.year, invoice.uploaded_at)}
+                      {invoice.client_name && ` - ${invoice.client_name}`}
+                    </>
+                  ) : (
+                    invoice.client_name || 'Sem cliente'
+                  )}
                 </p>
                 {(!invoice.client_email || invoice.client_email.trim() === '') && (
                   <button
