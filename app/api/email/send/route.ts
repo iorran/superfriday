@@ -81,6 +81,19 @@ export async function POST(request: NextRequest) {
 
     // Get client data for template variables
     const client = await getClient(clientId, userId)
+    const clientCurrency = client?.currency || 'EUR'
+
+    // Compute EUR amount for GBP clients (needed for template variable and DB storage)
+    let computedInvoiceAmountEur: number | null = null
+    if (clientCurrency === 'GBP' && invoice.invoice_amount) {
+      if (invoiceAmountEur !== undefined && invoiceAmountEur !== null) {
+        computedInvoiceAmountEur = invoiceAmountEur
+      } else {
+        const gbpToEurRateStr = await getSetting('gbp_to_eur_rate', userId)
+        const gbpToEurRate = gbpToEurRateStr ? parseFloat(gbpToEurRateStr) : 1.15
+        computedInvoiceAmountEur = invoice.invoice_amount * gbpToEurRate
+      }
+    }
 
     // Replace template variables
     const replaceVariables = (text: string) => {
@@ -89,10 +102,16 @@ export async function POST(request: NextRequest) {
       const monthName = invoice.month ? MONTH_NAMES_EN[invoice.month - 1] || String(invoice.month) : ''
       const monthYear = invoice.month && invoice.year ? `${monthName} ${invoice.year}` : (invoice.year ? String(invoice.year) : '')
 
+      // For invoiceAmountEur: use computed EUR amount for GBP clients, otherwise same as invoiceAmount
+      const eurAmount = clientCurrency === 'GBP' && computedInvoiceAmountEur !== null
+        ? formatCurrency(computedInvoiceAmountEur, 'EUR')
+        : (invoice.invoice_amount ? formatCurrency(invoice.invoice_amount, 'EUR') : '')
+
       return text
         .replace(/\{\{clientName\}\}/g, invoice.client_name || '')
         .replace(/\{\{invoiceName\}\}/g, invoice.id || '')
-        .replace(/\{\{invoiceAmount\}\}/g, invoice.invoice_amount ? formatCurrency(invoice.invoice_amount) : '')
+        .replace(/\{\{invoiceAmount\}\}/g, invoice.invoice_amount ? formatCurrency(invoice.invoice_amount, clientCurrency) : '')
+        .replace(/\{\{invoiceAmountEur\}\}/g, eurAmount)
         .replace(/\{\{month\}\}/g, invoice.month ? String(invoice.month) : '')
         .replace(/\{\{year\}\}/g, invoice.year ? String(invoice.year) : '')
         .replace(/\{\{monthYear\}\}/g, monthYear)
@@ -209,25 +228,10 @@ export async function POST(request: NextRequest) {
         userId,
       })
 
-      // If client uses GBP, use manual EUR amount if provided, otherwise convert automatically
-      // (using client data already fetched above)
-      let finalInvoiceAmountEur = null
-      if (client && client.currency === 'GBP' && invoice.invoice_amount) {
-        // Use manually entered EUR amount if provided, otherwise calculate using conversion rate
-        if (invoiceAmountEur !== undefined && invoiceAmountEur !== null) {
-          finalInvoiceAmountEur = invoiceAmountEur
-        } else {
-          // Fallback to automatic conversion (for backwards compatibility)
-          const gbpToEurRateStr = await getSetting('gbp_to_eur_rate', userId)
-          const gbpToEurRate = gbpToEurRateStr ? parseFloat(gbpToEurRateStr) : 1.15
-          finalInvoiceAmountEur = invoice.invoice_amount * gbpToEurRate
-        }
-      }
-
-      // Update invoice state with EUR amount if converted
-      await updateInvoiceState(invoiceId, { 
+      // Update invoice state with EUR amount if converted (computed earlier for template variables)
+      await updateInvoiceState(invoiceId, {
         sentToAccountant: true,
-        invoiceAmountEur: finalInvoiceAmountEur,
+        invoiceAmountEur: computedInvoiceAmountEur,
       }, userId)
     } else {
       return NextResponse.json(

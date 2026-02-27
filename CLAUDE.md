@@ -4,342 +4,191 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Common Commands
 
-### Development
 ```bash
-npm run dev          # Start development server (localhost:3000)
-npm run build        # Build for production
-npm start            # Start production server
-npm run lint         # Run ESLint
-```
-
-### Database
-```bash
-npm run db:init      # Initialize database (creates indexes and schema)
-npm run db:migrate   # Alias for db:init
-npm run db:test      # Test database connection
-```
-
-### Utilities
-```bash
+npm run dev              # Start development server (localhost:3000)
+npm run build            # Build for production
+npm run lint             # Run ESLint
+npm run db:init          # Initialize database (creates indexes and schema)
+npm run db:test          # Test database connection
 npm run cleanup:storage  # Remove orphaned files from Vercel Blob storage
-npm run truncate:all     # Truncate all collections (dangerous!)
 ```
 
 ## Architecture Overview
 
-This is a Next.js 15 invoice management application with MongoDB Atlas and Vercel Blob storage. It uses the App Router pattern (not Pages Router).
+Next.js 15 invoice management app for freelancers, using App Router (not Pages Router). UI text is primarily in Portuguese. Deployed on Vercel with MongoDB Atlas and Vercel Blob storage.
 
-### Key Technologies
-- **Next.js 15** with App Router
-- **React 19** with TypeScript
-- **MongoDB** with singleton connection pattern
-- **Better Auth** (v1.4.6) for authentication
-- **React Query** (@tanstack/react-query) for server state
-- **Vercel Blob** for file storage
-- **Radix UI** + **Tailwind CSS** for UI components
+**Key stack**: Next.js 15, React 19, TypeScript, MongoDB (raw driver — no Mongoose/Prisma), Better Auth, React Query, Vercel Blob, Radix UI + Tailwind CSS, PDFKit.
 
 ### Directory Structure
 
 ```
-├── app/                        # Next.js App Router
-│   ├── api/                    # API routes (all backend endpoints)
-│   │   ├── auth/[...all]/      # Better Auth catch-all route
-│   │   ├── clients/            # Client CRUD operations
-│   │   ├── invoices/           # Invoice management + PDF generation
-│   │   ├── email-templates/    # Email template CRUD
-│   │   ├── email-accounts/     # Email account management + OAuth
-│   │   ├── email/send/         # Email sending with templates
-│   │   ├── google-drive/       # Google Drive OAuth + file import
-│   │   ├── upload/             # File upload handler
-│   │   ├── files/[fileKey]/    # File download/delete
-│   │   ├── settings/           # User settings (accountant_email, VAT)
-│   │   ├── user-preferences/   # User preferences (tour state)
-│   │   └── finances/           # Financial reports
-│   └── */page.tsx              # Page routes (criar-invoice, settings, etc.)
-├── components/                 # React components
-│   ├── ui/                     # Radix UI-based primitives
-│   └── [feature].tsx           # Feature-specific components
-├── hooks/                      # Custom React hooks (data fetching)
-├── lib/
-│   ├── server/                 # Backend utilities (Node.js only)
-│   │   ├── db.ts              # MongoDB connection (singleton pattern)
-│   │   ├── db-operations.ts   # Database CRUD functions
-│   │   ├── auth.ts            # Better Auth configuration
-│   │   ├── email.ts           # Nodemailer + transporter caching
-│   │   ├── storage.ts         # Vercel Blob operations
-│   │   ├── encryption.ts      # AES-256-GCM for OAuth tokens
-│   │   ├── google-drive.ts    # Google Drive API client
-│   │   └── pdf-generator.ts   # PDFKit invoice generation
-│   ├── client/                # Client-side utilities
-│   │   ├── api.ts             # Fetch-based API client
-│   │   └── auth.ts            # Better Auth client + useSession
-│   └── shared/                # Shared between client/server
-│       ├── query-keys.ts      # React Query key factory
-│       ├── validations.ts     # Zod schemas
-│       └── utils.ts           # Utilities
-├── types/                     # TypeScript type definitions
-└── scripts/                   # Utility scripts
+app/                    # Next.js App Router pages + API routes
+components/
+├── ui/                 # Radix UI primitives (shadcn/ui-style with class-variance-authority)
+├── features/           # Feature-specific composites (file-upload/, invoices/)
+└── *.tsx               # Page-level components (DashboardLayout, InvoiceCreationForm, etc.)
+hooks/                  # React Query hooks (use-[feature].ts pattern)
+lib/
+├── server/             # Backend-only: db, auth, email, encryption, pdf, storage
+├── client/             # Client-only: API client (api.ts), auth client (auth.ts)
+└── shared/             # Shared: query-keys, validations (Zod), utils, constants
+types/                  # TypeScript type definitions
+scripts/                # DB init, cleanup utilities
 ```
+
+## Critical Architectural Details
+
+### Custom ID Scheme (Not ObjectIds)
+All application records use custom string IDs, not MongoDB `_id`. Format: `"client-{timestamp}"`, `"invoice-{timestamp}"`, `"template-{timestamp}"`, etc. All queries use `{ id: ..., user_id: ... }`. The `scripts/init-db.cjs` creates unique indexes on these `id` fields.
+
+### Two MongoDB Connections
+The app maintains **two separate MongoDB connections**:
+1. `lib/server/db.ts` — Singleton for all app data (clients, invoices, etc.)
+2. `lib/server/auth.ts` — Dedicated connection for Better Auth (synchronous initialization requirement)
+
+The main connection uses a global scope singleton to survive Next.js hot reloads in development.
+
+### No Auth Middleware
+There is **no `middleware.ts`** file. Authentication is enforced differently on each layer:
+- **API routes**: Server-side via `requireAuth()` (mandatory for all protected endpoints)
+- **Pages**: Client-side redirect in `DashboardLayout.tsx` using `useEffect` + `useSession()`
+- Login/signup pages bypass `DashboardLayout` by checking `pathname`
+
+### PDFKit Server External Package
+`next.config.js` declares `serverExternalPackages: ['pdfkit']`. This is **critical** — without it, Next.js tries to bundle PDFKit and fails. Do not remove this config.
+
+### Encryption Key Naming Quirk
+`GOOGLE_OAUTH_ENCRYPTION_KEY` is used for **all** encryption (Google OAuth tokens, Microsoft OAuth tokens, SMTP passwords), not just Google. It must be a base64-encoded 32-byte value. Format stored: `IV (16 bytes) + AuthTag (16 bytes) + ciphertext` as a single base64 string.
+
+### `__new__` Client Convention
+In invoice creation, if `clientId` starts with `"__new__"`, the text after the prefix becomes the new client's name (e.g., `"__new__Acme Corp"` auto-creates client "Acme Corp").
+
+### Invoice Queries Use Aggregation
+Invoice list queries use MongoDB `$lookup` aggregation pipelines to join client data and invoice files in a single round-trip. This is an intentional performance optimization in `db-operations.ts`.
+
+### Cache Invalidation Cross-Dependencies
+When a client is updated or deleted, both the `clients` and `invoices` query caches are invalidated (because invoice list data embeds client name/email via aggregation).
+
+### init-db.cjs is CommonJS
+The database init script (`scripts/init-db.cjs`) is intentionally CommonJS (`.cjs`) while the rest of the project is ESM (`"type": "module"`). This is because it needs synchronous `require('dotenv')` to load `.env.local` before anything runs.
 
 ## Database Layer
 
-### Connection Pattern
-- **File**: `lib/server/db.ts`
-- **Pattern**: Singleton with global scope for development (prevents hot reload reconnections)
-- **Environment**: `MONGODB_URI` or `DATABASE_URL`
-- **Connection Pool**: max 10, min 2 connections
-
 ### Collections
-- `clients` - Client information (name, email, daily rate, currency, etc.)
-- `invoices` - Invoice records with workflow states
-- `invoice_files` - File metadata (invoice PDFs, timesheets)
-- `email_templates` - Template subjects and bodies with variable substitution
-- `email_accounts` - SMTP/OAuth email account configurations
-- `user_settings` - Key-value settings (accountant_email, user_vat_percentage)
-- `user_preferences` - User UI preferences (tour state)
+- `clients` — Client info (name, email, daily rate, currency)
+- `invoices` — Invoice records with workflow states
+- `invoice_files` — File metadata (invoice PDFs, timesheets)
+- `email_templates` — Template subjects/bodies with variable substitution
+- `email_accounts` — SMTP/OAuth email configurations
+- `settings` — Key-value store per user (keys: `accountant_email`, `user_company_name`, `user_address`, `user_vat`, `user_bank_account`, `user_iban`, `user_bank_account_name`, `user_vat_percentage`)
+- `user_preferences` — UI preferences (tour completion state)
+- `email_history` — Email sending history per invoice
+- `google_oauth_tokens` — Encrypted Google Drive tokens
 - Better Auth collections: `user`, `session`, `account`, `verification`
 
 ### Database Operations
-- **File**: `lib/server/db-operations.ts`
-- **Pattern**: All operations are user-scoped (filtered by `user_id`)
-- **Functions**: CRUD operations for all entities with automatic user isolation
-- **Encryption**: OAuth tokens and email passwords are encrypted using AES-256-GCM
+- **File**: `lib/server/db-operations.ts` (~1200+ lines)
+- All operations are user-scoped (filtered by `user_id`)
+- CRUD operations for all entities with automatic user isolation
+- OAuth tokens and email passwords are encrypted before storage using AES-256-GCM
 
-### Better Auth Setup
-- **File**: `lib/server/auth.ts`
-- **Important**: Uses a SEPARATE MongoDB connection for auth (synchronous initialization requirement)
-- **API Route**: `/app/api/auth/[...all]/route.ts` (catch-all for auth endpoints)
-- **Session Helpers**: `getSession()`, `getCurrentUser()`, `requireAuth()` for server-side
-- **Client Hooks**: `useSession()` from `lib/client/auth.ts`
+## Security: User Isolation
+- **Critical**: Every database query MUST filter by `user_id`
+- All API routes MUST call `requireAuth()` to get the authenticated user
+- Never trust client-provided user IDs
 
 ## Data Fetching Pattern
 
-### React Query Integration
-- **Query Provider**: `components/providers/QueryProvider.tsx`
-  - Stale time: 1 minute
-  - Cache time: 5 minutes
-  - Retry: 1 time
-  - No refetch on window focus
-- **Query Keys**: Centralized factory in `lib/shared/query-keys.ts`
-  - Hierarchical structure: `['clients', 'list']`, `['invoices', 'detail', id]`
-  - Enables targeted cache invalidation
-
-### Custom Hooks Pattern
-All data fetching hooks follow this pattern:
-- `hooks/use-[feature].ts` - Query and mutation hooks
-- Example: `hooks/use-clients.ts`
-  - `useClients()` - Fetch all clients
-  - `useClient(id)` - Fetch single client
-  - `useCreateClient()` - Create mutation
-  - `useUpdateClient()` - Update mutation
-  - `useDeleteClient()` - Delete mutation with cache invalidation
-
-### API Client
-- **File**: `lib/client/api.ts`
-- **Pattern**: Simple fetch-based client (no axios)
-- **Error Handling**: Throws on non-ok responses with JSON error messages
-- **Auth**: Automatic cookie-based session (managed by Better Auth)
-
-## Authentication Flow
-
-1. User signs up/in via Better Auth (`authClient.signIn()` or `authClient.signUp()`)
-2. Session stored in HTTP-only cookies
-3. Protected API routes call `requireAuth()` to verify session and get user ID
-4. Client components use `useSession()` for UI state and auth checks
-5. All database queries automatically filtered by `user_id`
+- **Query Provider** (`components/providers/QueryProvider.tsx`): staleTime 1min, gcTime 5min, retry 1, no refetchOnWindowFocus
+- **Query Keys**: Centralized factory in `lib/shared/query-keys.ts` with hierarchical arrays
+- **Hooks**: `hooks/use-[feature].ts` — each exports `useFeatures()`, `useFeature(id)`, `useCreateFeature()`, `useUpdateFeature()`, `useDeleteFeature()`
+- **API Client** (`lib/client/api.ts`): Fetch-based, throws on non-ok responses, auth via cookies
 
 ## Invoice Workflow States
 
-Invoices have three boolean flags that track their lifecycle:
-- `sent_to_client` - Invoice emailed to client
-- `payment_received` - Client paid invoice
-- `sent_to_accountant` - Invoice sent to accountant
-
+Three boolean flags track lifecycle: `sent_to_client`, `payment_received`, `sent_to_accountant`.
 Update via: `PATCH /api/invoices/[invoiceId]/state`
 
 ## Email System
 
-### Email Templates
-- Support client-specific or accountant-wide templates
-- Variable substitution: `{{clientName}}`, `{{invoiceAmount}}`, `{{month}}`, `{{year}}`, `{{monthYear}}`
-- Month names rendered in Portuguese (e.g., "Janeiro" not "January")
+- **Templates**: Support client-specific or accountant-wide. Variables: `{{clientName}}`, `{{invoiceName}}`, `{{invoiceAmount}}`, `{{month}}`, `{{year}}`, `{{monthYear}}`, `{{downloadLink}}`, `{{currentDate}}`, `{{clientVat}}`, `{{clientAddress}}`
+- **Accounts**: SMTP credentials or OAuth2 (Microsoft/Outlook). One account can be set as default.
+- **Transporter caching**: Module-level `Map` in `lib/server/email.ts` keyed by `account-{id}`. Cache cleared on account update/delete.
+- **Fallback priority**: Specific account → default account for user → environment SMTP variables
+- **Sending** (`POST /api/email/send`): Auto-selects client template if available, falls back to accountant template. Email history tracked in `email_history` collection.
 
-### Email Accounts
-- Support both SMTP credentials and OAuth2 (Microsoft/Outlook)
-- OAuth tokens encrypted with AES-256-GCM
-- Transporter caching with account-specific keys for performance
-- Cache automatically cleared on account updates/deletions
-- One account can be set as default for sending
+## PDF Generation
 
-### Sending Emails
-- **Endpoint**: `POST /api/email/send`
-- Automatically selects client-specific template if available, falls back to accountant template
-- Template variables substituted before sending
-- Attachments supported (invoice PDFs)
-- Email history tracked in `invoice_email_history` collection
+- `lib/server/pdf-generator.ts` uses PDFKit to generate A4 invoices
+- User info for PDFs is pulled from the `settings` collection (company name, address, VAT, bank details)
+- If required settings are missing, the API returns an error asking the user to fill in company info first
+- Supports multi-currency (EUR €, GBP £) per client
 
-## File Storage
+## Localization
 
-### Vercel Blob Integration
-- **File**: `lib/server/storage.ts`
-- **Operations**: `uploadFile()`, `getFile()`, `deleteFile()`
-- **Token**: `BLOB_READ_WRITE_TOKEN`
-- **Pattern**: File metadata stored in MongoDB, actual files in Vercel Blob
-- **Cleanup**: Run `npm run cleanup:storage` to remove orphaned files
+- UI labels are primarily in Portuguese
+- Currency formatting uses `Intl.NumberFormat('pt-PT', ...)` (e.g., `12.696,00`)
+- Month names exist in three forms in `lib/shared/constants.ts`: `MONTH_NAMES_EN`, `MONTH_NAMES_SHORT`, `MONTH_NAMES_PT`
+- `{{monthYear}}` template variable renders in English (e.g., "January 2024")
 
-### File Types
-- `invoice` - Generated or uploaded invoice PDFs
-- `timesheet` - Timesheet documents (for clients that require them)
+## UI Design System
 
-## Google Drive Integration
+- Tailwind CSS with **CSS variable-based semantic color tokens** (`bg-primary`, `text-muted-foreground`, etc.)
+- Colors defined as HSL CSS variables in `globals.css` with light/dark mode variants
+- Dark mode is class-based (`darkMode: ["class"]`)
+- Follows shadcn/ui conventions: Radix UI primitives + `class-variance-authority` for variants
+- Border-radius uses `--radius` CSS variable
 
-### OAuth Flow
-1. User clicks "Connect Google Drive" → redirects to Google OAuth
-2. Google redirects back with code → `/api/google-drive/auth/callback`
-3. Tokens encrypted and stored in MongoDB
-4. User can browse folders and import PDF files
-
-### Security
-- Read-only access (scope: `drive.readonly`)
-- Tokens encrypted with `GOOGLE_OAUTH_ENCRYPTION_KEY` (AES-256-GCM)
-- Automatic token refresh handled by googleapis library
-
-## Form State Management
-
-### Invoice Creation Form
-- **Component**: `components/InvoiceCreationForm.tsx`
-- **Libraries**:
-  - `@tanstack/react-form` for form state
-  - `@tanstack/react-store` for computed values (e.g., total calculations)
-- **Validation**: Zod schema (`lib/shared/validations.ts`)
-- **Pattern**: Multi-step form with embedded expense array
-
-## Code Style Guidelines (from .cursor/rules/react.mdc)
+## Code Style
 
 - Use early returns for readability
 - Always use Tailwind classes (never CSS or `<style>` tags)
-- Use descriptive variable/function names
 - Event handlers prefixed with "handle" (e.g., `handleClick`)
 - Prefer `const` arrow functions over `function` declarations
 - Define types explicitly where possible
-- Implement accessibility features (tabindex, aria-label, keyboard handlers)
 
-## Security Notes
+## Settings Page Sub-Routes
 
-### User Isolation
-- **Critical**: Every database query MUST filter by `user_id`
-- All API routes MUST call `requireAuth()` to get authenticated user
-- Never trust client-provided user IDs
+The `/settings/` area has its own sub-routing:
+- `/settings/clients` — Client CRUD
+- `/settings/email-accounts` — Email account management + OAuth flows
+- `/settings/general` — Accountant email setting
+- `/settings/templates` — Email template CRUD
+- `/settings/user-info` — Company/user info for PDF generation
 
-### Encryption
-- OAuth tokens (Google, Microsoft) encrypted with AES-256-GCM
-- Email passwords encrypted before storage
-- Encryption key: `GOOGLE_OAUTH_ENCRYPTION_KEY` (32-byte base64)
+## Notable API Routes (Beyond CRUD)
 
-### Sensitive Data
-- Never commit `.env.local`
-- OAuth credentials user-provided (Microsoft) - stored per email account
-- SMTP passwords encrypted in database
+- `POST /api/invoices/generate-pdf` — Generates PDF in-memory, returns as download
+- `POST /api/pdf/extract` — Extracts invoice data from uploaded PDFs
+- `POST /api/invoices/import-old` — Batch import of old invoices (marks as already sent)
+- `POST /api/invoices/[invoiceId]/add-signature` — Adds signature to existing invoice PDF
+- `POST /api/invoices/[invoiceId]/upload-signed` — Uploads signed version of PDF
+- `DELETE /api/user/delete-all-data` — Deletes all data for current user
+
+## Tour System
+
+`components/Tour.tsx` implements a guided tour targeting DOM elements via `data-tour="..."` attributes. Completion state persisted to `user_preferences` collection. `TOUR_VERSION` constant in `hooks/use-tour.ts` controls whether the tour replays after updates.
 
 ## Environment Variables
 
 ### Required
 ```env
-MONGODB_URI=mongodb+srv://...                    # MongoDB connection
-BLOB_READ_WRITE_TOKEN=vercel_blob_...           # Vercel Blob storage
-BETTER_AUTH_URL=https://yourdomain.com          # Base URL for auth
-BETTER_AUTH_SECRET=your-secret-key              # Auth secret
-NEXT_PUBLIC_BETTER_AUTH_URL=https://yourdomain.com  # Client-side auth URL
+MONGODB_URI=mongodb+srv://...
+BLOB_READ_WRITE_TOKEN=vercel_blob_...
+BETTER_AUTH_URL=https://yourdomain.com
+BETTER_AUTH_SECRET=your-secret-key              # At least 32 characters
+NEXT_PUBLIC_BETTER_AUTH_URL=https://yourdomain.com
 ```
 
-### Optional (Feature-Specific)
+### Optional
 ```env
-# Google Drive Integration
 GOOGLE_CLIENT_ID=...
 GOOGLE_CLIENT_SECRET=...
 GOOGLE_REDIRECT_URI=https://yourdomain.com/api/google-drive/auth/callback
-GOOGLE_OAUTH_ENCRYPTION_KEY=...  # openssl rand -base64 32
-
-# Microsoft OAuth (user-provided per account)
+GOOGLE_OAUTH_ENCRYPTION_KEY=...                 # openssl rand -base64 32 (used for ALL encryption)
 MICROSOFT_REDIRECT_URI=https://yourdomain.com/api/email-accounts/oauth/callback
 ```
 
-## Common Patterns
+## Testing
 
-### API Route Structure
-```typescript
-// app/api/[resource]/route.ts
-export async function GET(request: NextRequest) {
-  const session = await requireAuth()
-  const userId = session.user.id
-  // Fetch data filtered by userId
-  return NextResponse.json(data)
-}
-
-export async function POST(request: NextRequest) {
-  const session = await requireAuth()
-  const userId = session.user.id
-  const body = await request.json()
-  // Validate, create, return
-}
-```
-
-### Custom Hook Structure
-```typescript
-// hooks/use-[feature].ts
-export function useFeatures() {
-  return useQuery({
-    queryKey: queryKeys.features.list(),
-    queryFn: () => apiClient.get('/api/features')
-  })
-}
-
-export function useCreateFeature() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (data) => apiClient.post('/api/features', data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.features.all })
-    }
-  })
-}
-```
-
-## Multi-Currency Support
-
-The app supports multiple currencies (EUR, GBP) configured per client. When creating invoices:
-- Daily rate stored in client's currency
-- Invoice amounts calculated in client's currency
-- PDF generation respects currency symbol (€, £)
-
-## Troubleshooting
-
-### Database Connection Issues
-- Run `npm run db:test` to verify connection
-- Check MongoDB Atlas IP whitelist (use 0.0.0.0/0 for development)
-- Verify `MONGODB_URI` includes database name
-
-### Email Sending Issues
-- Microsoft requires OAuth2 (SMTP basic auth disabled)
-- Gmail requires "App Passwords" (not regular password)
-- Test SMTP settings via `POST /api/settings/smtp/verify`
-
-### File Upload Issues
-- Verify `BLOB_READ_WRITE_TOKEN` is set
-- Check Vercel Blob storage quota
-- Files limited by Next.js config (`bodyParser.sizeLimit`)
-
-### Better Auth Issues
-- Ensure both `BETTER_AUTH_URL` and `NEXT_PUBLIC_BETTER_AUTH_URL` are set
-- Secret must be at least 32 characters
-- Auth uses separate MongoDB connection - don't close main connection
-
-## Testing Notes
-
-This project does not have automated tests yet. Manual testing recommended for:
-- Invoice creation flow (with/without timesheets)
-- Email sending (with template substitution)
-- Google Drive import
-- Microsoft OAuth flow
-- File upload/download/deletion
-- Client CRUD operations
+No automated tests exist. No test runner is configured.

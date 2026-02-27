@@ -10,7 +10,8 @@
 export const EMAIL_TEMPLATE_VARIABLES = [
   { name: 'clientName', description: 'Nome do cliente', example: '{{clientName}}' },
   { name: 'invoiceName', description: 'Nome/ID da invoice', example: '{{invoiceName}}' },
-  { name: 'invoiceAmount', description: 'Valor da invoice', example: '{{invoiceAmount}}' },
+  { name: 'invoiceAmount', description: 'Valor da invoice (na moeda do cliente)', example: '{{invoiceAmount}}' },
+  { name: 'invoiceAmountEur', description: 'Valor da invoice em EUR (convertido se cliente usa GBP)', example: '{{invoiceAmountEur}}' },
   { name: 'month', description: 'Mês da invoice (número)', example: '{{month}}' },
   { name: 'year', description: 'Ano da invoice', example: '{{year}}' },
   { name: 'monthYear', description: 'Month and year formatted (e.g., January 2024)', example: '{{monthYear}}' },
