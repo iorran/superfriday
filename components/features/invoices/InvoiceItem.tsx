@@ -12,7 +12,15 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
-import { FileText, Trash2, CheckCircle2, Send, Edit, Loader2, Mail, AlertCircle, Download } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu'
+import { FileText, Trash2, CheckCircle2, Circle, Send, Edit, Loader2, Mail, AlertCircle, Download, MoreVertical } from 'lucide-react'
 import { formatCurrency, formatFileSize, formatInvoiceDate } from '@/lib/shared/utils'
 import type { InvoiceFile, Client } from '@/types'
 
@@ -308,43 +316,6 @@ const InvoiceItem = ({
             </button>
           </div>
 
-          {/* Manual Status Toggle */}
-          <div className="flex items-center gap-2 mt-3 pt-3 border-t flex-wrap" role="group" aria-label="Status manual">
-            <p className="text-xs text-muted-foreground mr-2">Status Manual:</p>
-            <button
-              type="button"
-              onClick={handleToggleClientStatus}
-              aria-label={invoice.sentToClient ? 'Marcar como não enviado para cliente' : 'Marcar como enviado para cliente'}
-              tabIndex={0}
-              className={`flex items-center gap-1 text-xs px-3 py-1.5 rounded transition-all ${
-                invoice.sentToClient
-                  ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-800 cursor-pointer'
-                  : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 cursor-pointer'
-              }`}
-            >
-              <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
-              {invoice.sentToClient ? 'Cliente ✓' : 'Cliente'}
-            </button>
-
-            <button
-              type="button"
-              onClick={handleToggleAccountantStatus}
-              disabled={!invoice.sentToClient}
-              aria-label={invoice.sentToAccountant ? 'Marcar como não enviado para contador' : 'Marcar como enviado para contador'}
-              aria-disabled={!invoice.sentToClient}
-              tabIndex={0}
-              className={`flex items-center gap-1 text-xs px-3 py-1.5 rounded transition-all ${
-                invoice.sentToAccountant
-                  ? 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-800 cursor-pointer'
-                  : !invoice.sentToClient
-                  ? 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-600 cursor-not-allowed opacity-50'
-                  : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 cursor-pointer'
-              }`}
-            >
-              <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
-              {invoice.sentToAccountant ? 'Contador ✓' : 'Contador'}
-            </button>
-          </div>
         </div>
 
         <div className="flex items-center gap-2" role="group" aria-label="Ações da invoice">
@@ -408,6 +379,52 @@ const InvoiceItem = ({
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={(e) => e.stopPropagation()}
+                aria-label="Mais ações"
+                tabIndex={0}
+              >
+                <MoreVertical className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Status Manual</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleToggleClientStatus(e as unknown as React.MouseEvent)
+                }}
+                className="cursor-pointer"
+              >
+                {invoice.sentToClient ? (
+                  <CheckCircle2 className="text-green-600 dark:text-green-400" aria-hidden="true" />
+                ) : (
+                  <Circle className="text-muted-foreground" aria-hidden="true" />
+                )}
+                {invoice.sentToClient ? 'Desmarcar envio para cliente' : 'Marcar como enviado para cliente'}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleToggleAccountantStatus(e as unknown as React.MouseEvent)
+                }}
+                disabled={!invoice.sentToClient}
+                className="cursor-pointer"
+              >
+                {invoice.sentToAccountant ? (
+                  <CheckCircle2 className="text-purple-600 dark:text-purple-400" aria-hidden="true" />
+                ) : (
+                  <Circle className="text-muted-foreground" aria-hidden="true" />
+                )}
+                {invoice.sentToAccountant ? 'Desmarcar envio para contador' : 'Marcar como enviado para contador'}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
     </div>

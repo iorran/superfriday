@@ -37,88 +37,59 @@ const FileList = () => {
   const [pendingAccountantSend, setPendingAccountantSend] = useState<{ invoiceId: string; invoiceAmount: number | null; clientCurrency: string } | null>(null)
   const { toast } = useToast()
 
-  // Get current year
-  const currentYear = useMemo(() => {
-    return new Date().getFullYear()
-  }, [])
-
-  // Format invoices and group by client and year
-  const invoicesByClientAndYear = useMemo(() => {
+  // Format invoices and group by client (company-level)
+  const invoicesByClient = useMemo(() => {
     const formatted: FormattedInvoice[] = invoicesData.map((inv: Invoice) => {
       const date = inv.uploaded_at ? new Date(inv.uploaded_at) : new Date()
-      const year = inv.year || date.getFullYear()
       const clientName = inv.client_name || 'Sem cliente'
       const clientId = inv.client_id || 'unknown'
-      
-      const groupKey = `${clientId}-${year}`
-      const groupLabel = `${clientName} - ${year}`
 
       return {
         ...inv,
         lastModified: date,
-        groupKey,
-        groupLabel,
+        groupKey: clientId,
+        groupLabel: clientName,
         sentToClient: inv.sent_to_client === 1 || inv.sent_to_client === true,
         sentToAccountant: inv.sent_to_accountant === 1 || inv.sent_to_accountant === true,
       }
     })
 
-    const grouped: Record<string, { groupLabel: string; clientName: string; year: number; invoices: FormattedInvoice[] }> = {}
+    const grouped: Record<string, { clientName: string; clientId: string; invoices: FormattedInvoice[] }> = {}
     formatted.forEach((inv: FormattedInvoice) => {
-      const key = inv.groupKey!
+      const key = inv.client_id || 'unknown'
       if (!grouped[key]) {
-        const year = inv.year || new Date(inv.uploaded_at || Date.now()).getFullYear()
-        const clientName = inv.client_name || 'Sem cliente'
         grouped[key] = {
-          groupLabel: inv.groupLabel!,
-          clientName,
-          year,
+          clientName: inv.client_name || 'Sem cliente',
+          clientId: key,
           invoices: [],
         }
       }
       grouped[key].invoices.push(inv)
     })
 
-    // Sort invoices within each group
-    Object.values(grouped).forEach((group) => {
-      group.invoices.sort((a, b) => {
-        const yearA = a.year || 0
-        const yearB = b.year || 0
-        if (yearB !== yearA) return yearB - yearA
-        
-        const monthA = a.month || 0
-        const monthB = b.month || 0
-        if (monthB !== monthA) return monthB - monthA
-        
-        const dateA = a.uploaded_at ? new Date(a.uploaded_at).getTime() : 0
-        const dateB = b.uploaded_at ? new Date(b.uploaded_at).getTime() : 0
-        return dateB - dateA
-      })
-    })
-
     return grouped
   }, [invoicesData])
 
-  // Initialize: expand first group or current year groups
+  // Initialize: auto-expand companies that have pending actions
   const hasInitialized = useRef(false)
-  
+
   useEffect(() => {
-    const groupKeys = Object.keys(invoicesByClientAndYear)
-    
-    if (groupKeys.length > 0 && !hasInitialized.current) {
-      const currentYearGroups = groupKeys.filter(key => {
-        const group = invoicesByClientAndYear[key]
-        return group.year === currentYear
+    const clientKeys = Object.keys(invoicesByClient)
+
+    if (clientKeys.length > 0 && !hasInitialized.current) {
+      const pendingClients = clientKeys.filter(key => {
+        const group = invoicesByClient[key]
+        return group.invoices.some(inv => !inv.sentToClient || !inv.sentToAccountant)
       })
-      
-      if (currentYearGroups.length > 0) {
-        setExpandedGroups(new Set(currentYearGroups))
+
+      if (pendingClients.length > 0) {
+        setExpandedGroups(new Set(pendingClients))
       } else {
-        setExpandedGroups(new Set([groupKeys[0]]))
+        setExpandedGroups(new Set([clientKeys[0]]))
       }
       hasInitialized.current = true
     }
-  }, [invoicesByClientAndYear, currentYear])
+  }, [invoicesByClient])
 
   const toggleGroup = useCallback((groupKey: string) => {
     setExpandedGroups((prev) => {
@@ -131,26 +102,28 @@ const FileList = () => {
       return newSet
     })
   }, [])
-  
+
   const toggleHandlers = useMemo(() => {
     const handlers: Record<string, () => void> = {}
-    Object.keys(invoicesByClientAndYear).forEach((key) => {
+    Object.keys(invoicesByClient).forEach((key) => {
       handlers[key] = () => toggleGroup(key)
     })
     return handlers
-  }, [invoicesByClientAndYear, toggleGroup])
+  }, [invoicesByClient, toggleGroup])
 
   const allInvoices = useMemo(() => {
-    return Object.values(invoicesByClientAndYear).flatMap(group => group.invoices)
-  }, [invoicesByClientAndYear])
+    return Object.values(invoicesByClient).flatMap(group => group.invoices)
+  }, [invoicesByClient])
 
+  // Sort companies: most pending actions first, then alphabetically
   const sortedGroups = useMemo(() => {
-    return Object.entries(invoicesByClientAndYear).sort(([, groupA], [, groupB]) => {
-      const clientCompare = groupA.clientName.localeCompare(groupB.clientName)
-      if (clientCompare !== 0) return clientCompare
-      return groupB.year - groupA.year
+    return Object.entries(invoicesByClient).sort(([, groupA], [, groupB]) => {
+      const pendingA = groupA.invoices.filter(inv => !inv.sentToClient || !inv.sentToAccountant).length
+      const pendingB = groupB.invoices.filter(inv => !inv.sentToClient || !inv.sentToAccountant).length
+      if (pendingB !== pendingA) return pendingB - pendingA
+      return groupA.clientName.localeCompare(groupB.clientName)
     })
-  }, [invoicesByClientAndYear])
+  }, [invoicesByClient])
 
   const handleStateChange = useCallback(async (invoiceId: string, updates: {
     sentToClient?: boolean
@@ -376,7 +349,7 @@ const FileList = () => {
     )
   }
 
-  if (Object.keys(invoicesByClientAndYear).length === 0) {
+  if (Object.keys(invoicesByClient).length === 0) {
     return (
       <Card className="w-full">
         <CardContent className="p-6">
@@ -391,16 +364,14 @@ const FileList = () => {
   return (
     <div className="w-full space-y-4" role="region" aria-label="Lista de invoices" data-tour="main-content">
       {sortedGroups.map(([groupKey, group]) => {
-        const totalAmount = group.invoices.reduce((sum, inv) => sum + (inv.invoice_amount || 0), 0)
         const handleToggle = toggleHandlers[groupKey] || (() => toggleGroup(groupKey))
-        
+
         return (
           <InvoiceGroup
             key={groupKey}
             groupKey={groupKey}
-            groupLabel={group.groupLabel}
+            clientName={group.clientName}
             invoices={group.invoices}
-            totalAmount={totalAmount}
             isExpanded={expandedGroups.has(groupKey)}
             onToggle={handleToggle}
             clients={clients}
