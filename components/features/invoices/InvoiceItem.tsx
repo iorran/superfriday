@@ -164,7 +164,13 @@ const InvoiceItem = ({
 
   return (
     <div
-      className="p-4 rounded-md border bg-card hover:bg-accent/50 transition-colors"
+      className={`p-4 rounded-md border bg-card hover:bg-accent/50 transition-colors ${
+        invoice.sentToAccountant
+          ? 'border-purple-400 dark:border-purple-600'
+          : invoice.sentToClient
+          ? 'border-green-400 dark:border-green-600'
+          : 'border-l-4 border-orange-400 dark:border-orange-500 bg-orange-50/50 dark:bg-orange-950/20'
+      }`}
       role="listitem"
       aria-label={`Invoice de ${invoice.client_name || 'cliente desconhecido'} - ${formatCurrency(invoice.invoice_amount, clientCurrency)}`}
     >
