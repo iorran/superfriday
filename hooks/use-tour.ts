@@ -20,15 +20,15 @@ export const useTour = () => {
         // Ensure we always return a boolean, never undefined
         return value === true || value === 'true'
       } catch {
-        // If API fails, default to false (show tour)
-        return false
+        // If API fails, assume completed to avoid showing tour on errors
+        return true
       }
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
     retry: 1,
   })
 
-  const { data: tourVersion } = useQuery({
+  const { data: tourVersion, isLoading: isLoadingVersion } = useQuery({
     queryKey: ['user-preference', 'tour_version'],
     queryFn: async () => {
       try {
@@ -36,8 +36,8 @@ export const useTour = () => {
         // Ensure we always return a string or null, never undefined
         return value ?? null
       } catch {
-        // If API fails, default to null (show tour)
-        return null
+        // If API fails, return current version to avoid showing tour on errors
+        return TOUR_VERSION
       }
     },
     staleTime: 5 * 60 * 1000,
@@ -64,8 +64,8 @@ export const useTour = () => {
   })
 
   useEffect(() => {
-    // Wait for preferences to load
-    if (isLoadingCompleted) return
+    // Wait for both preferences to load
+    if (isLoadingCompleted || isLoadingVersion) return
 
     // Use database values
     const completed = tourCompleted ?? false
@@ -86,7 +86,7 @@ export const useTour = () => {
       // Ensure tour is hidden if it shouldn't show
       setShowTour(false)
     }
-  }, [tourCompleted, tourVersion, isLoadingCompleted])
+  }, [tourCompleted, tourVersion, isLoadingCompleted, isLoadingVersion])
 
   const completeTour = () => {
     saveTourCompletion.mutate()
