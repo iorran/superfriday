@@ -357,6 +357,28 @@ export const getAllInvoices = async (userId: string): Promise<Invoice[]> => {
 }
 
 /**
+ * Get the next invoice number for a client
+ * Returns the highest invoice_number + 1, or null if no invoices exist
+ */
+export const getNextInvoiceNumber = async (userId: string, clientId: string): Promise<number | null> => {
+  const db = await getDatabase()
+
+  const result = await db.collection('invoices').find(
+    { user_id: userId, client_id: clientId, invoice_number: { $ne: null } },
+    { projection: { invoice_number: 1 } }
+  ).toArray()
+
+  if (result.length === 0) return null
+
+  const maxNumber = result.reduce((max, inv) => {
+    const num = parseInt(String(inv.invoice_number), 10)
+    return !isNaN(num) && num > max ? num : max
+  }, 0)
+
+  return maxNumber + 1
+}
+
+/**
  * Create invoice with files
  */
 export const createInvoice = async (invoiceData: {

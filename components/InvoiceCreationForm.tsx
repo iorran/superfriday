@@ -95,6 +95,23 @@ const InvoiceCreationForm = ({ onSubmit, isLoading = false }: InvoiceCreationFor
     return clients.find((c: Client) => c.id === clientId) || null
   }, [clients, clientId])
 
+  // Fetch next invoice number when client changes
+  useEffect(() => {
+    if (!clientId) return
+    const fetchNextNumber = async () => {
+      try {
+        const response = await fetch(`/api/invoices/next-number?clientId=${encodeURIComponent(clientId)}`)
+        const data = await response.json()
+        if (data.success && data.nextNumber != null) {
+          form.setFieldValue('invoiceNumber', data.nextNumber)
+        }
+      } catch {
+        // Ignore - user can still enter manually
+      }
+    }
+    fetchNextNumber()
+  }, [clientId])
+
   const dailyRate = selectedClient?.daily_rate || 0
   const numberOfDays = useStore(form.store, (state) => Number(state.values.numberOfDays) || 0)
   const clientCurrency = selectedClient?.currency || 'EUR'
