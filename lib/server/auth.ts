@@ -15,20 +15,42 @@ if (!databaseUrl) {
   throw new Error('MONGODB_URI or DATABASE_URL environment variable is required')
 }
 
+// Use global to store the auth client in development (prevents topology closed errors during hot reload)
+declare global {
+  var _mongoAuthClient: MongoClient | undefined
+  var _mongoAuthDb: Db | undefined
+}
+
 // Create a dedicated MongoDB connection for Better Auth
 // We need to initialize it synchronously, so we'll use a lazy initialization pattern
-let authDbInstance: Db | null = null
-
-// Initialize the database connection
-// This will be called when the adapter first needs the db
 const getAuthDb = (): Db => {
   if (!databaseUrl) {
     throw new Error('MONGODB_URI or DATABASE_URL environment variable is required')
   }
 
-  if (!authDbInstance) {
-    // Create client and connect synchronously (connection happens in background)
-    const client = new MongoClient(databaseUrl, {
+  const dbName = databaseUrl.split('/').pop()?.split('?')[0] || 'superfriday'
+
+  if (process.env.NODE_ENV === 'development') {
+    if (!global._mongoAuthClient) {
+      global._mongoAuthClient = new MongoClient(databaseUrl, {
+        maxPoolSize: 10,
+        minPoolSize: 2,
+        maxIdleTimeMS: 30000,
+        serverSelectionTimeoutMS: 5000,
+        socketTimeoutMS: 45000,
+        connectTimeoutMS: 10000,
+      })
+      global._mongoAuthDb = global._mongoAuthClient.db(dbName)
+      // Connect in background (non-blocking)
+      global._mongoAuthClient.connect().catch(err => {
+        console.error('Better Auth MongoDB connection error:', err)
+      })
+    }
+    return global._mongoAuthDb!
+  }
+
+  if (!global._mongoAuthClient) {
+    global._mongoAuthClient = new MongoClient(databaseUrl, {
       maxPoolSize: 10,
       minPoolSize: 2,
       maxIdleTimeMS: 30000,
@@ -36,18 +58,13 @@ const getAuthDb = (): Db => {
       socketTimeoutMS: 45000,
       connectTimeoutMS: 10000,
     })
-    
-    // Get db instance (connection will be established when first used)
-    const dbName = databaseUrl.split('/').pop()?.split('?')[0] || 'superfriday'
-    authDbInstance = client.db(dbName)
-    
+    global._mongoAuthDb = global._mongoAuthClient.db(dbName)
     // Connect in background (non-blocking)
-    client.connect().catch(err => {
+    global._mongoAuthClient.connect().catch(err => {
       console.error('Better Auth MongoDB connection error:', err)
     })
   }
-
-  return authDbInstance
+  return global._mongoAuthDb!
 }
 
 const baseURL = process.env.BETTER_AUTH_URL || process.env.NEXT_PUBLIC_BETTER_AUTH_URL
